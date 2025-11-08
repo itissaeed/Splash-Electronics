@@ -5,7 +5,11 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/authRoutes');
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000', // allow only my frontend
+    credentials: true              // allow cookies or auth headers if needed
+}));
+
 app.use(express.json());
 
 
