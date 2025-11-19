@@ -1,38 +1,41 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const {protect, admin} = require('../middleware/authMiddleware');
-
-// Import controllers
+const { protect, admin } = require('../middleware/authMiddleware');
 const {
-    getProducts,
-    getProductsById,
-    createProduct,
-    updateProduct,
-    deleteProduct,
-    uploadProductImage,
-    deleteProductImage,
+  getProducts,
+  getProductById,
+  getAllProductsAdmin,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  uploadProductImage,
+  deleteProductImage,
+  getFeaturedProducts,
 } = require('../controllers/product');
 
-const { protect, admin } = require('../middleware/authMiddleware');
-
-// Configure Multer
-const storage = multer.memoryStorage(); // store file in memory
+// --- Configure multer for image upload ---
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Product CRUD routes
-router.route('/')
-    .get(getProducts)
-    .post(protect, admin, createProduct);
+// --- PUBLIC ROUTES ---
+// Get products with pagination & search
+router.get('/', getProducts);
 
-router.route('/:id')
-    .get(getProductsById)
-    .put(protect, admin, updateProduct)
-    .delete(protect, admin, deleteProduct);
+// Get featured products
+router.get('/featured', getFeaturedProducts);
 
-// Image upload route
-router.route('/:id/images')
-    .post(protect, admin, upload.single('image'), uploadProductImage)
-    .delete(protect, admin, deleteProductImage);
+// Get single product by ID
+router.get('/:id', getProductById);
+
+// --- ADMIN ROUTES ---
+router.get('/admin', protect, admin, getAllProductsAdmin); // Get all products (no pagination)
+router.post('/', protect, admin, createProduct);           // Create product
+router.put('/:id', protect, admin, updateProduct);         // Update product
+router.delete('/:id', protect, admin, deleteProduct);      // Delete product
+
+// --- ADMIN IMAGE ROUTES ---
+router.post('/:id/images', protect, admin, upload.single('image'), uploadProductImage);
+router.delete('/:id/images', protect, admin, deleteProductImage);
 
 module.exports = router;
