@@ -2,8 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 require('dotenv').config();
-
+const productRoutes = require('./routes/productRoutes');
 const authRoutes = require('./routes/authRoutes');
+
 const app = express();
 app.use(cors({
     origin: 'http://localhost:3000', // allow only my frontend
@@ -20,7 +21,8 @@ app.get('/', (req, res) => {
 });
 // Mount routes
 app.use('/api/auth', authRoutes);
-
+// Product routes
+app.use('/api/products', productRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
