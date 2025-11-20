@@ -18,24 +18,35 @@ const {
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// --- PUBLIC ROUTES ---
-// Get products with pagination & search
-router.get('/', getProducts);
+// -------------------- ADMIN ROUTES --------------------
 
-// Get featured products
+// Get all products (no pagination)
+router.get('/admin', protect, admin, getAllProductsAdmin);
+
+// Create a new product
+router.post('/', protect, admin, createProduct);
+
+// Update a product
+router.put('/:id', protect, admin, updateProduct);
+
+// Delete a product
+router.delete('/:id', protect, admin, deleteProduct);
+
+// Upload a product image
+router.post('/:id/images', protect, admin, upload.single('image'), uploadProductImage);
+
+// Delete a product image
+router.delete('/:id/images', protect, admin, deleteProductImage);
+
+// -------------------- PUBLIC ROUTES --------------------
+
+// Get featured products (specific route first!)
 router.get('/featured', getFeaturedProducts);
 
-// Get single product by ID
+// Get all products with pagination & search
+router.get('/', getProducts);
+
+// Get single product by ID (dynamic route LAST!)
 router.get('/:id', getProductById);
-
-// --- ADMIN ROUTES ---
-router.get('/admin', protect, admin, getAllProductsAdmin); // Get all products (no pagination)
-router.post('/', protect, admin, createProduct);           // Create product
-router.put('/:id', protect, admin, updateProduct);         // Update product
-router.delete('/:id', protect, admin, deleteProduct);      // Delete product
-
-// --- ADMIN IMAGE ROUTES ---
-router.post('/:id/images', protect, admin, upload.single('image'), uploadProductImage);
-router.delete('/:id/images', protect, admin, deleteProductImage);
 
 module.exports = router;

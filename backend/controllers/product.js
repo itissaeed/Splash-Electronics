@@ -1,4 +1,4 @@
-const Product = require('../models/Product');
+const Product = require('../models/product');
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 
@@ -41,24 +41,33 @@ const getAllProductsAdmin = async (req, res) => {
 
 // --- Admin: Create product ---
 const createProduct = async (req, res) => {
-    const product = new Product({
-        name: 'Sample Name',
-        price: 0,
-        user: req.user._id,
-        brand: 'Sample Brand',
-        category: 'Sample Category',
-        countInStock: 0,
-        description: 'Sample Description',
-        images: [],
-        isFeatured: false,
-    });
-    const createdProduct = await product.save();
-    res.status(201).json(createdProduct);
+    try {
+        const { name, brand, category, description, price, countInStock, isfeatured } = req.body;
+
+        const product = new Product({
+            name,
+            brand,
+            category,
+            description,
+            price,
+            countInStock,
+            images: [], // images will be uploaded separately
+            isfeatured: isfeatured || false,
+            rating: 0,
+            numReviews: 0,
+        });
+
+        const createdProduct = await product.save();
+        res.status(201).json(createdProduct);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to create product' });
+    }
 };
 
 // --- Admin: Update product ---
 const updateProduct = async (req, res) => {
-    const { name, price, description, images, brand, category, countInStock, isFeatured } = req.body;
+    const { name, price, description, images, brand, category, countInStock, isfeatured } = req.body;
 
     const product = await Product.findById(req.params.id);
     if (product) {
@@ -69,7 +78,7 @@ const updateProduct = async (req, res) => {
         product.brand = brand || product.brand;
         product.category = category || product.category;
         product.countInStock = countInStock || product.countInStock;
-        product.isFeatured = isFeatured !== undefined ? isFeatured : product.isFeatured;
+        product.isfeatured = isfeatured !== undefined ? isfeatured : product.isfeatured;
 
         const updatedProduct = await product.save();
         res.json(updatedProduct);
@@ -92,7 +101,7 @@ const deleteProduct = async (req, res) => {
 // --- Featured products ---
 const getFeaturedProducts = async (req, res) => {
     try {
-        const products = await Product.find({ isFeatured: true }).limit(8);
+        const products = await Product.find({ isfeatured: true }).limit(8);
         res.json(products);
     } catch (error) {
         console.error(error);
