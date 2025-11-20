@@ -12,6 +12,7 @@ const {
   uploadProductImage,
   deleteProductImage,
   getFeaturedProducts,
+  getCategories,
 } = require('../controllers/product');
 
 // --- Configure multer for image upload ---
@@ -42,6 +43,9 @@ router.delete('/:id/images', protect, admin, deleteProductImage);
 
 // Get featured products (specific route first!)
 router.get('/featured', getFeaturedProducts);
+
+// Get Categories
+router.get('/categories', getCategories);
 
 // Get all products with pagination & search
 router.get('/', getProducts);
