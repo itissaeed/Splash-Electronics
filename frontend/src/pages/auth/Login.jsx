@@ -1,27 +1,39 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import Breadcrumb from "../../BreadCrumb";
+import { useContext } from "react";
+import { UserContext } from "../context/UserContext";
+import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { login } = useContext(UserContext);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     try {
       const res = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+
       const data = await res.json();
-      if (res.ok) {
-        localStorage.setItem("token", data.token);
-        window.location.href = "/";
+
+      if (res.ok && data.status === "success") {
+        login(data.user, data.token);
+
+
+        // Redirect
+        navigate("/");
       } else {
         alert("Login failed: " + data.message);
       }
     } catch (err) {
+      console.error(err);
       alert("An error occurred during login.");
     }
   };

@@ -18,6 +18,7 @@ exports.signup = async (req, res) => {
 
         // Normalize and validate number before queries/creation
         const normalizedNumber = normalizeBangladeshNumber(number);
+        const VALIDATION_ERROR = 'Invalid Bangladeshi phone number format.';
         if (!normalizedNumber) {
             return res.status(400).json({ status: 'fail', message: VALIDATION_ERROR });
         }

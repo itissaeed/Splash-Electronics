@@ -1,8 +1,8 @@
-const Product = require('../models/Product');
+const Product = require('../models/product');
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 
-// @desc    Get all products with pagination and search
+// --- Public: Get products with pagination & search ---
 const getProducts = async (req, res) => {
     const pageSize = Number(req.query.limit) || 10;
     const page = Number(req.query.pageNumber) || 1;
@@ -23,37 +23,51 @@ const getProducts = async (req, res) => {
     res.json({ products, page, pages: Math.ceil(count / pageSize) });
 };
 
-// @desc    Get product by ID
-const getProductsById = async (req, res) => {
+// --- Public: Get single product by ID ---
+const getProductById = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (product) {
-        res.json(product);
+        res.json(product); // return a single object
     } else {
-        res.status(404);
-        throw new Error('Product not found');
+        res.status(404).json({ message: 'Product not found' });
     }
 };
 
-// @desc    Create a new product
-const createProduct = async (req, res) => {
-    const product = new Product({
-        name: 'Sample Name',
-        price: 0,
-        user: req.user._id,
-        brand: 'Sample Brand',
-        category: 'Sample Category',
-        countInStock: 0,
-        description: 'Sample Description',
-        images: [],
-    });
-
-    const createdProduct = await product.save();
-    res.status(201).json(createdProduct);
+// --- Admin: Get all products (no pagination) ---
+const getAllProductsAdmin = async (req, res) => {
+    const products = await Product.find({});
+    res.json({ products }); // always return { products: [...] } for .map
 };
 
-// @desc    Update a product
+// --- Admin: Create product ---
+const createProduct = async (req, res) => {
+    try {
+        const { name, brand, category, description, price, countInStock, isfeatured } = req.body;
+
+        const product = new Product({
+            name,
+            brand,
+            category,
+            description,
+            price,
+            countInStock,
+            images: [], // images will be uploaded separately
+            isfeatured: isfeatured || false,
+            rating: 0,
+            numReviews: 0,
+        });
+
+        const createdProduct = await product.save();
+        res.status(201).json(createdProduct);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to create product' });
+    }
+};
+
+// --- Admin: Update product ---
 const updateProduct = async (req, res) => {
-    const { name, price, description, images, brand, category, countInStock } = req.body;
+    const { name, price, description, images, brand, category, countInStock, isfeatured } = req.body;
 
     const product = await Product.findById(req.params.id);
     if (product) {
@@ -64,28 +78,38 @@ const updateProduct = async (req, res) => {
         product.brand = brand || product.brand;
         product.category = category || product.category;
         product.countInStock = countInStock || product.countInStock;
+        product.isfeatured = isfeatured !== undefined ? isfeatured : product.isfeatured;
 
         const updatedProduct = await product.save();
         res.json(updatedProduct);
     } else {
-        res.status(404);
-        throw new Error('Product not found');
+        res.status(404).json({ message: 'Product not found' });
     }
 };
 
-// @desc    Delete a product
+// --- Admin: Delete product ---
 const deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (product) {
         await product.remove();
         res.json({ message: 'Product removed' });
     } else {
-        res.status(404);
-        throw new Error('Product not found');
+        res.status(404).json({ message: 'Product not found' });
     }
 };
 
-// @desc    Upload product image to Cloudinary
+// --- Featured products ---
+const getFeaturedProducts = async (req, res) => {
+    try {
+        const products = await Product.find({ isfeatured: true }).limit(8);
+        res.json(products);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Failed to fetch featured products' });
+    }
+};
+
+// --- Image upload / delete (Cloudinary) remain unchanged ---
 const uploadProductImage = async (req, res) => {
     try {
         const product = await Product.findById(req.params.id);
@@ -96,17 +120,12 @@ const uploadProductImage = async (req, res) => {
             new Promise((resolve, reject) => {
                 const stream = cloudinary.uploader.upload_stream(
                     { folder: 'products' },
-                    (error, result) => {
-                        if (result) resolve(result);
-                        else reject(error);
-                    }
+                    (error, result) => (result ? resolve(result) : reject(error))
                 );
                 streamifier.createReadStream(buffer).pipe(stream);
             });
 
         const result = await uploadFromBuffer(req.file.buffer);
-
-        // Save URL and public_id in product images array
         product.images.push({ url: result.secure_url, public_id: result.public_id });
         await product.save();
 
@@ -117,17 +136,13 @@ const uploadProductImage = async (req, res) => {
     }
 };
 
-// @desc    Delete product image from Cloudinary
 const deleteProductImage = async (req, res) => {
-    const { public_id } = req.body; // send public_id in request
+    const { public_id } = req.body;
     try {
         const product = await Product.findById(req.params.id);
         if (!product) return res.status(404).json({ message: 'Product not found' });
 
-        // Delete from Cloudinary
         await cloudinary.uploader.destroy(public_id);
-
-        // Remove from product.images array
         product.images = product.images.filter(img => img.public_id !== public_id);
         await product.save();
 
@@ -140,10 +155,12 @@ const deleteProductImage = async (req, res) => {
 
 module.exports = {
     getProducts,
-    getProductsById,
+    getProductById,
+    getAllProductsAdmin,
     createProduct,
     updateProduct,
     deleteProduct,
     uploadProductImage,
     deleteProductImage,
+    getFeaturedProducts,
 };

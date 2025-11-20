@@ -1,38 +1,52 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const {protect, admin} = require('../middleware/authMiddleware');
-
-// Import controllers
+const { protect, admin } = require('../middleware/authMiddleware');
 const {
-    getProducts,
-    getProductsById,
-    createProduct,
-    updateProduct,
-    deleteProduct,
-    uploadProductImage,
-    deleteProductImage,
+  getProducts,
+  getProductById,
+  getAllProductsAdmin,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  uploadProductImage,
+  deleteProductImage,
+  getFeaturedProducts,
 } = require('../controllers/product');
 
-const { protect, admin } = require('../middleware/authMiddleware');
-
-// Configure Multer
-const storage = multer.memoryStorage(); // store file in memory
+// --- Configure multer for image upload ---
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
-// Product CRUD routes
-router.route('/')
-    .get(getProducts)
-    .post(protect, admin, createProduct);
+// -------------------- ADMIN ROUTES --------------------
 
-router.route('/:id')
-    .get(getProductsById)
-    .put(protect, admin, updateProduct)
-    .delete(protect, admin, deleteProduct);
+// Get all products (no pagination)
+router.get('/admin', protect, admin, getAllProductsAdmin);
 
-// Image upload route
-router.route('/:id/images')
-    .post(protect, admin, upload.single('image'), uploadProductImage)
-    .delete(protect, admin, deleteProductImage);
+// Create a new product
+router.post('/', protect, admin, createProduct);
+
+// Update a product
+router.put('/:id', protect, admin, updateProduct);
+
+// Delete a product
+router.delete('/:id', protect, admin, deleteProduct);
+
+// Upload a product image
+router.post('/:id/images', protect, admin, upload.single('image'), uploadProductImage);
+
+// Delete a product image
+router.delete('/:id/images', protect, admin, deleteProductImage);
+
+// -------------------- PUBLIC ROUTES --------------------
+
+// Get featured products (specific route first!)
+router.get('/featured', getFeaturedProducts);
+
+// Get all products with pagination & search
+router.get('/', getProducts);
+
+// Get single product by ID (dynamic route LAST!)
+router.get('/:id', getProductById);
 
 module.exports = router;
