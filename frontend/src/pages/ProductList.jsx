@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import api from "../utils/api";
+import Breadcrumb from "../BreadCrumb";
 
 const ProductListPage = () => {
   const [products, setProducts] = useState([]);
@@ -75,7 +76,7 @@ const ProductListPage = () => {
       {/* Dark header bar */}
       <header className="bg-gray-900 text-white py-6 shadow-lg mb-8">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-          <h1 className="text-2xl sm:text-3xl font-bold">All Products</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold">Products</h1>
 
           {/* Search input */}
           <input
@@ -87,6 +88,18 @@ const ProductListPage = () => {
           />
         </div>
       </header>
+
+      {/* Breadcrumb */}
+      <div className="max-w-7xl mx-auto px-6">
+        <Breadcrumb
+          items={[
+            { to: "/", label: "Home" },
+            selectedCategory !== "All"
+              ? { label: selectedCategory }
+              : { label: "Products" },
+          ]}
+        />
+      </div>
 
       {/* Filters */}
       <div className="max-w-7xl mx-auto px-6 flex flex-wrap gap-3 mb-6">
