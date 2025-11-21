@@ -8,9 +8,11 @@ const Home = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const { user, logout } = useContext(UserContext);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const colors = ["#FDE68A", "#A7F3D0", "#BFDBFE", "#FECACA", "#FBCFE8", "#C7D2FE"];
 
-  // Fetch featured products from backend
+
+  // Fetch featured products
   useEffect(() => {
     const fetchFeaturedProducts = async () => {
       try {
@@ -22,6 +24,24 @@ const Home = () => {
     };
     fetchFeaturedProducts();
   }, []);
+
+  // Fetch categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const { data } = await api.get("/products/categories");
+        setCategories(data);
+      } catch (error) {
+        console.error("Failed to fetch categories:", error);
+      }
+    };
+    fetchCategories();
+  }, []);
+
+
+
+
+
 
   return (
     <>
@@ -51,152 +71,135 @@ const Home = () => {
           {/* ACCOUNT BUTTON (Desktop) */}
           <div className="hidden md:flex items-center relative">
             {user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setDropdownOpen(!dropdownOpen)}
-                  className="text-white font-medium px-3 py-2 rounded-lg flex items-center gap-2"
-                >
+              <div className="group relative">
+                <button className="text-white font-medium px-3 py-2 rounded-lg flex items-center gap-2">
                   <FaUser /> Hello, {user.name.split(" ")[0]}
                 </button>
 
-                {dropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-40 bg-white shadow-lg rounded-lg py-2 text-gray-800 z-50">
-                    <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100">
-                      Profile
+                {/* DROPDOWN */}
+                <div className="absolute hidden group-hover:block right-0 mt-2 w-40 bg-white shadow-lg rounded-lg py-2 text-gray-800 z-50">
+                  <Link to="/profile" className="block px-4 py-2 hover:bg-gray-100">Profile</Link>
+                  <Link to="/orders" className="block px-4 py-2 hover:bg-gray-100">My Orders</Link>
+                  {user.isAdmin && (
+                    <Link to="/admin" className="block px-4 py-2 text-red-600 font-semibold hover:bg-gray-100">
+                      Admin Panel
                     </Link>
-                    <Link to="/orders" className="block px-4 py-2 hover:bg-gray-100">
-                      My Orders
-                    </Link>
-                    {user.isAdmin && (
-                      <Link
-                        to="/admin"
-                        className="block px-4 py-2 text-red-600 font-semibold hover:bg-gray-100"
-                      >
-                        Admin Panel
-                      </Link>
-                    )}
-                    <button
-                      onClick={() => {
-                        logout();
-                        setDropdownOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-red-500 hover:bg-gray-100"
-                    >
-                      Logout
-                    </button>
-                  </div>
-                )}
+                  )}
+                  <button onClick={logout} className="w-full text-left px-4 py-2 text-red-500 hover:bg-gray-100">
+                    Logout
+                  </button>
+                </div>
               </div>
             ) : (
-              <Link to="/login" className="flex items-center text-white font-medium px-3 py-2 rounded-lg hover:bg-gray-800 transition">
-                <FaUser className="mr-2" /> Account (Login / Sign Up)
+              <Link
+                to="/login"
+                className="flex items-center text-white hover:text-indigo-400 transition p-2 rounded-lg"
+              >
+                <FaUser className="mr-2 text-lg" />
+                Account (Login / Sign Up)
               </Link>
             )}
           </div>
 
-    {/* MOBILE MENU BUTTON */}
-            <button
-              className="text-white text-2xl md:hidden"
-              onClick={() => setMenuOpen(true)}
-            >
-              <FaBars />
-            </button>
-          </div>
+          {/* MOBILE MENU BUTTON */}
+          <button className="text-white text-2xl md:hidden" onClick={() => setMenuOpen(true)}>
+            <FaBars />
+          </button>
+        </div>
 
-          {/* MOBILE MENU DRAWER */}
-          <div
-            className={`fixed top-0 right-0 h-full w-64 bg-gray-800 p-6 transform transition-transform duration-300 ${menuOpen ? "translate-x-0" : "translate-x-full"
-              }`}
-          >
-            <button className="text-white text-2xl mb-8" onClick={() => setMenuOpen(false)}>
-              <FaTimes />
-            </button>
+        {/* MOBILE MENU */}
+        <div
+          className={`fixed top-0 right-0 h-full w-64 bg-gray-800 p-6 transform transition-transform duration-300 ${menuOpen ? "translate-x-0" : "translate-x-full"
+            }`}
+        >
+          <button className="text-white text-2xl mb-8" onClick={() => setMenuOpen(false)}>
+            <FaTimes />
+          </button>
 
-            {/* Mobile Search */}
-            <div className="mb-6">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search"
-                  className="w-full py-3 pl-4 pr-12 rounded-lg text-gray-800"
-                />
-                <FaSearch className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
-              </div>
+          {/* Mobile Search */}
+          <div className="mb-6">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search"
+                className="w-full py-3 pl-4 pr-12 rounded-lg text-gray-800"
+              />
+              <FaSearch className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600" />
             </div>
-
-            {/* Mobile Links */}
-            <nav className="flex flex-col space-y-4 text-white">
-              <Link to="/" onClick={() => setMenuOpen(false)}>Home</Link>
-
-              {user ? (
-                <>
-                  <span className="text-lg font-semibold">Hello, {user.name}</span>
-
-                  {user.role === "admin" && (
-                    <Link
-                      to="/admin"
-                      onClick={() => setMenuOpen(false)}
-                      className="text-red-400 font-semibold hover:text-red-500"
-                    >
-                      Admin Panel
-                    </Link>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      logout();
-                      setMenuOpen(false);
-                    }}
-                    className="text-sm text-red-400 hover:text-red-500"
-                  >
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <Link
-                  to="/login"
-                  className="flex items-center"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <FaUser className="mr-2" /> Account (Login / Sign Up)
-                </Link>
-              )}
-            </nav>
           </div>
+
+          {/* Mobile Links */}
+          <nav className="flex flex-col space-y-4 text-white">
+            <Link to="/" onClick={() => setMenuOpen(false)}>Home</Link>
+            {user ? (
+              <>
+                <span className="text-lg font-semibold">Hello, {user.name}</span>
+                {user.role === "admin" && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="text-red-400 font-semibold hover:text-red-500"
+                  >
+                    Admin Panel
+                  </Link>
+                )}
+                <button
+                  onClick={() => {
+                    logout();
+                    setMenuOpen(false);
+                  }}
+                  className="text-sm text-red-400 hover:text-red-500"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <Link to="/login" className="flex items-center" onClick={() => setMenuOpen(false)}>
+                <FaUser className="mr-2" /> Account (Login / Sign Up)
+              </Link>
+            )}
+          </nav>
+        </div>
       </header>
 
-
-      {/* HOME PAGE CONTENT */}
-      < main className="max-w-7xl mx-auto px-6 py-8" >
-        {/* HERO BANNER */}
-        < div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl p-10 shadow-lg mb-12" >
+      {/* MAIN CONTENT */}
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* HERO */}
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl p-10 shadow-lg mb-12">
           <h1 className="text-4xl font-bold mb-4">Welcome to Splash Electronics</h1>
           <p className="text-lg mb-6">
             Your one-stop shop for laptops, phones, headphones, gadgets & more!
           </p>
           <Link
-            to="/"
+            to="/products"
             className="bg-white text-indigo-700 px-6 py-3 rounded-lg font-semibold shadow hover:bg-gray-200"
           >
             Shop Now
           </Link>
-        </div >
-
-        {/* CATEGORIES */}
-        < h2 className="text-2xl font-bold mb-4" > Shop by Category</h2 >
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6 mb-12">
-          {["Laptops", "Phones", "Keyboards", "Mouse", "Headphones", "Speakers"].map(
-            (cat) => (
-              <Link
-                key={cat}
-                to={`/products?category=${encodeURIComponent(cat)}`}
-                className="bg-gray-100 p-6 rounded-xl text-center shadow hover:shadow-lg cursor-pointer font-semibold hover:bg-indigo-100 transition"
-              >
-                {cat}
-              </Link>
-            )
-          )}
         </div>
+
+        {/* shop by category */}
+        {/*  Fetch categories dynamically */}
+        <h2 className="text-2xl font-bold mb-4">Shop by Category</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-6 mb-12">
+          <Link
+            to="/products"
+            className="p-6 rounded-xl text-center shadow cursor-pointer font-semibold transition hover:scale-105 bg-gray-200"
+          >
+            All
+          </Link>
+          {categories.map((cat, index) => (
+            <Link
+              key={cat}
+              to={`/products?category=${encodeURIComponent(cat)}`}
+              className="p-6 rounded-xl text-center shadow cursor-pointer font-semibold transition hover:scale-105"
+              style={{ backgroundColor: colors[index % colors.length] }}
+            >
+              {cat}
+            </Link>
+          ))}
+        </div>
+
 
         {/* FEATURED PRODUCTS */}
         <h2 className="text-2xl font-bold mb-4">Featured Products</h2>
@@ -221,12 +224,11 @@ const Home = () => {
             <p>Loading featured products...</p>
           )}
         </div>
-      </main >
+      </main>
 
       {/* FOOTER */}
-      < footer className="bg-[#0b1420] text-gray-300 py-12" >
+      <footer className="bg-[#0b1420] text-gray-300 py-12">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* SUPPORT */}
           <div>
             <h3 className="text-white text-sm font-semibold mb-4">SUPPORT</h3>
             <div className="flex items-center mb-4">
@@ -245,7 +247,6 @@ const Home = () => {
             </div>
           </div>
 
-          {/* ABOUT US */}
           <div>
             <h3 className="text-white text-sm font-semibold mb-4">ABOUT US</h3>
             <ul className="space-y-2 text-sm">
@@ -258,7 +259,6 @@ const Home = () => {
             </ul>
           </div>
 
-          {/* COMPANY INFO */}
           <div>
             <h3 className="text-white text-sm font-semibold mb-4">COMPANY</h3>
             <ul className="space-y-2 text-sm">
@@ -269,7 +269,6 @@ const Home = () => {
             </ul>
           </div>
 
-          {/* STAY CONNECTED */}
           <div>
             <h3 className="text-white text-sm font-semibold mb-4">STAY CONNECTED</h3>
             <p className="text-sm font-bold">Splash Electronics</p>
@@ -277,7 +276,7 @@ const Home = () => {
             <p className="mt-2 text-orange-500 font-semibold">sunjinwoo35@gmail.com</p>
           </div>
         </div>
-      </footer >
+      </footer>
     </>
   );
 };

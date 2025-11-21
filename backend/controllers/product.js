@@ -98,6 +98,20 @@ const deleteProduct = async (req, res) => {
     }
 };
 
+// GET /api/products/categories
+const getCategories = async (req, res) => {
+    try {
+        const categories = await Product.distinct("category");
+        res.json(categories);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to fetch categories" });
+    }
+};
+
+module.exports = { getCategories };
+
+
 // --- Featured products ---
 const getFeaturedProducts = async (req, res) => {
     try {
@@ -163,4 +177,5 @@ module.exports = {
     uploadProductImage,
     deleteProductImage,
     getFeaturedProducts,
+    getCategories,
 };
