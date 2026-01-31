@@ -3,44 +3,50 @@ const asyncHandler = require('express-async-handler');
 const User = require('../models/userModel');
 
 const protect = asyncHandler(async (req, res, next) => {
-    let token;
+  let token;
 
-    // Check if token exists in Authorization header
-    if (
-        req.headers.authorization &&
-        req.headers.authorization.startsWith('Bearer')
-    ) {
-        try {
-            token = req.headers.authorization.split(' ')[1];
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      token = req.headers.authorization.split(' ')[1];
 
-            // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            // Attach user to request object (excluding password)
-            req.user = await User.findById(decoded.id).select('-password');
+      req.user = await User.findById(decoded.id).select('-password');
 
-            next(); // proceed to next middleware/controller
-        } catch (error) {
-            console.error(error);
-            res.status(401);
-            throw new Error('Not authorized, token failed');
-        }
-    }
-
-    if (!token) {
+      // ✅ user deleted but token still exists
+      if (!req.user) {
         res.status(401);
-        throw new Error('Not authorized, no token');
+        throw new Error('Not authorized, user not found');
+      }
+
+      // ✅ block user access
+      if (req.user.isBlocked) {
+        res.status(403);
+        throw new Error('Your account is blocked');
+      }
+
+      return next();
+    } catch (error) {
+      console.error(error);
+      res.status(401);
+      throw new Error('Not authorized, token failed');
     }
+  }
+
+  res.status(401);
+  throw new Error('Not authorized, no token');
 });
 
-// Admin middleware
 const admin = (req, res, next) => {
-    if (req.user && req.user.isAdmin) {
-        next(); // user is admin, allow
-    } else {
-        res.status(403); // forbidden
-        throw new Error('Not authorized as an admin');
-    }
+  const isAdmin = req.user?.isAdmin === true;
+  const hasAdminRole = Array.isArray(req.user?.roles) && req.user.roles.includes('admin');
+
+  if (req.user && (isAdmin || hasAdminRole)) {
+    return next();
+  }
+
+  res.status(403);
+  throw new Error('Not authorized as an admin');
 };
 
 module.exports = { protect, admin };

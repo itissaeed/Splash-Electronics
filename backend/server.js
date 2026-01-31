@@ -1,57 +1,84 @@
 const express = require('express');
 const cors = require('cors');
-const connectDB = require('./config/db');
 require('dotenv').config();
+
+const connectDB = require('./config/db');
+
 const productRoutes = require('./routes/productRoutes');
 const authRoutes = require('./routes/authRoutes');
 
+// NEW routes (if you created them)
+const categoryRoutes = require('./routes/categoryRoutes');
+const brandRoutes = require('./routes/brandRoutes');
+const cartRoutes = require('./routes/cartRoutes');
+const orderRoutes = require('./routes/orderRoutes');
+const returnRoutes = require('./routes/returnRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+
 const app = express();
+
 app.use(cors({
-    origin: 'http://localhost:3000', // allow only my frontend
-    credentials: true              // allow cookies or auth headers if needed
+  origin: 'http://localhost:3000',
+  credentials: true
 }));
 
 app.use(express.json());
 
-
-
 // Home route
 app.get('/', (req, res) => {
-    res.send("Splash Electronics Backend is running.");
+  res.send("Splash Electronics Backend is running.");
 });
+
 // Mount routes
 app.use('/api/auth', authRoutes);
-// Product routes
 app.use('/api/products', productRoutes);
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({
-        status: 'error',
-        message: 'Something went wrong!'
-    });
+
+app.use('/api/categories', categoryRoutes);
+app.use('/api/brands', brandRoutes);
+
+app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/returns', returnRoutes);
+
+app.use('/api/admin/inventory', inventoryRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    status: 'fail',
+    message: `Can't find ${req.originalUrl} on this server!`
+  });
 });
 
-// Handle unhandled routes
-app.use((req, res) => {
-    res.status(404).json({
-        status: 'fail',
-        message: `Can't find ${req.originalUrl} on this server!`
-    });
+// Error handler (must be last)
+app.use((err, req, res, next) => {
+  console.error(err);
+
+  const statusCode = res.statusCode && res.statusCode !== 200 ? res.statusCode : 500;
+
+  res.status(statusCode).json({
+    status: statusCode >= 500 ? 'error' : 'fail',
+    message: err.message || 'Something went wrong!',
+    stack: process.env.NODE_ENV === 'production' ? undefined : err.stack
+  });
 });
+
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+connectDB()
+  .then(() => {
     app.listen(PORT, () => {
-        console.log(`Server is running on port ${PORT}`);
+      console.log(`Server is running on port ${PORT}`);
     });
-}).catch(err => {
-    console.error("Failed to start server due to DB error.");
-});
+  })
+  .catch(err => {
+    console.error("Failed to start server due to DB error.", err);
+  });
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
-    console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-    console.error(err.name, err.message);
-    process.exit(1);
+  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
+  console.error(err);
+  process.exit(1);
 });
