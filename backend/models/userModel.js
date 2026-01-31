@@ -1,83 +1,68 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const { normalizeBangladeshNumber, VALIDATION_ERROR } = require('../utils/numberNormalizer');
-// IMPORT: For password reset token generation
-const crypto = require('crypto');
+// models/User.js
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const { normalizeBangladeshNumber, VALIDATION_ERROR } = require("../utils/numberNormalizer");
+
+const addressSchema = new mongoose.Schema({
+  label: { type: String, default: "Home" },     // Home/Office
+  recipientName: { type: String, required: true },
+  phone: { type: String, required: true },
+  division: { type: String, required: true },  // Dhaka, Chattogram...
+  district: { type: String, required: true },
+  upazila: { type: String },
+  area: { type: String },                      // locality
+  postalCode: { type: String },
+  addressLine1: { type: String, required: true },
+  addressLine2: { type: String },
+  isDefault: { type: Boolean, default: false },
+}, { _id: true });
 
 const userSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true,
-    },
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-    },
-    password: {
-        type: String,
-        required: true,
-    },
-    // Using a dedicated String for numbers is appropriate here
-    number: {
-        type: String,
-        required: true,
-    },
-    isAdmin: {
-        type: Boolean,
-        default: false,
-    },
-    // Stores the HASHED token
-    resetPasswordToken: String,
-    resetPasswordExpires: Date,
+  name: { type: String, required: true, trim: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password: { type: String, required: true },
 
-}, {
-    timestamps: true,
-});
+  number: { type: String, required: true },
+  isAdmin: { type: Boolean, default: false }, // keep if you want
+  roles: { type: [String], default: ["customer"] }, // customer/admin/manager/support
 
-// --- Pre-Save Hook (Data Validation & Password Hashing) ---
-userSchema.pre('save', async function (next) {
-    try {
-        // Normalize phone if changed using shared util
-        if (this.isModified('number')) {
-            const normalized = normalizeBangladeshNumber(this.number);
-            if (!normalized) {
-                return next(new Error(VALIDATION_ERROR));
-            }
-            this.number = normalized;
-        }
+  addresses: [addressSchema],
 
-        // --- Password Hashing ---
-        if (!this.isModified('password')) {
-            return next(); // Skip hashing if password hasn't changed
-        }
-        const salt = await bcrypt.genSalt(10);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (error) {
-        next(error); // Pass any error to the save operation
+  wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+  isBlocked: { type: Boolean, default: false },
+  lastLoginAt: { type: Date },
+
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
+}, { timestamps: true });
+
+userSchema.pre("save", async function (next) {
+  try {
+    if (this.isModified("number")) {
+      const normalized = normalizeBangladeshNumber(this.number);
+      if (!normalized) return next(new Error(VALIDATION_ERROR));
+      this.number = normalized;
     }
+    if (!this.isModified("password")) return next();
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (e) { next(e); }
 });
 
-// --- Instance Method: Compare Password ---
-// Compares the entered password (raw) with the hashed password (DB)
 userSchema.methods.matchPassword = async function (enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
+  return bcrypt.compare(enteredPassword, this.password);
 };
 
-// --- Instance Method: Generate Reset Token ---
-// Generates a random token, hashes it for storage, and returns the RAW token for email.
 userSchema.methods.createPasswordResetToken = function () {
-    const resetToken = crypto.randomBytes(32).toString('hex');
-
-    // Store HASHED token in DB for comparison
-    this.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    this.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // Token expires in 1 hour
-
-    return resetToken; // Return this RAW token to send to the user via email
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  this.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+  this.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
+  return resetToken;
 };
 
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ number: 1 });
 
-const User = mongoose.model('User', userSchema);
-
-module.exports = User;
+module.exports = mongoose.model("User", userSchema);

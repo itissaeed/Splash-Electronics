@@ -2,10 +2,9 @@ const express = require('express');
 const router = express.Router();
 
 // Import controllers
-const { signup } = require('../controllers/userSignup');
-const { login } = require('../controllers/userLogin');
-const { forgotPassword } = require('../controllers/forgotPassword');
-const { resetPassword } = require('../controllers/resetPassword');
+const { signup, login } = require('../controllers/authController');
+const { forgotPassword, resetPassword } = require('../controllers/passwordController');
+
 
 // Auth routes
 router.post('/signup', signup);

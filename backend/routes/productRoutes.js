@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { protect, admin } = require('../middleware/authMiddleware');
+
 const {
   getProducts,
-  getProductById,
+  getProductBySlug,
+  getProductById,        // optional helper (if you keep it)
   getAllProductsAdmin,
   createProduct,
   updateProduct,
@@ -12,45 +14,36 @@ const {
   uploadProductImage,
   deleteProductImage,
   getFeaturedProducts,
-  getCategories,
-} = require('../controllers/product');
+} = require('../controllers/productController'); // ✅ updated import
 
-// --- Configure multer for image upload ---
+// --- multer ---
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 // -------------------- ADMIN ROUTES --------------------
-
-// Get all products (no pagination)
 router.get('/admin', protect, admin, getAllProductsAdmin);
-
-// Create a new product
 router.post('/', protect, admin, createProduct);
-
-// Update a product
 router.put('/:id', protect, admin, updateProduct);
-
-// Delete a product
 router.delete('/:id', protect, admin, deleteProduct);
 
-// Upload a product image
+// Upload image to a VARIANT
+// POST /api/products/:id/images?variantId=xxxx
 router.post('/:id/images', protect, admin, upload.single('image'), uploadProductImage);
 
-// Delete a product image
+// Delete image from a VARIANT
+// DELETE /api/products/:id/images  body: { variantId, public_id }
 router.delete('/:id/images', protect, admin, deleteProductImage);
 
 // -------------------- PUBLIC ROUTES --------------------
-
-// Get featured products (specific route first!)
 router.get('/featured', getFeaturedProducts);
 
-// Get Categories
-router.get('/categories', getCategories);
+// Optional: support old frontend calling by id
+router.get('/id/:id', getProductById);
 
-// Get all products with pagination & search
+// List
 router.get('/', getProducts);
 
-// Get single product by ID (dynamic route LAST!)
-router.get('/:id', getProductById);
+// Single product by slug (SEO)
+router.get('/:slug', getProductBySlug);
 
 module.exports = router;
