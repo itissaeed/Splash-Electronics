@@ -1,18 +1,19 @@
+// src/pages/admin/pages/AdminLayout.jsx
 import React, { useMemo, useState } from "react";
-import { Routes, Route, NavLink, Navigate } from "react-router-dom";
-
+import { Routes, Route, NavLink, Navigate, Link } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  Boxes,
-  Users,
-  TicketPercent,
-  BarChart3,
-  LineChart,
-  Settings,
-  Menu,
-} from "lucide-react";
+  FaHome,
+  FaTachometerAlt,
+  FaBox,
+  FaShoppingCart,
+  FaBoxes,
+  FaUsers,
+  FaTags,
+  FaChartBar,
+  FaChartLine,
+  FaCog,
+  FaBars,
+} from "react-icons/fa";
 
 import AdminOverview from "./AdminOverview";
 import AdminProducts from "./AdminProducts";
@@ -24,15 +25,16 @@ import AdminAnalytics from "./AdminAnalytics";
 import AdminForecasting from "./AdminForecasting";
 
 const nav = [
-  { to: "/admin/overview", label: "Overview", icon: LayoutDashboard },
-  { to: "/admin/products", label: "Products", icon: Package },
-  { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
-  { to: "/admin/inventory", label: "Inventory", icon: Boxes },
-  { to: "/admin/customers", label: "Customers", icon: Users },
-  { to: "/admin/coupons", label: "Coupons", icon: TicketPercent },
-  { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/admin/forecasting", label: "Forecasting", icon: LineChart },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
+  { to: "/", label: "Store Home", icon: FaHome, external: true }, // ✅ go back to site
+  { to: "/admin/overview", label: "Overview", icon: FaTachometerAlt },
+  { to: "/admin/products", label: "Products", icon: FaBox },
+  { to: "/admin/orders", label: "Orders", icon: FaShoppingCart },
+  { to: "/admin/inventory", label: "Inventory", icon: FaBoxes },
+  { to: "/admin/customers", label: "Customers", icon: FaUsers },
+  { to: "/admin/coupons", label: "Coupons", icon: FaTags },
+  { to: "/admin/analytics", label: "Analytics", icon: FaChartBar },
+  { to: "/admin/forecasting", label: "Forecasting", icon: FaChartLine },
+  { to: "/admin/settings", label: "Settings", icon: FaCog },
 ];
 
 export default function AdminLayout() {
@@ -54,13 +56,15 @@ export default function AdminLayout() {
           ${collapsed ? "w-20" : "w-64"}`}
         >
           <div className="flex items-center justify-between p-4 border-b">
-            <div
+            <Link
+              to="/admin/overview"
               className={`font-extrabold text-gray-900 ${
                 collapsed ? "text-xs" : "text-lg"
               }`}
+              title="Go to Admin Overview"
             >
               {collapsed ? "SE" : "Splash Admin"}
-            </div>
+            </Link>
 
             <button
               className="p-2 rounded-lg hover:bg-gray-100"
@@ -68,13 +72,28 @@ export default function AdminLayout() {
               aria-label="Toggle sidebar"
               type="button"
             >
-              <Menu size={18} />
+              <FaBars size={18} />
             </button>
           </div>
 
           <nav className="p-2 space-y-1">
             {nav.map((item) => {
               const Icon = item.icon;
+
+              // ✅ Store/Home link shouldn't highlight like NavLink
+              if (item.external) {
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    <Icon size={18} />
+                    {!collapsed && <span>{item.label}</span>}
+                  </Link>
+                );
+              }
+
               return (
                 <NavLink
                   key={item.to}
@@ -87,6 +106,13 @@ export default function AdminLayout() {
               );
             })}
           </nav>
+
+          {/* Bottom area */}
+          <div className="absolute bottom-0 left-0 right-0 p-3 border-t bg-white">
+            <div className="text-xs text-gray-500">
+              {!collapsed ? "Splash Electronics Admin" : "Admin"}
+            </div>
+          </div>
         </aside>
 
         {/* Content */}
@@ -97,11 +123,23 @@ export default function AdminLayout() {
               <div className="font-bold text-gray-900">Admin Dashboard</div>
 
               <div className="flex items-center gap-2">
+                {/* ✅ Always visible home button */}
+                <Link
+                  to="/"
+                  className="rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  ← Back to Store
+                </Link>
+
                 <input
                   placeholder="Search in admin…"
                   className="hidden md:block w-80 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                 />
-                <div className="h-9 w-9 rounded-full bg-gray-200" />
+
+                <div
+                  className="h-9 w-9 rounded-full bg-gray-200"
+                  title="Admin"
+                />
               </div>
             </div>
           </header>
