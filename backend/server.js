@@ -17,6 +17,7 @@ const orderRoutes = require('./routes/orderRoutes');
 const returnRoutes = require('./routes/returnRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 
 const app = express();
 
@@ -33,8 +34,18 @@ app.get('/', (req, res) => {
 });
 
 // Mount routes
-app.use('/api/admin', adminRoutes);
+
+// 🔹 More specific admin routes FIRST
 app.use('/api/admin/orders', adminOrderRoutes);
+app.use('/api/admin/inventory', inventoryRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
+
+app.use('/api/admin/customers', adminCustomerRoutes); 
+
+// 🔹 Generic admin routes LAST
+app.use('/api/admin', adminRoutes);
+
+// Auth + public
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 
@@ -44,9 +55,6 @@ app.use('/api/brands', brandRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/returns', returnRoutes);
-
-app.use('/api/admin/inventory', inventoryRoutes);
-app.use('/api/admin/analytics', analyticsRoutes);
 
 // 404 handler
 app.use((req, res) => {

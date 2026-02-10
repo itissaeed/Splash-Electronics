@@ -3,13 +3,14 @@ const router = express.Router();
 const { protect, admin } = require("../middleware/authMiddleware");
 
 const {
-  stockIn,
-  adjustStock,
-  getLedger,
+  getInventoryOverview,
+  adjustInventory,
 } = require("../controllers/inventoryController");
 
-router.post("/in", protect, admin, stockIn);
-router.post("/adjust", protect, admin, adjustStock);
-router.get("/ledger", protect, admin, getLedger);
+// GET /api/admin/inventory/overview
+router.get("/overview", protect, admin, getInventoryOverview);
+
+// POST /api/admin/inventory/adjust
+router.post("/adjust", protect, admin, adjustInventory);
 
 module.exports = router;
