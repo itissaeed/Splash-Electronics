@@ -18,6 +18,14 @@ import { UserProvider } from "./pages/context/UserContext";
 import AdminRoute from "./pages/admin/AdminRoutes";
 import ProtectedRoute from "./pages/ProtectedRoute";
 
+import Cart from "./pages/cart/Cart";
+import Checkout from "./pages/cart/Checkout";
+import OrderSuccess from "./pages/cart/OrderSuccess";
+import OrderDetails from "./pages/cart/OrderDetails";
+import MyOrders from "./pages/orders/MyOrders";
+
+
+
 function App() {
   return (
     <div className="App">
@@ -33,6 +41,14 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
+
+          {/* Cart & Orders */}
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/order-success/:orderNo" element={<OrderSuccess />} />
+          <Route path="/orders" element={<MyOrders />} />
+          <Route path="/order/:orderNo" element={<OrderDetails />} />
+
 
           {/* User protected (examples) */}
           <Route

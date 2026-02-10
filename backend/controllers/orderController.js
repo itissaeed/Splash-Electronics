@@ -205,18 +205,46 @@ exports.getOrderByOrderNo = async (req, res) => {
   }
 };
 
-// Admin: GET /api/admin/orders?status=
+
+// Admin: GET /api/admin/orders?status=all&page=1&limit=20&keyword=ORD
 exports.adminGetOrders = async (req, res) => {
   try {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+
     const filter = {};
-    if (req.query.status) filter.status = req.query.status;
+
+    // Status filter
+    if (req.query.status && req.query.status !== "all") {
+      filter.status = req.query.status;
+    }
+
+    // Keyword filter (orderNo / phone / district / division / user email)
+    const keyword = String(req.query.keyword || "").trim();
+    if (keyword) {
+      filter.$or = [
+        { orderNo: { $regex: keyword, $options: "i" } },
+        { "shippingAddress.phone": { $regex: keyword, $options: "i" } },
+        { "shippingAddress.district": { $regex: keyword, $options: "i" } },
+        { "shippingAddress.division": { $regex: keyword, $options: "i" } },
+      ];
+    }
+
+    const total = await Order.countDocuments(filter);
 
     const orders = await Order.find(filter)
       .sort({ createdAt: -1 })
       .populate("user", "name email number")
+      .skip(limit * (page - 1))
+      .limit(limit)
       .lean();
 
-    res.json(orders);
+    res.json({
+      orders,
+      page,
+      pages: Math.ceil(total / limit),
+      total,
+    });
   } catch (e) {
     console.error("adminGetOrders:", e);
     res.status(500).json({ message: "Failed to fetch orders" });

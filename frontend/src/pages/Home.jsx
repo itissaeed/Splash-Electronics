@@ -103,6 +103,7 @@ const Home = () => {
             </span>
           </Link>
 
+
           {/* Search (Desktop) */}
           <div className="hidden md:flex flex-1 justify-center px-6">
             <div className="relative w-full max-w-2xl">
@@ -139,10 +140,11 @@ const Home = () => {
                   <Link to="/profile" className="block px-4 py-3 text-sm hover:bg-gray-50">
                     Profile
                   </Link>
+                  {!user.isAdmin && (
                   <Link to="/orders" className="block px-4 py-3 text-sm hover:bg-gray-50">
                     My Orders
                   </Link>
-
+                  )}
                   {user.isAdmin && (
                     <Link
                       to="/admin"
@@ -196,9 +198,8 @@ const Home = () => {
 
         {/* Mobile drawer */}
         <div
-          className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-gray-950 text-white p-5 md:hidden transform transition-transform duration-300 ${
-            menuOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-gray-950 text-white p-5 md:hidden transform transition-transform duration-300 ${menuOpen ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="font-bold text-lg">Menu</span>

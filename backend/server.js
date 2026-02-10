@@ -6,6 +6,8 @@ const connectDB = require('./config/db');
 
 const productRoutes = require('./routes/productRoutes');
 const authRoutes = require('./routes/authRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const adminOrderRoutes = require('./routes/adminOrderRoutes');
 
 // NEW routes (if you created them)
 const categoryRoutes = require('./routes/categoryRoutes');
@@ -31,6 +33,8 @@ app.get('/', (req, res) => {
 });
 
 // Mount routes
+app.use('/api/admin', adminRoutes);
+app.use('/api/admin/orders', adminOrderRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 
