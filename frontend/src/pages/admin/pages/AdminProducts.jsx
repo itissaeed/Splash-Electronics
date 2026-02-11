@@ -8,6 +8,9 @@ import {
   Check,
   Image as ImageIcon,
   Search,
+  Tag,
+  Shapes,
+  Loader2,
 } from "lucide-react";
 
 const fallbackImg =
@@ -26,6 +29,33 @@ const slugify = (text) =>
     .replace(/[^\w\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
+
+function Modal({ open, title, subtitle, children, onClose }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[80]">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 flex items-center justify-center p-4">
+        <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl border overflow-hidden">
+          <div className="p-5 border-b flex items-start justify-between gap-3">
+            <div>
+              <div className="text-lg font-extrabold text-gray-900">{title}</div>
+              {subtitle && <div className="text-sm text-gray-500 mt-1">{subtitle}</div>}
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-xl hover:bg-gray-100"
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="p-5">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminProducts() {
   // data
@@ -47,6 +77,13 @@ export default function AdminProducts() {
 
   // edit state
   const [editingId, setEditingId] = useState(null);
+
+  // quick add modal (brand/category)
+  const [createType, setCreateType] = useState(null); // "brand" | "category" | null
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createSlug, setCreateSlug] = useState("");
 
   // form
   const [formData, setFormData] = useState({
@@ -143,7 +180,7 @@ export default function AdminProducts() {
     fetchAll();
   }, []);
 
-  // auto slug while creating
+  // auto slug while creating product
   useEffect(() => {
     if (!editingId) {
       setFormData((prev) => ({
@@ -164,24 +201,37 @@ export default function AdminProducts() {
         p?.brand?.name?.toLowerCase?.().includes(term) ||
         p?.category?.name?.toLowerCase?.().includes(term);
 
-      const matchesBrand = !filterBrand || (p?.brand?._id || p?.brand) === filterBrand;
+      const matchesBrand =
+        !filterBrand || (p?.brand?._id || p?.brand) === filterBrand;
+
       const matchesCategory =
         !filterCategory || (p?.category?._id || p?.category) === filterCategory;
 
       const matchesFeatured = !onlyFeatured || !!p.isFeatured;
       const matchesActive = !onlyActive || !!p.isActive;
 
-      return matchesText && matchesBrand && matchesCategory && matchesFeatured && matchesActive;
+      return (
+        matchesText &&
+        matchesBrand &&
+        matchesCategory &&
+        matchesFeatured &&
+        matchesActive
+      );
     });
   }, [products, q, filterBrand, filterCategory, onlyFeatured, onlyActive]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
   };
 
   const handleVariantChange = (idx, field, value) => {
-    setVariants((prev) => prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v)));
+    setVariants((prev) =>
+      prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v))
+    );
   };
 
   const handleVariantAttr = (idx, key, value) => {
@@ -298,6 +348,12 @@ export default function AdminProducts() {
   const saveProduct = async (e) => {
     e.preventDefault();
 
+    // Pro UX: stop early with clear message
+    if (brands.length === 0 || categories.length === 0) {
+      alert("Please create at least one Brand and one Category first.");
+      return;
+    }
+
     if (!formData.name || !formData.slug || !formData.brand || !formData.category || !formData.description) {
       alert("Please fill: name, slug, brand, category, description.");
       return;
@@ -315,10 +371,17 @@ export default function AdminProducts() {
       },
     }));
 
-    // ensure there is exactly one default variant if variants exist
+    // Ensure exactly one default
     if (cleanedVariants.length > 0) {
-      const hasDefault = cleanedVariants.some((v) => v.isDefault);
-      if (!hasDefault) cleanedVariants[0].isDefault = true;
+      let defaultCount = cleanedVariants.filter((x) => x.isDefault).length;
+      if (defaultCount === 0) cleanedVariants[0].isDefault = true;
+      if (defaultCount > 1) {
+        let first = true;
+        for (const v of cleanedVariants) {
+          if (v.isDefault && first) first = false;
+          else if (v.isDefault && !first) v.isDefault = false;
+        }
+      }
     }
 
     const payload = {
@@ -346,9 +409,8 @@ export default function AdminProducts() {
         productId = data?._id;
       }
 
-      // Upload images to selected variant (need variantId)
+      // Upload images after save
       if (uploadFiles.length > 0) {
-        // fetch product fresh to get variant ids
         const fresh = await api.get(`/products/id/${productId}`);
         const prod = fresh.data;
         const variantId = prod?.variants?.[uploadVariantIndex]?._id;
@@ -371,8 +433,54 @@ export default function AdminProducts() {
     }
   };
 
+  // ---- QUICK ADD (brand/category) ----
+  const openQuickAdd = (type) => {
+    setCreateType(type);
+    setCreateErr("");
+    setCreateName("");
+    setCreateSlug("");
+  };
+
+  useEffect(() => {
+    if (!createType) return;
+    setCreateSlug(slugify(createName));
+  }, [createName, createType]);
+
+  const submitQuickAdd = async () => {
+    try {
+      setCreating(true);
+      setCreateErr("");
+
+      const name = createName.trim();
+      const slug = slugify(createSlug || createName);
+
+      if (!name) {
+        setCreateErr("Name is required.");
+        return;
+      }
+
+      if (createType === "brand") {
+        const { data } = await api.post("/brands", { name, slug });
+        await fetchAll();
+        setFormData((p) => ({ ...p, brand: data?._id || p.brand }));
+      } else {
+        const { data } = await api.post("/categories", { name, slug });
+        await fetchAll();
+        setFormData((p) => ({ ...p, category: data?._id || p.category }));
+      }
+
+      setCreateType(null);
+    } catch (e) {
+      console.error(e);
+      setCreateErr(e?.response?.data?.message || "Failed to create. Check backend POST route.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const priceFromProduct = (p) => p?.basePrice ?? p?.variants?.[0]?.price ?? 0;
-  const stockFromProduct = (p) => p?.variants?.reduce((sum, v) => sum + (v.countInStock || 0), 0) ?? 0;
+  const stockFromProduct = (p) =>
+    p?.variants?.reduce((sum, v) => sum + (v.countInStock || 0), 0) ?? 0;
   const imageFromProduct = (p) => p?.variants?.[0]?.images?.[0]?.url || fallbackImg;
 
   return (
@@ -381,7 +489,9 @@ export default function AdminProducts() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-gray-900">Products</h1>
-          <p className="text-sm text-gray-500">Manage products, variants, images, featured & active status.</p>
+          <p className="text-sm text-gray-500">
+            Manage products, variants, images, featured & active status.
+          </p>
         </div>
 
         <button
@@ -391,6 +501,41 @@ export default function AdminProducts() {
           <Plus size={18} /> Add Product
         </button>
       </div>
+
+      {/* Helpful warning if missing base data */}
+      {(brands.length === 0 || categories.length === 0) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm">
+          <div className="font-extrabold text-amber-900">Setup required</div>
+          <div className="text-amber-800 mt-1">
+            You must create at least <span className="font-semibold">1 Brand</span> and{" "}
+            <span className="font-semibold">1 Category</span> before adding products.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {brands.length === 0 && (
+              <button
+                onClick={() => {
+                  openCreate();
+                  openQuickAdd("brand");
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3 py-2 text-xs font-semibold hover:bg-amber-500"
+              >
+                <Tag size={14} /> Create Brand
+              </button>
+            )}
+            {categories.length === 0 && (
+              <button
+                onClick={() => {
+                  openCreate();
+                  openQuickAdd("category");
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3 py-2 text-xs font-semibold hover:bg-amber-500"
+              >
+                <Shapes size={14} /> Create Category
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border rounded-2xl p-4">
@@ -459,8 +604,8 @@ export default function AdminProducts() {
       <div className="bg-white border rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div className="text-sm text-gray-600">
-            Showing <span className="font-semibold">{filteredProducts.length}</span>{" "}
-            of <span className="font-semibold">{products.length}</span>
+            Showing <span className="font-semibold">{filteredProducts.length}</span> of{" "}
+            <span className="font-semibold">{products.length}</span>
           </div>
         </div>
 
@@ -515,20 +660,19 @@ export default function AdminProducts() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 text-gray-700">
-                        {p.brand?.name || "—"}
-                      </td>
-
-                      <td className="px-4 py-3 text-gray-700">
-                        {p.category?.name || "—"}
-                      </td>
+                      <td className="px-4 py-3 text-gray-700">{p.brand?.name || "—"}</td>
+                      <td className="px-4 py-3 text-gray-700">{p.category?.name || "—"}</td>
 
                       <td className="px-4 py-3 font-semibold text-gray-900">
                         {moneyBDT(price)}
                       </td>
 
                       <td className="px-4 py-3">
-                        <span className={`font-semibold ${stock <= 5 ? "text-red-600" : "text-gray-900"}`}>
+                        <span
+                          className={`font-semibold ${
+                            stock <= 5 ? "text-red-600" : "text-gray-900"
+                          }`}
+                        >
                           {stock}
                         </span>
                       </td>
@@ -537,7 +681,11 @@ export default function AdminProducts() {
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-xs font-semibold px-2 py-1 rounded-full
-                              ${p.isActive ? "bg-green-50 text-green-700" : "bg-gray-100 text-gray-700"}`}
+                              ${
+                                p.isActive
+                                  ? "bg-green-50 text-green-700"
+                                  : "bg-gray-100 text-gray-700"
+                              }`}
                           >
                             {p.isActive ? "Active" : "Inactive"}
                           </span>
@@ -579,10 +727,7 @@ export default function AdminProducts() {
       </div>
 
       {/* Drawer */}
-      <div
-        className={`fixed inset-0 z-50 ${drawerOpen ? "" : "pointer-events-none"}`}
-        aria-hidden={!drawerOpen}
-      >
+      <div className={`fixed inset-0 z-50 ${drawerOpen ? "" : "pointer-events-none"}`}>
         {/* overlay */}
         <div
           className={`absolute inset-0 bg-black/40 transition-opacity ${
@@ -679,8 +824,18 @@ export default function AdminProducts() {
                   />
                 </div>
 
+                {/* Brand row with Quick Add */}
                 <div>
-                  <label className="text-xs font-semibold text-gray-600">Brand</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-600">Brand</label>
+                    <button
+                      type="button"
+                      onClick={() => openQuickAdd("brand")}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                    >
+                      + Create
+                    </button>
+                  </div>
                   <select
                     name="brand"
                     value={formData.brand}
@@ -688,17 +843,32 @@ export default function AdminProducts() {
                     className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
                     required
                   >
-                    <option value="">Select brand</option>
+                    <option value="">{brands.length ? "Select brand" : "No brands yet"}</option>
                     {brands.map((b) => (
                       <option key={b._id} value={b._id}>
                         {b.name}
                       </option>
                     ))}
                   </select>
+                  {brands.length === 0 && (
+                    <div className="mt-2 text-xs text-amber-700">
+                      Create a brand to continue.
+                    </div>
+                  )}
                 </div>
 
+                {/* Category row with Quick Add */}
                 <div>
-                  <label className="text-xs font-semibold text-gray-600">Category</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-600">Category</label>
+                    <button
+                      type="button"
+                      onClick={() => openQuickAdd("category")}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                    >
+                      + Create
+                    </button>
+                  </div>
                   <select
                     name="category"
                     value={formData.category}
@@ -706,13 +876,20 @@ export default function AdminProducts() {
                     className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
                     required
                   >
-                    <option value="">Select category</option>
+                    <option value="">
+                      {categories.length ? "Select category" : "No categories yet"}
+                    </option>
                     {categories.map((c) => (
                       <option key={c._id} value={c._id}>
                         {c.name}
                       </option>
                     ))}
                   </select>
+                  {categories.length === 0 && (
+                    <div className="mt-2 text-xs text-amber-700">
+                      Create a category to continue.
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -814,7 +991,6 @@ export default function AdminProducts() {
                             value={v.price}
                             onChange={(e) => handleVariantChange(idx, "price", e.target.value)}
                             className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                            placeholder="৳"
                           />
                         </div>
 
@@ -825,7 +1001,6 @@ export default function AdminProducts() {
                             value={v.countInStock}
                             onChange={(e) => handleVariantChange(idx, "countInStock", e.target.value)}
                             className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                            placeholder="0"
                           />
                         </div>
                       </div>
@@ -862,7 +1037,6 @@ export default function AdminProducts() {
                         </div>
                       </div>
 
-                      {/* Existing images */}
                       {editingId && Array.isArray(v.images) && v.images.length > 0 && (
                         <div className="mt-4">
                           <div className="text-xs font-semibold text-gray-600 mb-2">
@@ -960,6 +1134,66 @@ export default function AdminProducts() {
           </div>
         </div>
       </div>
+
+      {/* Quick Add Modal */}
+      <Modal
+        open={!!createType}
+        title={createType === "brand" ? "Create Brand" : "Create Category"}
+        subtitle="Add instantly without leaving product form."
+        onClose={() => {
+          if (!creating) setCreateType(null);
+        }}
+      >
+        {createErr && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {createErr}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Name</label>
+            <input
+              value={createName}
+              onChange={(e) => setCreateName(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder={createType === "brand" ? "Apple" : "Phones"}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-600">Slug</label>
+            <input
+              value={createSlug}
+              onChange={(e) => setCreateSlug(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="auto-generated"
+            />
+            <div className="mt-1 text-xs text-gray-500">
+              Used in URLs and filters.
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              onClick={() => !creating && setCreateType(null)}
+              className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-gray-50"
+              disabled={creating}
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={submitQuickAdd}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-60"
+              disabled={creating}
+            >
+              {creating ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
+              {creating ? "Creating..." : "Create"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
