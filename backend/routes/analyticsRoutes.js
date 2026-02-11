@@ -1,15 +1,17 @@
+// routes/analyticsRoutes.js
 const express = require("express");
 const router = express.Router();
 const { protect, admin } = require("../middleware/authMiddleware");
 
 const {
-  bestSellers,
-  regionSales,
-  salesTimeseries,
+  adminAnalyticsOverview,
+  adminDemandForecast,
 } = require("../controllers/analyticsController");
 
-router.get("/best-sellers", protect, admin, bestSellers);
-router.get("/region-sales", protect, admin, regionSales);
-router.get("/sales-timeseries", protect, admin, salesTimeseries);
+// GET /api/admin/analytics/overview
+router.get("/overview", protect, admin, adminAnalyticsOverview);
+
+// GET /api/admin/analytics/forecasting
+router.get("/forecasting", protect, admin, adminDemandForecast);
 
 module.exports = router;

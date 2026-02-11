@@ -18,6 +18,8 @@ const returnRoutes = require('./routes/returnRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
+const couponRoutes = require('./routes/couponRoutes');
+const adminSettingsRoutes = require('./routes/adminSettingsRoutes');
 
 const app = express();
 
@@ -38,9 +40,10 @@ app.get('/', (req, res) => {
 // 🔹 More specific admin routes FIRST
 app.use('/api/admin/orders', adminOrderRoutes);
 app.use('/api/admin/inventory', inventoryRoutes);
-app.use('/api/admin/analytics', analyticsRoutes);
-
 app.use('/api/admin/customers', adminCustomerRoutes); 
+app.use('/api/admin/coupons', couponRoutes);
+app.use('/api/admin/analytics', analyticsRoutes);
+app.use('/api/admin/settings', adminSettingsRoutes);
 
 // 🔹 Generic admin routes LAST
 app.use('/api/admin', adminRoutes);
