@@ -1,56 +1,102 @@
-import React, { useState } from "react";
-import axios from "axios";
+import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import api from "../../utils/api";
+import Breadcrumb from "../../BreadCrumb";
+import { FaEnvelope } from "react-icons/fa";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
+  const [errMsg, setErrMsg] = useState("");
+
+  const canSubmit = useMemo(() => email.trim().includes("@") && !loading, [email, loading]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSuccessMsg("");
+    setErrMsg("");
+    setLoading(true);
 
     try {
-      const res = await axios.post("http://localhost:5000/api/auth/forgot-password", {
-        email,
-      });
+      const { data } = await api.post("/auth/forgot-password", { email: email.trim() });
 
-      alert("Password reset code sent to your email!");
-      window.location.href = "/login";
-      console.log("Reset response:", res.data);
+      // backend returns a generic success message whether user exists or not
+      setSuccessMsg(data?.message || "If that email exists, a reset link has been sent.");
     } catch (err) {
-      const msg =
-        err.response?.data?.message || "Failed to send password reset code email.";
-      alert(msg);
+      setErrMsg(err?.response?.data?.message || "Failed to send reset link. Try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-blue-50 px-4">
-      <div className="bg-white shadow-lg rounded-xl w-full max-w-md px-8 py-10">
-        <h2 className="text-2xl font-semibold text-gray-800 text-center mb-6">
-          Reset Password
-        </h2>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <Breadcrumb items={[{ to: "/login", label: "Account" }, { label: "Forgot Password" }]} />
+      </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Enter Your E-Mail
-            </label>
-            <input
-              type="email"
-              placeholder="example@mail.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-md"
-            />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 flex justify-center">
+        <div className="w-full max-w-md rounded-3xl border bg-white p-8 shadow-sm">
+          <div className="text-center">
+            <h2 className="text-2xl font-extrabold text-gray-900">Reset your password</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Enter your email and we’ll send you a reset link.
+            </p>
           </div>
 
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-md font-semibold hover:bg-blue-700 transition"
-          >
-            Send Reset Link
-          </button>
-        </form>
+          {successMsg && (
+            <div className="mt-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              {successMsg}
+            </div>
+          )}
+
+          {errMsg && (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errMsg}
+            </div>
+          )}
+
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Your email
+              </label>
+
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <FaEnvelope />
+                </span>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-indigo-400"
+                  autoComplete="email"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className={`w-full rounded-xl py-3 text-sm font-semibold text-white shadow-sm transition
+                ${canSubmit ? "bg-indigo-600 hover:bg-indigo-500" : "bg-indigo-300 cursor-not-allowed"}
+              `}
+            >
+              {loading ? "Sending..." : "Send reset link"}
+            </button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-gray-600">
+            Remember your password?{" "}
+            <Link to="/login" className="font-semibold text-indigo-600 hover:text-indigo-700">
+              Back to Login
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );
