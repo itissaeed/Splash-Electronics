@@ -39,42 +39,57 @@ const ProductSkeleton = () => (
   </div>
 );
 
-const Home = () => {
+export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
 
+  // NEW: public settings from admin panel
+  const [settings, setSettings] = useState(null);
+
   const { user, logout } = useContext(UserContext);
   const navigate = useNavigate();
 
-  // Close mobile menu on escape
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Fetch featured products
+  // Load PUBLIC settings
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await api.get("/settings/public");
+        setSettings(data);
+      } catch (e) {
+        console.error("Failed to load public settings", e);
+        setSettings(null);
+      }
+    })();
+  }, []);
+
+  // Featured products
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get("/products/featured");
         setFeaturedProducts(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch featured products:", error);
+      } catch (e) {
+        console.error("Failed to fetch featured products:", e);
       }
     })();
   }, []);
 
-  // Fetch categories
+  // Categories
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get("/categories");
         setCategories(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error("Failed to fetch categories:", error);
+      } catch (e) {
+        console.error("Failed to fetch categories:", e);
       }
     })();
   }, []);
@@ -91,18 +106,56 @@ const Home = () => {
     setMenuOpen(false);
   };
 
+  const storeName = settings?.storeName || "Splash Electronics";
+  const supportPhone = settings?.supportPhone || "01751160811";
+  const supportHours = settings?.supportHours || "9 AM - 8 PM";
+  const supportEmail = settings?.supportEmail || "sunjinwoo35@gmail.com";
+  const addressText = [settings?.addressLine1, settings?.district, settings?.country]
+    .filter(Boolean)
+    .join(", ") || "Ambottola, Jashore";
+
+  // Optional maintenance mode
+  if (settings?.maintenanceEnabled) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="max-w-xl w-full bg-white border rounded-3xl p-8 shadow-sm text-center">
+          <div className="text-2xl font-extrabold text-gray-900">{storeName}</div>
+          <p className="mt-3 text-gray-600">{settings?.maintenanceMessage}</p>
+          <div className="mt-6 text-sm text-gray-500">
+            Need help? Call <span className="font-semibold">{supportPhone}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
+      {/* Announcement Bar */}
+      {settings?.announcementBarText ? (
+        <div className="bg-indigo-600 text-white text-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-center">
+            {settings.announcementBarText}
+          </div>
+        </div>
+      ) : null}
+
       {/* NAVBAR */}
       <header className="sticky top-0 z-50 border-b border-white/10 bg-gray-950/80 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
           {/* Logo */}
-          <Link to="/" className="flex-shrink-0">
+          <Link to="/" className="flex items-center gap-3 flex-shrink-0">
+            {settings?.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt={storeName}
+                className="h-9 w-9 rounded-xl object-cover ring-1 ring-white/20"
+              />
+            ) : null}
             <span className="text-indigo-200 text-xl sm:text-2xl font-extrabold tracking-tight hover:text-indigo-100 transition">
-              Splash Electronics
+              {storeName}
             </span>
           </Link>
-
 
           {/* Search (Desktop) */}
           <div className="hidden md:flex flex-1 justify-center px-6">
@@ -135,16 +188,17 @@ const Home = () => {
                   <span className="text-sm font-medium">Hello, {firstName}</span>
                 </button>
 
-                {/* Dropdown */}
                 <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl bg-white shadow-xl ring-1 ring-black/5 hidden group-hover:block">
                   <Link to="/profile" className="block px-4 py-3 text-sm hover:bg-gray-50">
                     Profile
                   </Link>
+
                   {!user.isAdmin && (
-                  <Link to="/orders" className="block px-4 py-3 text-sm hover:bg-gray-50">
-                    My Orders
-                  </Link>
+                    <Link to="/orders" className="block px-4 py-3 text-sm hover:bg-gray-50">
+                      My Orders
+                    </Link>
                   )}
+
                   {user.isAdmin && (
                     <Link
                       to="/admin"
@@ -172,7 +226,6 @@ const Home = () => {
               </Link>
             )}
 
-            {/* CTA */}
             <Link
               to="/products"
               className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-400 transition"
@@ -191,15 +244,15 @@ const Home = () => {
           </button>
         </div>
 
-        {/* Mobile overlay */}
         {menuOpen && (
           <div className="fixed inset-0 bg-black/60 md:hidden" onClick={() => setMenuOpen(false)} />
         )}
 
         {/* Mobile drawer */}
         <div
-          className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-gray-950 text-white p-5 md:hidden transform transition-transform duration-300 ${menuOpen ? "translate-x-0" : "translate-x-full"
-            }`}
+          className={`fixed top-0 right-0 h-full w-80 max-w-[85vw] bg-gray-950 text-white p-5 md:hidden transform transition-transform duration-300 ${
+            menuOpen ? "translate-x-0" : "translate-x-full"
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="font-bold text-lg">Menu</span>
@@ -212,7 +265,6 @@ const Home = () => {
             </button>
           </div>
 
-          {/* Mobile search */}
           <div className="mt-5">
             <div className="relative">
               <input
@@ -221,7 +273,7 @@ const Home = () => {
                 onKeyDown={(e) => e.key === "Enter" && goSearch()}
                 type="text"
                 placeholder="Search products…"
-                className="w-full rounded-xl bg-white/95 py-3 pl-4 pr-12 text-sm text-gray-900 outline-none ring-1 ring-transparent focus:ring-2 focus:ring-indigo-400"
+                className="w-full rounded-xl bg-white/95 py-3 pl-4 pr-12 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-indigo-400"
               />
               <button
                 type="button"
@@ -252,9 +304,12 @@ const Home = () => {
                 <Link to="/profile" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
                   Profile
                 </Link>
-                <Link to="/orders" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
-                  My Orders
-                </Link>
+
+                {!user.isAdmin && (
+                  <Link to="/orders" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
+                    My Orders
+                  </Link>
+                )}
 
                 {user.isAdmin && (
                   <Link
@@ -297,10 +352,10 @@ const Home = () => {
             <div className="p-8 sm:p-12">
               <div className="max-w-2xl">
                 <p className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
-                  New arrivals • Best deals • Genuine products
+                  {settings?.homepageBannerText || "New arrivals • Best deals • Genuine products"}
                 </p>
                 <h1 className="mt-4 text-3xl sm:text-5xl font-extrabold leading-tight">
-                  Upgrade your tech with <span className="text-indigo-100">Splash Electronics</span>
+                  Upgrade your tech with <span className="text-indigo-100">{storeName}</span>
                 </h1>
                 <p className="mt-4 text-white/90 text-base sm:text-lg">
                   Phones, laptops, earbuds, smart watches and more — delivered across Bangladesh.
@@ -321,7 +376,6 @@ const Home = () => {
                   </Link>
                 </div>
 
-                {/* Trust badges */}
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
                     <FaMoneyBillWave />
@@ -368,23 +422,21 @@ const Home = () => {
                 <div className="mt-1 text-xs text-gray-500">Browse everything</div>
               </Link>
 
-              {categories.length === 0 ? (
-                Array.from({ length: 11 }).map((_, i) => <CategorySkeleton key={i} />)
-              ) : (
-                categories.slice(0, 11).map((cat) => (
-                  <Link
-                    key={cat._id || cat.slug || cat.name}
-                    to={`/products?category=${encodeURIComponent(cat.slug || cat.name)}`}
-                    className="group rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition"
-                  >
-                    <div className="h-1 w-10 rounded-full bg-gradient-to-r from-indigo-500 to-fuchsia-500 mb-3" />
-                    <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition">
-                      {cat.name}
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">Explore {String(cat.name).toLowerCase()}</div>
-                  </Link>
-                ))
-              )}
+              {categories.length === 0
+                ? Array.from({ length: 11 }).map((_, i) => <CategorySkeleton key={i} />)
+                : categories.slice(0, 11).map((cat) => (
+                    <Link
+                      key={cat._id || cat.slug || cat.name}
+                      to={`/products?category=${encodeURIComponent(cat.slug || cat.name)}`}
+                      className="group rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition"
+                    >
+                      <div className="h-1 w-10 rounded-full bg-gradient-to-r from-indigo-500 to-fuchsia-500 mb-3" />
+                      <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition">
+                        {cat.name}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">Explore {String(cat.name).toLowerCase()}</div>
+                    </Link>
+                  ))}
             </div>
           </section>
 
@@ -408,8 +460,6 @@ const Home = () => {
                     fallbackImg;
 
                   const price = p?.basePrice ?? p?.variants?.[0]?.price ?? p?.price ?? 0;
-
-                  // ✅ Use BOTH: slug for SEO, fallback to _id if slug missing
                   const productKey = p?.slug || p?._id;
                   const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
 
@@ -425,9 +475,7 @@ const Home = () => {
                           alt={p.name}
                           className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
                           loading="lazy"
-                          onError={(e) => {
-                            e.currentTarget.src = fallbackImg;
-                          }}
+                          onError={(e) => (e.currentTarget.src = fallbackImg)}
                         />
                         <span className="absolute left-3 top-3 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow">
                           Featured
@@ -458,15 +506,15 @@ const Home = () => {
             <div className="flex items-center mb-4">
               <FaPhone className="mr-3" />
               <div>
-                <p className="text-xs">9 AM - 8 PM</p>
-                <p className="text-orange-500 font-bold text-lg">01751160811</p>
+                <p className="text-xs">{supportHours}</p>
+                <p className="text-orange-500 font-bold text-lg">{supportPhone}</p>
               </div>
             </div>
             <div className="flex items-center">
               <FaMapMarkerAlt className="mr-3" />
               <div>
-                <p className="text-xs">Store Locator</p>
-                <p className="text-orange-500 font-semibold cursor-pointer">We will have a store!</p>
+                <p className="text-xs">Store Address</p>
+                <p className="text-orange-500 font-semibold">{addressText}</p>
               </div>
             </div>
           </div>
@@ -495,14 +543,12 @@ const Home = () => {
 
           <div>
             <h3 className="text-white text-sm font-semibold mb-4">STAY CONNECTED</h3>
-            <p className="text-sm font-bold">Splash Electronics</p>
-            <p className="text-xs text-gray-400">Head Office: Ambottola, Jashore</p>
-            <p className="mt-2 text-orange-500 font-semibold">sunjinwoo35@gmail.com</p>
+            <p className="text-sm font-bold">{storeName}</p>
+            <p className="text-xs text-gray-400">{addressText}</p>
+            <p className="mt-2 text-orange-500 font-semibold">{supportEmail}</p>
           </div>
         </div>
       </footer>
     </>
   );
-};
-
-export default Home;
+}
