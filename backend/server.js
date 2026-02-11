@@ -20,6 +20,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 const couponRoutes = require('./routes/couponRoutes');
 const adminSettingsRoutes = require('./routes/adminSettingsRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
 
@@ -51,6 +52,8 @@ app.use('/api/admin', adminRoutes);
 // Auth + public
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+
+app.use('/api/settings', settingsRoutes); // Public settings route
 
 app.use('/api/categories', categoryRoutes);
 app.use('/api/brands', brandRoutes);
