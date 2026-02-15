@@ -8,7 +8,7 @@ import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 
 import ProductList from "./pages/ProductList";
-import ProductDetails from "./pages/ProductList";
+import ProductDetails from "./pages/ProductDetails";
 import Profile from "./pages/Profile";
 import AdminLayout from "./pages/admin/pages/AdminLayout";
 
@@ -34,7 +34,7 @@ function App() {
           {/* Public */}
           <Route path="/" element={<Home />} />
           <Route path="/products" element={<ProductList />} />
-          <Route path="/product/:slug" element={<ProductDetails />} /> {/* ✅ */}
+          <Route path="/product/:slug" element={<ProductDetails />} />
 
           {/* Auth */}
           <Route path="/login" element={<Login />} />
