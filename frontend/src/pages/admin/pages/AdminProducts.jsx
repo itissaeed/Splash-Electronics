@@ -40,7 +40,9 @@ function Modal({ open, title, subtitle, children, onClose }) {
           <div className="p-5 border-b flex items-start justify-between gap-3">
             <div>
               <div className="text-lg font-extrabold text-gray-900">{title}</div>
-              {subtitle && <div className="text-sm text-gray-500 mt-1">{subtitle}</div>}
+              {subtitle && (
+                <div className="text-sm text-gray-500 mt-1">{subtitle}</div>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -60,8 +62,8 @@ function Modal({ open, title, subtitle, children, onClose }) {
 export default function AdminProducts() {
   // data
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]); // [{_id,name,slug}]
-  const [brands, setBrands] = useState([]); // [{_id,name,slug}]
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // UI state
@@ -111,9 +113,12 @@ export default function AdminProducts() {
     },
   ]);
 
-  // upload
-  const [uploadVariantIndex, setUploadVariantIndex] = useState(0);
-  const [uploadFiles, setUploadFiles] = useState([]);
+  // ✅ per-variant uploads: { [idx]: File[] }
+  const [variantFiles, setVariantFiles] = useState({});
+  const handleVariantFiles = (idx, filesList) => {
+    const files = Array.from(filesList || []);
+    setVariantFiles((prev) => ({ ...prev, [idx]: files }));
+  };
 
   const resetForm = () => {
     setEditingId(null);
@@ -139,8 +144,7 @@ export default function AdminProducts() {
         images: [],
       },
     ]);
-    setUploadVariantIndex(0);
-    setUploadFiles([]);
+    setVariantFiles({});
   };
 
   const closeDrawer = () => {
@@ -156,6 +160,10 @@ export default function AdminProducts() {
   const fetchAll = async () => {
     try {
       setLoading(true);
+
+      // IMPORTANT:
+      // If your api baseURL already includes /api, keep "/products/admin"
+      // If not, change to "/api/products/admin"
       const [pRes, cRes, bRes] = await Promise.all([
         api.get("/products/admin"),
         api.get("/categories"),
@@ -169,7 +177,7 @@ export default function AdminProducts() {
       console.error(e);
       alert(
         e?.response?.data?.message ||
-          "Failed to load admin data. Ensure /products/admin, /categories, /brands exist."
+        "Failed to load admin data. Ensure GET /products/admin, /categories, /brands exist."
       );
     } finally {
       setLoading(false);
@@ -257,23 +265,38 @@ export default function AdminProducts() {
     ]);
   };
 
+  // ✅ fixed: remove variant + reindex variantFiles
   const removeVariant = (idx) => {
-    setVariants((prev) => prev.filter((_, i) => i !== idx));
-    setUploadVariantIndex((prev) => (prev >= idx ? 0 : prev));
+    setVariants((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      // Ensure exactly one default after remove
+      const hasDefault = next.some((x) => x.isDefault);
+      if (!hasDefault && next.length) next[0] = { ...next[0], isDefault: true };
+      return next;
+    });
+
+    setVariantFiles((prev) => {
+      const next = {};
+      Object.entries(prev).forEach(([k, files]) => {
+        const i = Number(k);
+        if (i === idx) return;
+        next[i > idx ? i - 1 : i] = files;
+      });
+      return next;
+    });
   };
 
+  // ✅ enforce single default instantly
   const setDefaultVariant = (idx) => {
     setVariants((prev) => prev.map((v, i) => ({ ...v, isDefault: i === idx })));
   };
 
-  const handleFiles = (e) => {
-    setUploadFiles(Array.from(e.target.files || []));
-  };
-
-  const uploadImagesToVariant = async (productId, variantId) => {
-    for (const file of uploadFiles) {
+  // ✅ upload helper (single upload endpoint, loops files)
+  const uploadImagesToVariant = async (productId, variantId, files = []) => {
+    for (const file of files) {
       const fd = new FormData();
       fd.append("image", file);
+
       await api.post(`/products/${productId}/images?variantId=${variantId}`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -308,9 +331,21 @@ export default function AdminProducts() {
       images: Array.isArray(x.images) ? x.images : [],
     }));
 
+    // ✅ ensure there is exactly 1 default (server data might be messy)
+    if (mapped.length) {
+      const defaults = mapped.filter((x) => x.isDefault).length;
+      if (defaults === 0) mapped[0].isDefault = true;
+      if (defaults > 1) {
+        let first = true;
+        for (const v of mapped) {
+          if (v.isDefault && first) first = false;
+          else if (v.isDefault && !first) v.isDefault = false;
+        }
+      }
+    }
+
     setVariants(mapped.length ? mapped : variants);
-    setUploadVariantIndex(0);
-    setUploadFiles([]);
+    setVariantFiles({});
     setDrawerOpen(true);
   };
 
@@ -345,19 +380,62 @@ export default function AdminProducts() {
     }
   };
 
+  const findVariantIdBySku = (prod, sku) => {
+    const s = String(sku || "").trim();
+    const v = (prod?.variants || []).find((x) => String(x?.sku || "").trim() === s);
+    return v?._id || null;
+  };
+
+  const validateBeforeSave = () => {
+    // If you selected files for a variant, SKU must exist
+    for (const [idxStr, files] of Object.entries(variantFiles)) {
+      const idx = Number(idxStr);
+      if (!files?.length) continue;
+      const sku = String(variants?.[idx]?.sku || "").trim();
+      if (!sku) {
+        alert(`Variant #${idx + 1}: SKU is required because you selected images for it.`);
+        return false;
+      }
+    }
+
+    // Prevent duplicate SKUs (important for mapping on create)
+    const skus = variants
+      .map((v) => String(v.sku || "").trim())
+      .filter(Boolean);
+
+    const set = new Set();
+    for (const s of skus) {
+      const key = s.toLowerCase();
+      if (set.has(key)) {
+        alert(`Duplicate SKU found: "${s}". Please make SKUs unique.`);
+        return false;
+      }
+      set.add(key);
+    }
+
+    return true;
+  };
+
   const saveProduct = async (e) => {
     e.preventDefault();
 
-    // Pro UX: stop early with clear message
     if (brands.length === 0 || categories.length === 0) {
       alert("Please create at least one Brand and one Category first.");
       return;
     }
 
-    if (!formData.name || !formData.slug || !formData.brand || !formData.category || !formData.description) {
+    if (
+      !formData.name ||
+      !formData.slug ||
+      !formData.brand ||
+      !formData.category ||
+      !formData.description
+    ) {
       alert("Please fill: name, slug, brand, category, description.");
       return;
     }
+
+    if (!validateBeforeSave()) return;
 
     const cleanedVariants = variants.map((v) => ({
       sku: String(v.sku || "").trim(),
@@ -409,18 +487,35 @@ export default function AdminProducts() {
         productId = data?._id;
       }
 
-      // Upload images after save
-      if (uploadFiles.length > 0) {
+      // ✅ Upload images for EACH variant after save
+      const hasAnyUploads = Object.values(variantFiles).some(
+        (arr) => (arr?.length || 0) > 0
+      );
+
+      if (hasAnyUploads) {
+        // Always refetch product after save (important!)
         const fresh = await api.get(`/products/id/${productId}`);
         const prod = fresh.data;
-        const variantId = prod?.variants?.[uploadVariantIndex]?._id;
 
-        if (!variantId) {
-          alert("Variant not found for image upload. Check /products/id/:id route.");
-        } else {
-          await uploadImagesToVariant(productId, variantId);
+        for (const [idxStr, files] of Object.entries(variantFiles)) {
+          const idx = Number(idxStr);
+          if (!files || files.length === 0) continue;
+
+          // Always map using SKU
+          const sku = cleanedVariants?.[idx]?.sku;
+          if (!sku) continue;
+
+          const variantId = findVariantIdBySku(prod, sku);
+
+          if (!variantId) {
+            console.warn("Variant not found for upload:", { idx, sku });
+            continue;
+          }
+
+          await uploadImagesToVariant(productId, variantId, files);
         }
       }
+
 
       await fetchAll();
       closeDrawer();
@@ -472,7 +567,9 @@ export default function AdminProducts() {
       setCreateType(null);
     } catch (e) {
       console.error(e);
-      setCreateErr(e?.response?.data?.message || "Failed to create. Check backend POST route.");
+      setCreateErr(
+        e?.response?.data?.message || "Failed to create. Check backend POST route."
+      );
     } finally {
       setCreating(false);
     }
@@ -650,6 +747,7 @@ export default function AdminProducts() {
                             src={img}
                             alt={p.name}
                             className="h-10 w-10 rounded-lg object-cover border"
+                            onError={(e) => (e.currentTarget.src = fallbackImg)}
                           />
                           <div>
                             <div className="font-semibold text-gray-900 line-clamp-1">
@@ -669,9 +767,8 @@ export default function AdminProducts() {
 
                       <td className="px-4 py-3">
                         <span
-                          className={`font-semibold ${
-                            stock <= 5 ? "text-red-600" : "text-gray-900"
-                          }`}
+                          className={`font-semibold ${stock <= 5 ? "text-red-600" : "text-gray-900"
+                            }`}
                         >
                           {stock}
                         </span>
@@ -680,11 +777,9 @@ export default function AdminProducts() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-xs font-semibold px-2 py-1 rounded-full
-                              ${
-                                p.isActive
-                                  ? "bg-green-50 text-green-700"
-                                  : "bg-gray-100 text-gray-700"
+                            className={`text-xs font-semibold px-2 py-1 rounded-full ${p.isActive
+                              ? "bg-green-50 text-green-700"
+                              : "bg-gray-100 text-gray-700"
                               }`}
                           >
                             {p.isActive ? "Active" : "Inactive"}
@@ -728,11 +823,9 @@ export default function AdminProducts() {
 
       {/* Drawer */}
       <div className={`fixed inset-0 z-50 ${drawerOpen ? "" : "pointer-events-none"}`}>
-        {/* overlay */}
         <div
-          className={`absolute inset-0 bg-black/40 transition-opacity ${
-            drawerOpen ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-black/40 transition-opacity ${drawerOpen ? "opacity-100" : "opacity-0"
+            }`}
           onClick={() => {
             if (!saving) {
               closeDrawer();
@@ -741,7 +834,6 @@ export default function AdminProducts() {
           }}
         />
 
-        {/* panel */}
         <div
           className={`absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transition-transform duration-300
             ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}
@@ -752,9 +844,7 @@ export default function AdminProducts() {
                 <div className="text-lg font-extrabold text-gray-900">
                   {editingId ? "Edit Product" : "Add Product"}
                 </div>
-                <div className="text-sm text-gray-500">
-                  Manage base info, variants & images.
-                </div>
+                <div className="text-sm text-gray-500">Manage base info, variants & images.</div>
               </div>
 
               <button
@@ -850,11 +940,6 @@ export default function AdminProducts() {
                       </option>
                     ))}
                   </select>
-                  {brands.length === 0 && (
-                    <div className="mt-2 text-xs text-amber-700">
-                      Create a brand to continue.
-                    </div>
-                  )}
                 </div>
 
                 {/* Category row with Quick Add */}
@@ -885,11 +970,6 @@ export default function AdminProducts() {
                       </option>
                     ))}
                   </select>
-                  {categories.length === 0 && (
-                    <div className="mt-2 text-xs text-amber-700">
-                      Create a category to continue.
-                    </div>
-                  )}
                 </div>
 
                 <div>
@@ -982,6 +1062,9 @@ export default function AdminProducts() {
                             className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                             placeholder="IP15PM-256-BLK"
                           />
+                          <div className="mt-1 text-[11px] text-gray-500">
+                            SKU must be unique (used to map images on create).
+                          </div>
                         </div>
 
                         <div>
@@ -999,7 +1082,9 @@ export default function AdminProducts() {
                           <input
                             type="number"
                             value={v.countInStock}
-                            onChange={(e) => handleVariantChange(idx, "countInStock", e.target.value)}
+                            onChange={(e) =>
+                              handleVariantChange(idx, "countInStock", e.target.value)
+                            }
                             className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                           />
                         </div>
@@ -1037,6 +1122,7 @@ export default function AdminProducts() {
                         </div>
                       </div>
 
+                      {/* existing images (edit mode) */}
                       {editingId && Array.isArray(v.images) && v.images.length > 0 && (
                         <div className="mt-4">
                           <div className="text-xs font-semibold text-gray-600 mb-2">
@@ -1049,6 +1135,7 @@ export default function AdminProducts() {
                                   src={img.url || fallbackImg}
                                   alt="variant"
                                   className="h-20 w-20 object-cover rounded-xl border"
+                                  onError={(e) => (e.currentTarget.src = fallbackImg)}
                                 />
                                 <button
                                   type="button"
@@ -1068,41 +1155,43 @@ export default function AdminProducts() {
                 </div>
               </div>
 
-              {/* Upload images */}
+              {/* Upload images per variant */}
               <div className="rounded-2xl border p-4">
                 <div className="flex items-center gap-2 font-extrabold text-gray-900">
                   <ImageIcon size={18} /> Upload Variant Images
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  Select which variant to upload images for. Upload happens on save.
+                  Upload images for each variant separately. Upload happens on Save.
                 </p>
 
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
-                  <select
-                    value={uploadVariantIndex}
-                    onChange={(e) => setUploadVariantIndex(Number(e.target.value))}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
-                  >
-                    {variants.map((_, idx) => (
-                      <option key={idx} value={idx}>
-                        Variant #{idx + 1}
-                      </option>
-                    ))}
-                  </select>
+                <div className="mt-4 space-y-3">
+                  {variants.map((v, idx) => (
+                    <div key={v._id || idx} className="rounded-2xl border p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-extrabold text-gray-900">
+                            Variant #{idx + 1} {v.isDefault ? "(Default)" : ""}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            SKU: <span className="font-semibold">{v.sku || "—"}</span>
+                          </div>
+                        </div>
 
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFiles}
-                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
-                  />
+                        <div className="text-xs text-gray-600 font-semibold">
+                          Selected: {variantFiles?.[idx]?.length || 0}
+                        </div>
+                      </div>
+
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={(e) => handleVariantFiles(idx, e.target.files)}
+                        className="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+                  ))}
                 </div>
-
-                {uploadFiles.length > 0 && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Selected: <span className="font-semibold">{uploadFiles.length}</span> files
-                  </div>
-                )}
               </div>
 
               {/* Footer buttons */}
@@ -1169,9 +1258,7 @@ export default function AdminProducts() {
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
               placeholder="auto-generated"
             />
-            <div className="mt-1 text-xs text-gray-500">
-              Used in URLs and filters.
-            </div>
+            <div className="mt-1 text-xs text-gray-500">Used in URLs and filters.</div>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">

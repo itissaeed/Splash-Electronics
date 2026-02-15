@@ -2,7 +2,7 @@
 const Product = require("../models/Product");
 const Category = require("../models/Category");
 const Brand = require("../models/Brand");
-
+const mongoose = require("mongoose");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 
@@ -10,6 +10,32 @@ const streamifier = require("streamifier");
 const toNum = (v, def) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
+};
+
+// helper: upload buffer -> cloudinary
+const uploadFromBuffer = (buffer) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "products" },
+      (error, result) => (result ? resolve(result) : reject(error))
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+
+// helper: validate unique SKU in variants (within this product)
+const assertUniqueSkus = (variants = []) => {
+  const seen = new Set();
+  for (const v of variants) {
+    const sku = String(v?.sku || "").trim();
+    if (!sku) continue; // allow empty SKU (optional)
+    const key = sku.toLowerCase();
+    if (seen.has(key)) {
+      const err = new Error(`Duplicate SKU found: ${sku}`);
+      err.statusCode = 400;
+      throw err;
+    }
+    seen.add(key);
+  }
 };
 
 // --- Public: GET /api/products (pagination + filters) ---
@@ -33,14 +59,26 @@ exports.getProducts = async (req, res) => {
     // brand filter (accept brandId or brandSlug)
     if (req.query.brand) {
       const brandVal = String(req.query.brand).trim();
-      const brandDoc = await Brand.findOne({ $or: [{ _id: brandVal }, { slug: brandVal }] }).select("_id");
+
+      const or = [{ slug: brandVal }];
+      if (mongoose.Types.ObjectId.isValid(brandVal)) {
+        or.unshift({ _id: brandVal });
+      }
+
+      const brandDoc = await Brand.findOne({ $or: or }).select("_id");
       if (brandDoc) filter.brand = brandDoc._id;
     }
 
     // category filter (accept categoryId or categorySlug)
     if (req.query.category) {
       const catVal = String(req.query.category).trim();
-      const catDoc = await Category.findOne({ $or: [{ _id: catVal }, { slug: catVal }] }).select("_id");
+
+      const or = [{ slug: catVal }];
+      if (mongoose.Types.ObjectId.isValid(catVal)) {
+        or.unshift({ _id: catVal });
+      }
+
+      const catDoc = await Category.findOne({ $or: or }).select("_id");
       if (catDoc) filter.category = catDoc._id;
     }
 
@@ -53,10 +91,7 @@ exports.getProducts = async (req, res) => {
       if (minPrice !== null) priceCond.$gte = minPrice;
       if (maxPrice !== null) priceCond.$lte = maxPrice;
 
-      filter.$or = [
-        { basePrice: priceCond },
-        { "variants.price": priceCond },
-      ];
+      filter.$or = [{ basePrice: priceCond }, { "variants.price": priceCond }];
     }
 
     // sorting
@@ -92,7 +127,6 @@ exports.getProductById = async (req, res) => {
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    // If you want to hide inactive products from public:
     if (product.isActive === false) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -154,15 +188,22 @@ exports.createProduct = async (req, res) => {
     } = req.body;
 
     if (!name || !slug || !brand || !category || !description) {
-      return res.status(400).json({ message: "name, slug, brand, category, description are required" });
+      return res.status(400).json({
+        message: "name, slug, brand, category, description are required",
+      });
     }
 
-    const exists = await Product.findOne({ slug: String(slug).toLowerCase().trim() });
+    const normalizedSlug = String(slug).toLowerCase().trim();
+
+    const exists = await Product.findOne({ slug: normalizedSlug });
     if (exists) return res.status(409).json({ message: "Product slug already exists" });
+
+    // ✅ SKU uniqueness inside this product
+    if (Array.isArray(variants)) assertUniqueSkus(variants);
 
     const product = await Product.create({
       name: String(name).trim(),
-      slug: String(slug).toLowerCase().trim(),
+      slug: normalizedSlug,
       brand,
       category,
       description,
@@ -181,7 +222,9 @@ exports.createProduct = async (req, res) => {
     res.status(201).json(product);
   } catch (error) {
     console.error("createProduct Error:", error);
-    res.status(500).json({ message: "Failed to create product" });
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Failed to create product",
+    });
   }
 };
 
@@ -200,9 +243,11 @@ exports.updateProduct = async (req, res) => {
     if (up.description !== undefined) product.description = up.description;
 
     if (up.basePrice !== undefined) product.basePrice = toNum(up.basePrice, product.basePrice);
-    if (up.highlights !== undefined) product.highlights = Array.isArray(up.highlights) ? up.highlights : product.highlights;
+    if (up.highlights !== undefined)
+      product.highlights = Array.isArray(up.highlights) ? up.highlights : product.highlights;
     if (up.specs !== undefined) product.specs = up.specs || product.specs;
-    if (up.warrantyMonths !== undefined) product.warrantyMonths = toNum(up.warrantyMonths, product.warrantyMonths);
+    if (up.warrantyMonths !== undefined)
+      product.warrantyMonths = toNum(up.warrantyMonths, product.warrantyMonths);
     if (up.tags !== undefined) product.tags = Array.isArray(up.tags) ? up.tags : product.tags;
 
     if (up.isFeatured !== undefined) product.isFeatured = !!up.isFeatured;
@@ -210,14 +255,20 @@ exports.updateProduct = async (req, res) => {
 
     // variants replace (simple approach)
     if (up.variants !== undefined) {
-      product.variants = Array.isArray(up.variants) ? up.variants : product.variants;
+      const nextVariants = Array.isArray(up.variants) ? up.variants : product.variants;
+      // ✅ SKU uniqueness inside this product
+      assertUniqueSkus(nextVariants);
+
+      product.variants = nextVariants;
     }
 
     const updated = await product.save();
     res.json(updated);
   } catch (error) {
     console.error("updateProduct Error:", error);
-    res.status(500).json({ message: "Failed to update product" });
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Failed to update product",
+    });
   }
 };
 
@@ -251,42 +302,56 @@ exports.getFeaturedProducts = async (req, res) => {
   }
 };
 
-// --- Admin: POST /api/admin/products/:id/images (upload to variant) ---
-// query: ?variantId=xxxx   (required)
+/**
+ * ✅ Admin: POST /api/products/:id/images  (or /api/admin/products/:id/images — your choice)
+ * query: ?variantId=xxxx   (required)
+ *
+ * Supports:
+ * - single upload: req.file (multer.single("image"))
+ * - multiple upload: req.files (multer.array("images") OR multer.array("image"))
+ */
 exports.uploadProductImage = async (req, res) => {
   try {
     const { variantId } = req.query;
 
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
+
     if (!variantId) return res.status(400).json({ message: "variantId is required in query" });
-    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     const variant = product.variants.id(variantId);
     if (!variant) return res.status(404).json({ message: "Variant not found" });
 
-    const uploadFromBuffer = (buffer) =>
-      new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "products" },
-          (error, result) => (result ? resolve(result) : reject(error))
-        );
-        streamifier.createReadStream(buffer).pipe(stream);
-      });
+    // ✅ accept single or multiple
+    const files = [];
+    if (req.file) files.push(req.file);
+    if (Array.isArray(req.files) && req.files.length) files.push(...req.files);
 
-    const result = await uploadFromBuffer(req.file.buffer);
+    if (!files.length) return res.status(400).json({ message: "No file uploaded" });
 
-    variant.images.push({ url: result.secure_url, public_id: result.public_id });
+    const uploaded = [];
+
+    for (const f of files) {
+      const result = await uploadFromBuffer(f.buffer);
+      variant.images.push({ url: result.secure_url, public_id: result.public_id });
+      uploaded.push({ url: result.secure_url, public_id: result.public_id });
+    }
+
     await product.save();
 
-    res.status(201).json({ message: "Image uploaded", image: result.secure_url, public_id: result.public_id });
+    res.status(201).json({
+      message: "Image(s) uploaded",
+      variantId,
+      uploaded,
+      images: variant.images, // ✅ return updated gallery for this variant
+    });
   } catch (error) {
     console.error("uploadProductImage Error:", error);
     res.status(500).json({ message: "Image upload failed" });
   }
 };
 
-// --- Admin: DELETE /api/admin/products/:id/images ---
+// --- Admin: DELETE /api/products/:id/images ---
 // body: { variantId, public_id }
 exports.deleteProductImage = async (req, res) => {
   try {
@@ -307,7 +372,7 @@ exports.deleteProductImage = async (req, res) => {
     variant.images = variant.images.filter((img) => img.public_id !== public_id);
     await product.save();
 
-    res.json({ message: "Image deleted successfully" });
+    res.json({ message: "Image deleted successfully", variantId, images: variant.images });
   } catch (error) {
     console.error("deleteProductImage Error:", error);
     res.status(500).json({ message: "Failed to delete image" });
