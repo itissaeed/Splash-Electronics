@@ -6,6 +6,9 @@ const cartItemSchema = new mongoose.Schema({
   variantId: { type: mongoose.Schema.Types.ObjectId, required: true }, // points to Product.variants._id
   qty: { type: Number, required: true, min: 1 },
   priceAtAdd: { type: Number, required: true },
+  nameSnapshot: { type: String, default: "" },
+  skuSnapshot: { type: String, default: "" },
+  imageSnapshot: { type: String, default: "" },
 }, { _id: true });
 
 const cartSchema = new mongoose.Schema({

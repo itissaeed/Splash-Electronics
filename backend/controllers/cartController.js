@@ -7,6 +7,18 @@ const toNum = (v, def) => {
   return Number.isFinite(n) ? n : def;
 };
 
+const getVariantImage = (variant) => {
+  const first = Array.isArray(variant?.images) ? variant.images[0] : null;
+  if (!first) return "";
+  return typeof first === "string" ? first : first.url || "";
+};
+
+const buildSnapshots = (product, variant) => ({
+  nameSnapshot: product?.name || "",
+  skuSnapshot: variant?.sku || "",
+  imageSnapshot: getVariantImage(variant),
+});
+
 exports.getMyCart = async (req, res) => {
   try {
     const cart = await Cart.findOne({ user: req.user._id })
@@ -53,12 +65,18 @@ exports.addToCart = async (req, res) => {
       }
       existing.qty = newQty;
       existing.priceAtAdd = variant.price;
+      const snapshots = buildSnapshots(product, variant);
+      existing.nameSnapshot = snapshots.nameSnapshot;
+      existing.skuSnapshot = snapshots.skuSnapshot;
+      existing.imageSnapshot = snapshots.imageSnapshot;
     } else {
+      const snapshots = buildSnapshots(product, variant);
       cart.items.push({
         product: productId,
         variantId,
         qty: Q,
         priceAtAdd: variant.price,
+        ...snapshots,
       });
     }
 
@@ -93,6 +111,10 @@ exports.updateCartItemQty = async (req, res) => {
 
     item.qty = Q;
     item.priceAtAdd = variant.price;
+    const snapshots = buildSnapshots(product, variant);
+    item.nameSnapshot = snapshots.nameSnapshot;
+    item.skuSnapshot = snapshots.skuSnapshot;
+    item.imageSnapshot = snapshots.imageSnapshot;
 
     await cart.save();
     res.json(cart);

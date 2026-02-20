@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState, useContext } from "react";
+import React, { useEffect, useMemo, useState, useContext, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FaSearch,
   FaUser,
   FaBars,
   FaTimes,
+  FaShoppingCart,
   FaPhone,
   FaMapMarkerAlt,
   FaTruck,
@@ -41,9 +42,11 @@ const ProductSkeleton = () => (
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
+  const accountMenuRef = useRef(null);
 
   // NEW: public settings from admin panel
   const [settings, setSettings] = useState(null);
@@ -52,9 +55,23 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && setMenuOpen(false);
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        setAccountMenuOpen(false);
+      }
+    };
+    const onMouseDown = (e) => {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(e.target)) {
+        setAccountMenuOpen(false);
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onMouseDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onMouseDown);
+    };
   }, []);
 
   // Load PUBLIC settings
@@ -181,40 +198,65 @@ export default function Home() {
 
           {/* Account (Desktop) */}
           <div className="hidden md:flex items-center gap-3 ml-auto">
+            <Link
+              to={user ? "/cart" : "/login"}
+              className="flex items-center gap-2 rounded-xl px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition"
+            >
+              <FaShoppingCart />
+              <span className="text-sm font-medium">Cart</span>
+            </Link>
+
             {user ? (
-              <div className="relative group">
-                <button className="flex items-center gap-2 rounded-xl px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition">
+              <div ref={accountMenuRef} className="relative">
+                <button
+                  onClick={() => setAccountMenuOpen((v) => !v)}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition"
+                >
                   <FaUser />
                   <span className="text-sm font-medium">Hello, {firstName}</span>
                 </button>
 
-                <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl bg-white shadow-xl ring-1 ring-black/5 hidden group-hover:block">
-                  <Link to="/profile" className="block px-4 py-3 text-sm hover:bg-gray-50">
-                    Profile
-                  </Link>
-
-                  {!user.isAdmin && (
-                    <Link to="/orders" className="block px-4 py-3 text-sm hover:bg-gray-50">
-                      My Orders
-                    </Link>
-                  )}
-
-                  {user.isAdmin && (
+                {accountMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-xl bg-white shadow-xl ring-1 ring-black/5">
                     <Link
-                      to="/admin"
-                      className="block px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
+                      to="/profile"
+                      onClick={() => setAccountMenuOpen(false)}
+                      className="block px-4 py-3 text-sm hover:bg-gray-50"
                     >
-                      Admin Panel
+                      Profile
                     </Link>
-                  )}
 
-                  <button
-                    onClick={logout}
-                    className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-gray-50"
-                  >
-                    Logout
-                  </button>
-                </div>
+                    {!user.isAdmin && (
+                      <Link
+                        to="/orders"
+                        onClick={() => setAccountMenuOpen(false)}
+                        className="block px-4 py-3 text-sm hover:bg-gray-50"
+                      >
+                        My Orders
+                      </Link>
+                    )}
+
+                    {user.isAdmin && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setAccountMenuOpen(false)}
+                        className="block px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        Admin Panel
+                      </Link>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-gray-50"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <Link
@@ -292,6 +334,9 @@ export default function Home() {
             </Link>
             <Link to="/products" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
               Shop
+            </Link>
+            <Link to={user ? "/cart" : "/login"} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
+              Cart
             </Link>
 
             <div className="h-px bg-white/10 my-2" />

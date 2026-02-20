@@ -153,40 +153,31 @@ export default function ProductDetails() {
     setQty(1);
   };
 
-  const addToCart = () => {
+  const addToCart = async () => {
     if (!product) return;
     if (variants.length && !selectedVariant) return;
-
-    const chosen = selectedVariant;
-    const item = {
-      productId: product._id,
-      slug: product.slug,
-      name: product.name,
-      price: Number(price) || 0,
-      qty: Number(qty) || 1,
-      variantId: chosen?._id || null,
-      attributes: chosen?.attributes || {},
-      image: activeImg || gallery[0] || fallbackImg,
-      stock: Number(stock) || 0,
-      brand: brandName,
-      category: catName,
-    };
-
-    const key = "cartItems";
-    const prev = JSON.parse(localStorage.getItem(key) || "[]");
-    const idx = prev.findIndex(
-      (x) => x.productId === item.productId && x.variantId === item.variantId
-    );
-
-    if (idx >= 0) {
-      const nextQty = clamp((prev[idx].qty || 1) + item.qty, 1, item.stock || 999);
-      prev[idx] = { ...prev[idx], qty: nextQty };
-      localStorage.setItem(key, JSON.stringify(prev));
-    } else {
-      localStorage.setItem(key, JSON.stringify([item, ...prev]));
+    if (!selectedVariant?._id) {
+      alert("Please select an in-stock variant");
+      return;
     }
 
-    navigate("/cart");
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      await api.post("/cart/items", {
+        productId: product._id,
+        variantId: selectedVariant._id,
+        qty: Number(qty) || 1,
+      });
+      navigate("/cart");
+    } catch (e) {
+      console.error("Failed to add to cart:", e);
+      alert(e?.response?.data?.message || "Failed to add to cart");
+    }
   };
 
   if (loading) {
