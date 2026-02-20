@@ -122,7 +122,7 @@ export default function Cart() {
 
           <div className="flex items-center gap-3">
             <Link to="/products" className="font-semibold text-cyan-700 hover:underline">
-              Continue shopping ->
+              Continue shopping --
             </Link>
             {cart?.items?.length > 0 && (
               <button
