@@ -21,9 +21,33 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function normalizeAttributeEntries(attributes) {
+  if (!attributes) return [];
+  if (attributes instanceof Map) {
+    return Array.from(attributes.entries()).filter(
+      ([k, v]) => k && String(v || "").trim()
+    );
+  }
+  if (typeof attributes === "object") {
+    return Object.entries(attributes).filter(
+      ([k, v]) => k && String(v || "").trim()
+    );
+  }
+  return [];
+}
+
+function prettyAttrKey(key) {
+  return String(key || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
 function VariantLabel({ v }) {
-  const a = v?.attributes || {};
-  const parts = [a.color, a.ram, a.storage].filter(Boolean);
+  const parts = normalizeAttributeEntries(v?.attributes)
+    .slice(0, 3)
+    .map(([k, val]) => `${prettyAttrKey(k)}: ${val}`);
   return (
     <span className="text-sm font-semibold">
       {parts.length ? parts.join(" / ") : v?.sku || "Variant"}
@@ -73,7 +97,7 @@ export default function ProductDetails() {
     })();
   }, [slug]);
 
-  const variants = product?.variants || [];
+  const variants = useMemo(() => product?.variants || [], [product]);
 
   const selectedVariant = useMemo(() => {
     if (!variants.length) return null;

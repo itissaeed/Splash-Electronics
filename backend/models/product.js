@@ -15,12 +15,9 @@ const imageSchema = new mongoose.Schema({
 
 const variantSchema = new mongoose.Schema({
   sku: { type: String, required: true, unique: true }, // e.g. IP15PM-256-BLK
-  attributes: {
-    color: String,
-    ram: String,      // "8GB"
-    storage: String,  // "256GB"
-    size: String,     // optional
-  },
+  // Dynamic per-category attributes (e.g. color/ram/storage for phones,
+  // switch_type/layout/connectivity for keyboards, etc.)
+  attributes: { type: Map, of: String, default: {} },
   price: { type: Number, required: true },
   countInStock: { type: Number, required: true, default: 0 },
   images: [imageSchema],

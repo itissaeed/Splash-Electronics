@@ -30,6 +30,74 @@ const slugify = (text) =>
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 
+const DEFAULT_VARIANT_ATTRIBUTE_KEYS = ["color", "ram", "storage"];
+const CATEGORY_ATTRIBUTE_PRESETS = {
+  smartphone: ["color", "ram", "storage", "screen_size", "chipset", "battery"],
+  smartphones: ["color", "ram", "storage", "screen_size", "chipset", "battery"],
+  laptop: ["color", "ram", "storage", "processor", "screen_size", "gpu"],
+  laptops: ["color", "ram", "storage", "processor", "screen_size", "gpu"],
+  keyboard: ["color", "switch_type", "layout", "connectivity", "keycaps"],
+  keyboards: ["color", "switch_type", "layout", "connectivity", "keycaps"],
+  mouse: ["color", "dpi", "connectivity", "buttons", "weight"],
+  mice: ["color", "dpi", "connectivity", "buttons", "weight"],
+  headset: ["color", "connectivity", "driver_size", "microphone", "battery_life"],
+  headsets: ["color", "connectivity", "driver_size", "microphone", "battery_life"],
+  tab: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
+  tabs: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
+  tablet: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
+  tablets: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
+};
+
+const toAttributeKey = (text) =>
+  String(text || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_");
+
+const formatAttributeLabel = (key) =>
+  String(key || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+const getKeyboardNavigableFields = (container) => {
+  if (!container) return [];
+  const selectors = [
+    "input:not([type='hidden']):not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "button:not([disabled])",
+  ].join(",");
+  return Array.from(container.querySelectorAll(selectors)).filter(
+    (el) => el.tabIndex !== -1 && el.offsetParent !== null
+  );
+};
+
+const getPresetAttributeKeys = (categoryLike) => {
+  const slugKey = toAttributeKey(categoryLike?.slug);
+  if (slugKey && CATEGORY_ATTRIBUTE_PRESETS[slugKey]) {
+    return CATEGORY_ATTRIBUTE_PRESETS[slugKey];
+  }
+  const nameKey = toAttributeKey(categoryLike?.name);
+  if (nameKey && CATEGORY_ATTRIBUTE_PRESETS[nameKey]) {
+    return CATEGORY_ATTRIBUTE_PRESETS[nameKey];
+  }
+  return [];
+};
+
+const emptyVariant = (isDefault = false) => ({
+  _id: null,
+  sku: "",
+  price: "",
+  countInStock: "",
+  isDefault,
+  attributes: {},
+  images: [],
+});
+
 function Modal({ open, title, subtitle, children, onClose }) {
   if (!open) return null;
   return (
@@ -86,6 +154,7 @@ export default function AdminProducts() {
   const [createErr, setCreateErr] = useState("");
   const [createName, setCreateName] = useState("");
   const [createSlug, setCreateSlug] = useState("");
+  const [createAttributes, setCreateAttributes] = useState("");
 
   // form
   const [formData, setFormData] = useState({
@@ -101,17 +170,7 @@ export default function AdminProducts() {
   });
 
   // variants
-  const [variants, setVariants] = useState([
-    {
-      _id: null,
-      sku: "",
-      price: "",
-      countInStock: "",
-      isDefault: true,
-      attributes: { color: "", ram: "", storage: "" },
-      images: [],
-    },
-  ]);
+  const [variants, setVariants] = useState([emptyVariant(true)]);
 
   // ✅ per-variant uploads: { [idx]: File[] }
   const [variantFiles, setVariantFiles] = useState({});
@@ -133,17 +192,7 @@ export default function AdminProducts() {
       isFeatured: false,
       isActive: true,
     });
-    setVariants([
-      {
-        _id: null,
-        sku: "",
-        price: "",
-        countInStock: "",
-        isDefault: true,
-        attributes: { color: "", ram: "", storage: "" },
-        images: [],
-      },
-    ]);
+    setVariants([emptyVariant(true)]);
     setVariantFiles({});
   };
 
@@ -199,6 +248,44 @@ export default function AdminProducts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.name]);
 
+  const selectedCategory = useMemo(
+    () => categories.find((c) => c._id === formData.category) || null,
+    [categories, formData.category]
+  );
+
+  const variantAttributeKeys = useMemo(() => {
+    const dbKeys = Array.isArray(selectedCategory?.attributes)
+      ? selectedCategory.attributes.map(toAttributeKey).filter(Boolean)
+      : [];
+    if (dbKeys.length) return Array.from(new Set(dbKeys));
+
+    const presetKeys = getPresetAttributeKeys(selectedCategory);
+    if (presetKeys.length) return Array.from(new Set(presetKeys));
+
+    return DEFAULT_VARIANT_ATTRIBUTE_KEYS;
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    if (!variantAttributeKeys.length) return;
+    setVariants((prev) => {
+      let changed = false;
+      const next = prev.map((v) => {
+        const attrs = { ...(v.attributes || {}) };
+        let localChange = false;
+        for (const key of variantAttributeKeys) {
+          if (attrs[key] === undefined) {
+            attrs[key] = "";
+            localChange = true;
+          }
+        }
+        if (!localChange) return v;
+        changed = true;
+        return { ...v, attributes: attrs };
+      });
+      return changed ? next : prev;
+    });
+  }, [variantAttributeKeys]);
+
   const filteredProducts = useMemo(() => {
     const term = q.trim().toLowerCase();
     return products.filter((p) => {
@@ -236,6 +323,40 @@ export default function AdminProducts() {
     }));
   };
 
+  const focusByOffset = (container, fromEl, offset) => {
+    const fields = getKeyboardNavigableFields(container);
+    const idx = fields.indexOf(fromEl);
+    if (idx < 0) return;
+    const nextIdx = idx + offset;
+    if (nextIdx < 0 || nextIdx >= fields.length) return;
+    fields[nextIdx].focus();
+  };
+
+  const handleFormKeyboardNav = (e) => {
+    const target = e.target;
+    if (!target || !["INPUT", "SELECT", "TEXTAREA", "BUTTON"].includes(target.tagName)) {
+      return;
+    }
+
+    const formEl = e.currentTarget;
+    const isTextarea = target.tagName === "TEXTAREA";
+    const isButton = target.tagName === "BUTTON";
+
+    // Enter moves to next field (Shift+Enter previous). Keep textarea line-break behavior.
+    if (e.key === "Enter" && !isTextarea && !isButton) {
+      e.preventDefault();
+      focusByOffset(formEl, target, e.shiftKey ? -1 : 1);
+      return;
+    }
+
+    // Alt + Arrow keys navigate between form controls.
+    if (e.altKey && ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(e.key)) {
+      e.preventDefault();
+      const forward = e.key === "ArrowRight" || e.key === "ArrowDown";
+      focusByOffset(formEl, target, forward ? 1 : -1);
+    }
+  };
+
   const handleVariantChange = (idx, field, value) => {
     setVariants((prev) =>
       prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v))
@@ -251,18 +372,7 @@ export default function AdminProducts() {
   };
 
   const addVariant = () => {
-    setVariants((prev) => [
-      ...prev,
-      {
-        _id: null,
-        sku: "",
-        price: "",
-        countInStock: "",
-        isDefault: false,
-        attributes: { color: "", ram: "", storage: "" },
-        images: [],
-      },
-    ]);
+    setVariants((prev) => [...prev, emptyVariant(false)]);
   };
 
   // ✅ fixed: remove variant + reindex variantFiles
@@ -323,11 +433,7 @@ export default function AdminProducts() {
       price: x.price ?? "",
       countInStock: x.countInStock ?? "",
       isDefault: !!x.isDefault,
-      attributes: {
-        color: x.attributes?.color || "",
-        ram: x.attributes?.ram || "",
-        storage: x.attributes?.storage || "",
-      },
+      attributes: { ...(x.attributes || {}) },
       images: Array.isArray(x.images) ? x.images : [],
     }));
 
@@ -437,17 +543,27 @@ export default function AdminProducts() {
 
     if (!validateBeforeSave()) return;
 
-    const cleanedVariants = variants.map((v) => ({
-      sku: String(v.sku || "").trim(),
-      price: Number(v.price || 0),
-      countInStock: Number(v.countInStock || 0),
-      isDefault: !!v.isDefault,
-      attributes: {
-        color: String(v.attributes?.color || "").trim(),
-        ram: String(v.attributes?.ram || "").trim(),
-        storage: String(v.attributes?.storage || "").trim(),
-      },
-    }));
+    const cleanedVariants = variants.map((v) => {
+      const normalized = {
+        sku: String(v.sku || "").trim(),
+        price: Number(v.price || 0),
+        countInStock: Number(v.countInStock || 0),
+        isDefault: !!v.isDefault,
+        attributes: Object.entries(v.attributes || {}).reduce((acc, [rawKey, rawVal]) => {
+          const key = toAttributeKey(rawKey);
+          if (!key) return acc;
+          const value = String(rawVal || "").trim();
+          if (value) acc[key] = value;
+          return acc;
+        }, {}),
+      };
+
+      // Keep existing variant identity and gallery when editing.
+      if (v?._id) normalized._id = v._id;
+      if (Array.isArray(v?.images)) normalized.images = v.images;
+
+      return normalized;
+    });
 
     // Ensure exactly one default
     if (cleanedVariants.length > 0) {
@@ -534,6 +650,7 @@ export default function AdminProducts() {
     setCreateErr("");
     setCreateName("");
     setCreateSlug("");
+    setCreateAttributes("");
   };
 
   useEffect(() => {
@@ -559,7 +676,18 @@ export default function AdminProducts() {
         await fetchAll();
         setFormData((p) => ({ ...p, brand: data?._id || p.brand }));
       } else {
-        const { data } = await api.post("/categories", { name, slug });
+        const manualAttributes = Array.from(
+          new Set(
+            String(createAttributes || "")
+              .split(",")
+              .map((x) => toAttributeKey(x))
+              .filter(Boolean)
+          )
+        );
+        const attributes = manualAttributes.length
+          ? manualAttributes
+          : getPresetAttributeKeys({ name, slug });
+        const { data } = await api.post("/categories", { name, slug, attributes });
         await fetchAll();
         setFormData((p) => ({ ...p, category: data?._id || p.category }));
       }
@@ -861,7 +989,11 @@ export default function AdminProducts() {
               </button>
             </div>
 
-            <form onSubmit={saveProduct} className="flex-1 overflow-y-auto p-5 space-y-6">
+            <form
+              onSubmit={saveProduct}
+              onKeyDown={handleFormKeyboardNav}
+              className="flex-1 overflow-y-auto p-5 space-y-6"
+            >
               {/* toggles */}
               <div className="flex flex-wrap gap-4">
                 <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
@@ -1009,7 +1141,15 @@ export default function AdminProducts() {
               {/* Variants */}
               <div className="rounded-2xl border p-4">
                 <div className="flex items-center justify-between">
-                  <div className="font-extrabold text-gray-900">Variants</div>
+                  <div>
+                    <div className="font-extrabold text-gray-900">Variants</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Fields: {variantAttributeKeys.map(formatAttributeLabel).join(", ")}
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-1">
+                      Keyboard: Enter next, Shift+Enter previous, Alt+Arrow navigate.
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={addVariant}
@@ -1091,35 +1231,19 @@ export default function AdminProducts() {
                       </div>
 
                       <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="text-xs font-semibold text-gray-600">Color</label>
-                          <input
-                            value={v.attributes?.color || ""}
-                            onChange={(e) => handleVariantAttr(idx, "color", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                            placeholder="Black"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-semibold text-gray-600">RAM</label>
-                          <input
-                            value={v.attributes?.ram || ""}
-                            onChange={(e) => handleVariantAttr(idx, "ram", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                            placeholder="8GB"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-semibold text-gray-600">Storage</label>
-                          <input
-                            value={v.attributes?.storage || ""}
-                            onChange={(e) => handleVariantAttr(idx, "storage", e.target.value)}
-                            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                            placeholder="256GB"
-                          />
-                        </div>
+                        {variantAttributeKeys.map((attrKey) => (
+                          <div key={`${v._id || idx}-${attrKey}`}>
+                            <label className="text-xs font-semibold text-gray-600">
+                              {formatAttributeLabel(attrKey)}
+                            </label>
+                            <input
+                              value={v.attributes?.[attrKey] || ""}
+                              onChange={(e) => handleVariantAttr(idx, attrKey, e.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                              placeholder={`Enter ${formatAttributeLabel(attrKey)}`}
+                            />
+                          </div>
+                        ))}
                       </div>
 
                       {/* existing images (edit mode) */}
@@ -1260,6 +1384,23 @@ export default function AdminProducts() {
             />
             <div className="mt-1 text-xs text-gray-500">Used in URLs and filters.</div>
           </div>
+
+          {createType === "category" && (
+            <div>
+              <label className="text-xs font-semibold text-gray-600">
+                Variant Attributes (optional)
+              </label>
+              <input
+                value={createAttributes}
+                onChange={(e) => setCreateAttributes(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                placeholder="color, ram, storage"
+              />
+              <div className="mt-1 text-xs text-gray-500">
+                Comma separated. Example: switch_type, layout, connectivity.
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
