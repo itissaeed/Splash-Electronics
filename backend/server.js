@@ -21,6 +21,7 @@ const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 const couponRoutes = require('./routes/couponRoutes');
 const adminSettingsRoutes = require('./routes/adminSettingsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Home route
 app.get('/', (req, res) => {
@@ -61,6 +63,7 @@ app.use('/api/brands', brandRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/returns', returnRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // 404 handler
 app.use((req, res) => {

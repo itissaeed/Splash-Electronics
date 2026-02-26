@@ -24,7 +24,7 @@ const shippingAddressSchema = new mongoose.Schema({
 }, { _id: false });
 
 const paymentSchema = new mongoose.Schema({
-  method: { type: String, enum: ["COD", "BKASH", "NAGAD", "CARD", "BANK"], required: true },
+  method: { type: String, enum: ["COD", "BKASH", "NAGAD", "CARD", "BANK", "SSLCOMMERZ"], required: true },
   status: { type: String, enum: ["unpaid", "paid", "failed", "refunded", "partial_refund"], default: "unpaid" },
   provider: { type: String }, // bKash/nagad/sslcommerz/stripe
   transactionId: String,
@@ -69,7 +69,6 @@ const orderSchema = new mongoose.Schema({
   notes: String,
 }, { timestamps: true });
 
-orderSchema.index({ orderNo: 1 }, { unique: true });
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
 // Region analytics

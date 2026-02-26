@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useContext, useEffect } from "react";
+import React, { useMemo, useState, useContext, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../../utils/api";
 import { UserContext } from "../context/UserContext";
@@ -27,6 +27,7 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
+  const formRef = useRef(null);
 
   const districts = useMemo(
     () => DISTRICTS_BY_DIVISION[shippingAddress.division] || [],
@@ -120,19 +121,56 @@ export default function Checkout() {
     setLoading(true);
 
     try {
-      const { data } = await api.post(
-        "/orders",
-        { shippingAddress, paymentMethod, couponCode: couponCode || undefined },
-        { headers: tokenHeader() }
-      );
+      if (paymentMethod === "SSLCOMMERZ") {
+        const { data } = await api.post(
+          "/payments/sslcommerz/init",
+          { shippingAddress, couponCode: couponCode || undefined },
+          { headers: tokenHeader() }
+        );
 
-      // data is the created order
-      navigate(`/order-success/${data.orderNo}`);
+        if (data?.gatewayUrl) {
+          window.location.href = data.gatewayUrl;
+          return;
+        }
+
+        throw new Error("Failed to start payment session");
+      } else {
+        const { data } = await api.post(
+          "/orders",
+          { shippingAddress, paymentMethod, couponCode: couponCode || undefined },
+          { headers: tokenHeader() }
+        );
+
+        // data is the created order
+        navigate(`/order-success/${data.orderNo}`);
+      }
     } catch (err) {
       const msg = err?.response?.data?.message || "Failed to place order";
       setErrMsg(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFormKeyDown = (e) => {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    const target = e.target;
+    if (target.tagName === "TEXTAREA") return;
+    if (target.type === "submit") return;
+    if (!formRef.current) return;
+
+    const focusables = Array.from(
+      formRef.current.querySelectorAll(
+        "input:not([type='hidden']), select, textarea, button"
+      )
+    ).filter((el) => !el.disabled && el.tabIndex !== -1);
+
+    const idx = focusables.indexOf(target);
+    if (idx === -1) return;
+    const next = focusables[idx + 1];
+    if (next) {
+      e.preventDefault();
+      next.focus();
     }
   };
 
@@ -174,13 +212,22 @@ export default function Checkout() {
         </div>
 
         {errMsg && (
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div
+            className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+            aria-live="polite"
+          >
             {errMsg}
           </div>
         )}
 
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
-          <form onSubmit={placeOrder} className="bg-white border rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm">
+          <form
+            ref={formRef}
+            onSubmit={placeOrder}
+            onKeyDown={handleFormKeyDown}
+            className="bg-white border rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs uppercase tracking-[0.25em] text-cyan-700">Step 1</div>
@@ -215,6 +262,7 @@ export default function Checkout() {
                   onChange={handleChange}
                   placeholder="01XXXXXXXXX"
                   autoComplete="tel"
+                  inputMode="tel"
                 />
               </label>
 
@@ -226,6 +274,8 @@ export default function Checkout() {
                   value={shippingAddress.division}
                   onChange={handleDivisionChange}
                   required
+                  aria-required="true"
+                  aria-invalid={!shippingAddress.division.trim()}
                 >
                   <option value="" disabled>
                     Select division
@@ -247,6 +297,8 @@ export default function Checkout() {
                   onChange={handleDistrictChange}
                   required
                   disabled={!shippingAddress.division}
+                  aria-required="true"
+                  aria-invalid={shippingAddress.division ? !shippingAddress.district.trim() : false}
                 >
                   <option value="" disabled>
                     {shippingAddress.division ? "Select district" : "Select division first"}
@@ -298,6 +350,7 @@ export default function Checkout() {
                   value={shippingAddress.postalCode}
                   onChange={handleChange}
                   placeholder="Postal code (optional)"
+                  inputMode="numeric"
                 />
               </label>
 
@@ -322,6 +375,9 @@ export default function Checkout() {
                 onChange={handleChange}
                 placeholder="House/road/village details"
                 required
+                aria-required="true"
+                aria-invalid={!shippingAddress.addressLine1.trim()}
+                autoComplete="address-line1"
               />
             </label>
 
@@ -339,11 +395,14 @@ export default function Checkout() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-3">
-                {["COD", "BKASH", "NAGAD", "CARD", "BANK"].map((m) => (
+                {[
+                  { value: "COD", label: "Cash on Delivery" },
+                  { value: "SSLCOMMERZ", label: "Online Payment (SSLCOMMERZ)" },
+                ].map((m) => (
                   <label
-                    key={m}
+                    key={m.value}
                     className={`flex items-center gap-2 rounded-2xl border px-4 py-2 cursor-pointer text-sm font-semibold ${
-                      paymentMethod === m
+                      paymentMethod === m.value
                         ? "border-cyan-500 bg-cyan-50 text-cyan-700"
                         : "border-gray-200 text-gray-700 hover:border-cyan-200"
                     }`}
@@ -351,11 +410,11 @@ export default function Checkout() {
                     <input
                       type="radio"
                       name="paymentMethod"
-                      value={m}
-                      checked={paymentMethod === m}
-                      onChange={() => setPaymentMethod(m)}
+                      value={m.value}
+                      checked={paymentMethod === m.value}
+                      onChange={() => setPaymentMethod(m.value)}
                     />
-                    <span>{m}</span>
+                    <span>{m.label}</span>
                   </label>
                 ))}
               </div>
