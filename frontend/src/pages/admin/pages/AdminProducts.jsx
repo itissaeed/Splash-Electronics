@@ -31,21 +31,161 @@ const slugify = (text) =>
     .replace(/-+/g, "-");
 
 const DEFAULT_VARIANT_ATTRIBUTE_KEYS = ["color", "ram", "storage"];
+const PHONE_KEYS = [
+  "color",
+  "ram",
+  "storage",
+  "display_size",
+  "display_type",
+  "refresh_rate",
+  "chipset",
+  "battery_capacity",
+  "charging_power",
+  "camera_main",
+  "camera_selfie",
+  "network",
+  "sim_type",
+  "os",
+];
+const LAPTOP_KEYS = [
+  "color",
+  "processor",
+  "ram",
+  "storage",
+  "storage_type",
+  "display_size",
+  "display_resolution",
+  "refresh_rate",
+  "gpu",
+  "battery_capacity",
+  "weight",
+  "os",
+];
+const TABLET_KEYS = [
+  "color",
+  "ram",
+  "storage",
+  "display_size",
+  "display_type",
+  "chipset",
+  "battery_capacity",
+  "network",
+  "sim_support",
+  "os",
+];
+const AUDIO_KEYS = [
+  "color",
+  "connectivity",
+  "bluetooth_version",
+  "driver_size",
+  "noise_cancellation",
+  "microphone",
+  "battery_life",
+  "charging_port",
+  "water_resistance",
+];
 const CATEGORY_ATTRIBUTE_PRESETS = {
-  smartphone: ["color", "ram", "storage", "screen_size", "chipset", "battery"],
-  smartphones: ["color", "ram", "storage", "screen_size", "chipset", "battery"],
-  laptop: ["color", "ram", "storage", "processor", "screen_size", "gpu"],
-  laptops: ["color", "ram", "storage", "processor", "screen_size", "gpu"],
-  keyboard: ["color", "switch_type", "layout", "connectivity", "keycaps"],
-  keyboards: ["color", "switch_type", "layout", "connectivity", "keycaps"],
-  mouse: ["color", "dpi", "connectivity", "buttons", "weight"],
-  mice: ["color", "dpi", "connectivity", "buttons", "weight"],
-  headset: ["color", "connectivity", "driver_size", "microphone", "battery_life"],
-  headsets: ["color", "connectivity", "driver_size", "microphone", "battery_life"],
-  tab: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
-  tabs: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
-  tablet: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
-  tablets: ["color", "ram", "storage", "screen_size", "battery", "chipset"],
+  smartphone: PHONE_KEYS,
+  smartphones: PHONE_KEYS,
+  phone: PHONE_KEYS,
+  phones: PHONE_KEYS,
+  mobile: PHONE_KEYS,
+  mobile_phone: PHONE_KEYS,
+
+  laptop: LAPTOP_KEYS,
+  laptops: LAPTOP_KEYS,
+  notebook: LAPTOP_KEYS,
+  notebooks: LAPTOP_KEYS,
+
+  tablet: TABLET_KEYS,
+  tablets: TABLET_KEYS,
+  tab: TABLET_KEYS,
+  tabs: TABLET_KEYS,
+
+  monitor: [
+    "size",
+    "panel_type",
+    "resolution",
+    "refresh_rate",
+    "response_time",
+    "brightness",
+    "connectivity",
+    "color_gamut",
+  ],
+  monitors: [
+    "size",
+    "panel_type",
+    "resolution",
+    "refresh_rate",
+    "response_time",
+    "brightness",
+    "connectivity",
+    "color_gamut",
+  ],
+
+  keyboard: [
+    "color",
+    "switch_type",
+    "layout",
+    "size",
+    "connectivity",
+    "backlight",
+    "keycaps",
+  ],
+  keyboards: [
+    "color",
+    "switch_type",
+    "layout",
+    "size",
+    "connectivity",
+    "backlight",
+    "keycaps",
+  ],
+  mouse: ["color", "dpi", "sensor", "connectivity", "buttons", "weight", "battery_life"],
+  mice: ["color", "dpi", "sensor", "connectivity", "buttons", "weight", "battery_life"],
+  headset: AUDIO_KEYS,
+  headsets: AUDIO_KEYS,
+  earbuds: AUDIO_KEYS,
+  earbud: AUDIO_KEYS,
+  headphone: AUDIO_KEYS,
+  headphones: AUDIO_KEYS,
+
+  smartwatch: [
+    "color",
+    "size",
+    "display_type",
+    "strap_material",
+    "bluetooth_version",
+    "battery_life",
+    "water_resistance",
+    "gps",
+  ],
+  smartwatches: [
+    "color",
+    "size",
+    "display_type",
+    "strap_material",
+    "bluetooth_version",
+    "battery_life",
+    "water_resistance",
+    "gps",
+  ],
+
+  charger: ["color", "port_type", "ports", "output_power", "fast_charging", "cable_included"],
+  chargers: ["color", "port_type", "ports", "output_power", "fast_charging", "cable_included"],
+  power_bank: ["color", "capacity", "ports", "output_power", "fast_charging", "weight"],
+  powerbank: ["color", "capacity", "ports", "output_power", "fast_charging", "weight"],
+  cable: ["color", "connector_type", "length", "material", "max_power", "data_speed"],
+  cables: ["color", "connector_type", "length", "material", "max_power", "data_speed"],
+
+  ssd: ["capacity", "form_factor", "interface", "read_speed", "write_speed", "warranty_years"],
+  hdd: ["capacity", "rpm", "cache", "form_factor", "interface", "warranty_years"],
+  ram: ["capacity", "memory_type", "speed", "latency", "voltage", "heatsink"],
+  motherboard: ["socket", "chipset", "form_factor", "ram_type", "max_ram", "pcie_version"],
+  graphics_card: ["vram", "memory_type", "boost_clock", "length", "tdp", "power_connector"],
+  gpu: ["vram", "memory_type", "boost_clock", "length", "tdp", "power_connector"],
+  processor: ["cores", "threads", "base_clock", "boost_clock", "cache", "tdp", "socket"],
+  cpu: ["cores", "threads", "base_clock", "boost_clock", "cache", "tdp", "socket"],
 };
 
 const toAttributeKey = (text) =>
@@ -87,6 +227,237 @@ const getPresetAttributeKeys = (categoryLike) => {
   }
   return [];
 };
+
+const CATEGORY_INFO_PRESETS = {
+  smartphone: {
+    highlights: [
+      "Powerful chipset for smooth daily and gaming performance",
+      "Long battery life with fast charging support",
+      "High refresh rate display with vivid colors",
+      "Advanced camera system for day and night shots",
+    ],
+    specs: {
+      display: "AMOLED, FHD+, 120Hz",
+      chipset: "",
+      ram: "",
+      storage: "",
+      rear_camera: "",
+      front_camera: "",
+      battery: "",
+      charging: "",
+      network: "5G",
+      os: "",
+    },
+  },
+  laptop: {
+    highlights: [
+      "Balanced performance for work, study, and multitasking",
+      "Fast SSD storage for quick boot and app load times",
+      "Comfortable keyboard and large precision touchpad",
+      "Reliable battery backup for all-day use",
+    ],
+    specs: {
+      processor: "",
+      ram: "",
+      storage: "",
+      display: "",
+      graphics: "",
+      battery: "",
+      weight: "",
+      os: "",
+    },
+  },
+  tablet: {
+    highlights: [
+      "Large immersive display for media and productivity",
+      "Slim and lightweight design for portability",
+      "Strong battery life for full-day usage",
+      "Smooth app and multitasking experience",
+    ],
+    specs: {
+      display: "",
+      chipset: "",
+      ram: "",
+      storage: "",
+      battery: "",
+      connectivity: "",
+      os: "",
+    },
+  },
+  monitor: {
+    highlights: [
+      "Crisp panel with strong color accuracy",
+      "Fast refresh rate and low response time",
+      "Comfortable viewing with eye-care features",
+      "Multiple connectivity options for flexible setup",
+    ],
+    specs: {
+      size: "",
+      panel_type: "",
+      resolution: "",
+      refresh_rate: "",
+      response_time: "",
+      brightness: "",
+      ports: "",
+    },
+  },
+  keyboard: {
+    highlights: [
+      "Comfortable typing with durable key switches",
+      "Optimized layout for productivity and gaming",
+      "Stable build quality with long key life",
+      "Reliable wired/wireless connectivity",
+    ],
+    specs: {
+      switch_type: "",
+      layout: "",
+      size: "",
+      connectivity: "",
+      backlight: "",
+      keycaps: "",
+    },
+  },
+  mouse: {
+    highlights: [
+      "Accurate sensor for precise control",
+      "Ergonomic shape for long sessions",
+      "Adjustable DPI for different workflows",
+      "Low-latency connection for responsive input",
+    ],
+    specs: {
+      sensor: "",
+      dpi: "",
+      buttons: "",
+      weight: "",
+      connectivity: "",
+      battery_life: "",
+    },
+  },
+  headset: {
+    highlights: [
+      "Clear audio with immersive sound stage",
+      "Comfortable fit for extended sessions",
+      "Stable wireless or wired connection",
+      "Clear microphone pickup for calls and gaming",
+    ],
+    specs: {
+      driver_size: "",
+      connectivity: "",
+      microphone: "",
+      noise_cancellation: "",
+      battery_life: "",
+      charging_port: "",
+    },
+  },
+  smartwatch: {
+    highlights: [
+      "Health and activity tracking with smart notifications",
+      "Bright display with smooth touch response",
+      "Durable build with water resistance",
+      "Long battery life for daily wear",
+    ],
+    specs: {
+      display: "",
+      sensors: "",
+      battery_life: "",
+      water_resistance: "",
+      connectivity: "",
+      gps: "",
+    },
+  },
+};
+
+CATEGORY_INFO_PRESETS.smartphones = CATEGORY_INFO_PRESETS.smartphone;
+CATEGORY_INFO_PRESETS.phone = CATEGORY_INFO_PRESETS.smartphone;
+CATEGORY_INFO_PRESETS.phones = CATEGORY_INFO_PRESETS.smartphone;
+CATEGORY_INFO_PRESETS.mobile = CATEGORY_INFO_PRESETS.smartphone;
+CATEGORY_INFO_PRESETS.mobile_phone = CATEGORY_INFO_PRESETS.smartphone;
+CATEGORY_INFO_PRESETS.laptops = CATEGORY_INFO_PRESETS.laptop;
+CATEGORY_INFO_PRESETS.notebook = CATEGORY_INFO_PRESETS.laptop;
+CATEGORY_INFO_PRESETS.notebooks = CATEGORY_INFO_PRESETS.laptop;
+CATEGORY_INFO_PRESETS.tablets = CATEGORY_INFO_PRESETS.tablet;
+CATEGORY_INFO_PRESETS.tab = CATEGORY_INFO_PRESETS.tablet;
+CATEGORY_INFO_PRESETS.tabs = CATEGORY_INFO_PRESETS.tablet;
+CATEGORY_INFO_PRESETS.monitors = CATEGORY_INFO_PRESETS.monitor;
+CATEGORY_INFO_PRESETS.keyboards = CATEGORY_INFO_PRESETS.keyboard;
+CATEGORY_INFO_PRESETS.mice = CATEGORY_INFO_PRESETS.mouse;
+CATEGORY_INFO_PRESETS.headsets = CATEGORY_INFO_PRESETS.headset;
+CATEGORY_INFO_PRESETS.earbuds = CATEGORY_INFO_PRESETS.headset;
+CATEGORY_INFO_PRESETS.earbud = CATEGORY_INFO_PRESETS.headset;
+CATEGORY_INFO_PRESETS.headphone = CATEGORY_INFO_PRESETS.headset;
+CATEGORY_INFO_PRESETS.headphones = CATEGORY_INFO_PRESETS.headset;
+CATEGORY_INFO_PRESETS.smartwatches = CATEGORY_INFO_PRESETS.smartwatch;
+
+const getPresetInfoTemplate = (categoryLike) => {
+  const localSlugKey = toAttributeKey(categoryLike?.slug);
+  const localNameKey = toAttributeKey(categoryLike?.name);
+  const localTemplate =
+    (localSlugKey && CATEGORY_INFO_PRESETS[localSlugKey]) ||
+    (localNameKey && CATEGORY_INFO_PRESETS[localNameKey]) ||
+    null;
+
+  const dbHighlights = Array.isArray(categoryLike?.highlightsTemplate)
+    ? categoryLike.highlightsTemplate
+    : [];
+
+  const dbSpecsRaw = categoryLike?.specsTemplate;
+  const dbSpecs =
+    dbSpecsRaw instanceof Map
+      ? Object.fromEntries(Array.from(dbSpecsRaw.entries()))
+      : dbSpecsRaw && typeof dbSpecsRaw === "object"
+        ? dbSpecsRaw
+        : {};
+
+  const merged = {
+    highlights: dbHighlights.length ? dbHighlights : localTemplate?.highlights || [],
+    specs: Object.keys(dbSpecs).length ? dbSpecs : localTemplate?.specs || {},
+  };
+
+  if (!merged.highlights.length && !Object.keys(merged.specs).length) {
+    return null;
+  }
+
+  return merged;
+};
+
+const highlightsArrayToText = (highlights) =>
+  (Array.isArray(highlights) ? highlights : [])
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .join("\n");
+
+const specsObjectToText = (specs) => {
+  if (!specs || typeof specs !== "object") return "";
+  const entries =
+    specs instanceof Map ? Array.from(specs.entries()) : Object.entries(specs);
+  return entries
+    .map(([k, v]) => [toAttributeKey(k), String(v || "").trim()])
+    .filter(([k]) => !!k)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join("\n");
+};
+
+const parseHighlightsText = (rawText) =>
+  String(rawText || "")
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+const parseSpecsText = (rawText) =>
+  String(rawText || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reduce((acc, line) => {
+      const idx = line.indexOf(":");
+      if (idx < 0) return acc;
+      const left = line.slice(0, idx).trim();
+      const right = line.slice(idx + 1).trim();
+      const key = toAttributeKey(left);
+      if (!key || !right) return acc;
+      acc[key] = right;
+      return acc;
+    }, {});
 
 const emptyVariant = (isDefault = false) => ({
   _id: null,
@@ -137,6 +508,7 @@ export default function AdminProducts() {
   // UI state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingCategoryTemplate, setSavingCategoryTemplate] = useState(false);
 
   // filters
   const [q, setQ] = useState("");
@@ -163,6 +535,8 @@ export default function AdminProducts() {
     brand: "",
     category: "",
     description: "",
+    highlightsText: "",
+    specsText: "",
     basePrice: "",
     warrantyMonths: "",
     isFeatured: false,
@@ -187,6 +561,8 @@ export default function AdminProducts() {
       brand: "",
       category: "",
       description: "",
+      highlightsText: "",
+      specsText: "",
       basePrice: "",
       warrantyMonths: "",
       isFeatured: false,
@@ -252,6 +628,52 @@ export default function AdminProducts() {
     () => categories.find((c) => c._id === formData.category) || null,
     [categories, formData.category]
   );
+
+  const applyCategoryInfoPreset = (force = false) => {
+    const preset = getPresetInfoTemplate(selectedCategory);
+    if (!preset) return;
+
+    setFormData((prev) => {
+      const hasHighlights = String(prev.highlightsText || "").trim().length > 0;
+      const hasSpecs = String(prev.specsText || "").trim().length > 0;
+
+      if (!force && (hasHighlights || hasSpecs)) return prev;
+
+      return {
+        ...prev,
+        highlightsText: highlightsArrayToText(preset.highlights),
+        specsText: specsObjectToText(preset.specs),
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (editingId || !selectedCategory) return;
+    applyCategoryInfoPreset(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, selectedCategory?._id]);
+
+  const saveCategoryTemplateFromForm = async () => {
+    if (!selectedCategory?._id) {
+      alert("Select a category first.");
+      return;
+    }
+
+    try {
+      setSavingCategoryTemplate(true);
+      await api.put(`/categories/${selectedCategory._id}`, {
+        highlightsTemplate: parseHighlightsText(formData.highlightsText),
+        specsTemplate: parseSpecsText(formData.specsText),
+      });
+      await fetchAll();
+      alert("Category template saved.");
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to save category template.");
+    } finally {
+      setSavingCategoryTemplate(false);
+    }
+  };
 
   const variantAttributeKeys = useMemo(() => {
     const dbKeys = Array.isArray(selectedCategory?.attributes)
@@ -421,6 +843,8 @@ export default function AdminProducts() {
       brand: p.brand?._id || p.brand || "",
       category: p.category?._id || p.category || "",
       description: p.description || "",
+      highlightsText: highlightsArrayToText(p.highlights),
+      specsText: specsObjectToText(p.specs),
       basePrice: p.basePrice ?? "",
       warrantyMonths: p.warrantyMonths ?? "",
       isFeatured: !!p.isFeatured,
@@ -584,6 +1008,8 @@ export default function AdminProducts() {
       brand: formData.brand,
       category: formData.category,
       description: formData.description,
+      highlights: parseHighlightsText(formData.highlightsText),
+      specs: parseSpecsText(formData.specsText),
       basePrice: Number(formData.basePrice || 0),
       warrantyMonths: Number(formData.warrantyMonths || 0),
       isFeatured: !!formData.isFeatured,
@@ -687,7 +1113,14 @@ export default function AdminProducts() {
         const attributes = manualAttributes.length
           ? manualAttributes
           : getPresetAttributeKeys({ name, slug });
-        const { data } = await api.post("/categories", { name, slug, attributes });
+        const infoTemplate = getPresetInfoTemplate({ name, slug });
+        const { data } = await api.post("/categories", {
+          name,
+          slug,
+          attributes,
+          highlightsTemplate: infoTemplate?.highlights || [],
+          specsTemplate: infoTemplate?.specs || {},
+        });
         await fetchAll();
         setFormData((p) => ({ ...p, category: data?._id || p.category }));
       }
@@ -701,6 +1134,12 @@ export default function AdminProducts() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleQuickAddSubmit = (e) => {
+    e.preventDefault();
+    if (creating) return;
+    submitQuickAdd();
   };
 
   const priceFromProduct = (p) => p?.basePrice ?? p?.variants?.[0]?.price ?? 0;
@@ -1136,6 +1575,58 @@ export default function AdminProducts() {
                     required
                   />
                 </div>
+
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-600">
+                      Highlights (one per line)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {getPresetInfoTemplate(selectedCategory) && (
+                        <button
+                          type="button"
+                          onClick={() => applyCategoryInfoPreset(true)}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                        >
+                          Use Category Preset
+                        </button>
+                      )}
+                      {selectedCategory?._id && (
+                        <button
+                          type="button"
+                          onClick={saveCategoryTemplateFromForm}
+                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-60"
+                          disabled={savingCategoryTemplate}
+                        >
+                          {savingCategoryTemplate ? "Saving..." : "Save As Category Template"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <textarea
+                    name="highlightsText"
+                    value={formData.highlightsText}
+                    onChange={handleChange}
+                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 min-h-[100px]"
+                    placeholder={"Fast chipset\n120Hz smooth display\nAll-day battery life"}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold text-gray-600">
+                    Specs (format: key: value)
+                  </label>
+                  <textarea
+                    name="specsText"
+                    value={formData.specsText}
+                    onChange={handleChange}
+                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 min-h-[120px]"
+                    placeholder={"display: 6.7 inch AMOLED\nchipset: Snapdragon 8 Gen 3\nbattery: 5000 mAh"}
+                  />
+                  <div className="mt-1 text-xs text-gray-500">
+                    Example keys: display, chipset, battery, connectivity, gpu.
+                  </div>
+                </div>
               </div>
 
               {/* Variants */}
@@ -1363,7 +1854,7 @@ export default function AdminProducts() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-3">
+        <form onSubmit={handleQuickAddSubmit} className="grid grid-cols-1 gap-3">
           <div>
             <label className="text-xs font-semibold text-gray-600">Name</label>
             <input
@@ -1404,6 +1895,7 @@ export default function AdminProducts() {
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
+              type="button"
               onClick={() => !creating && setCreateType(null)}
               className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-gray-50"
               disabled={creating}
@@ -1412,7 +1904,7 @@ export default function AdminProducts() {
             </button>
 
             <button
-              onClick={submitQuickAdd}
+              type="submit"
               className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500 disabled:opacity-60"
               disabled={creating}
             >
@@ -1420,7 +1912,7 @@ export default function AdminProducts() {
               {creating ? "Creating..." : "Create"}
             </button>
           </div>
-        </div>
+        </form>
       </Modal>
     </div>
   );

@@ -44,6 +44,13 @@ function prettyAttrKey(key) {
     .replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
+function toAttributeMap(attributes) {
+  return normalizeAttributeEntries(attributes).reduce((acc, [k, v]) => {
+    acc[k] = String(v);
+    return acc;
+  }, {});
+}
+
 function VariantLabel({ v }) {
   const parts = normalizeAttributeEntries(v?.attributes)
     .slice(0, 3)
@@ -107,6 +114,30 @@ export default function ProductDetails() {
     );
   }, [variants, selectedVariantId]);
 
+  const variantAttributeKeys = useMemo(() => {
+    const keys = new Set();
+    variants.forEach((v) => {
+      normalizeAttributeEntries(v?.attributes).forEach(([k]) => {
+        if (k) keys.add(k);
+      });
+    });
+    return Array.from(keys);
+  }, [variants]);
+
+  const variantOptionsByKey = useMemo(() => {
+    const map = {};
+    for (const key of variantAttributeKeys) {
+      const values = new Set();
+      variants.forEach((v) => {
+        const attrMap = toAttributeMap(v?.attributes);
+        const value = String(attrMap[key] || "").trim();
+        if (value) values.add(value);
+      });
+      map[key] = Array.from(values);
+    }
+    return map;
+  }, [variantAttributeKeys, variants]);
+
   // ✅ Always build gallery from selected variant images
   const gallery = useMemo(() => {
     const vImgs =
@@ -151,6 +182,33 @@ export default function ProductDetails() {
 
     // ✅ (optional) reset quantity when variant changes
     setQty(1);
+  };
+
+  const findBestVariantForSelection = (nextSelection = {}) => {
+    if (!variants.length) return null;
+
+    const matches = variants.filter((v) => {
+      const attrs = toAttributeMap(v?.attributes);
+      return Object.entries(nextSelection).every(([k, val]) => {
+        if (!val) return true;
+        return String(attrs[k] || "") === String(val);
+      });
+    });
+
+    if (!matches.length) return null;
+
+    return (
+      matches.find((v) => String(v?._id) === String(selectedVariantId)) ||
+      matches.find((v) => Number(v?.countInStock || 0) > 0) ||
+      matches[0]
+    );
+  };
+
+  const onSelectAttribute = (key, value) => {
+    const currentSelection = toAttributeMap(selectedVariant?.attributes);
+    const nextSelection = { ...currentSelection, [key]: value };
+    const nextVariant = findBestVariantForSelection(nextSelection);
+    if (nextVariant) onSelectVariant(nextVariant);
   };
 
   const addToCart = async () => {
@@ -283,6 +341,20 @@ export default function ProductDetails() {
                 </p>
               </div>
 
+              {selectedVariant && normalizeAttributeEntries(selectedVariant.attributes).length > 0 && (
+                <div className="rounded-3xl border bg-white p-6 shadow-sm">
+                  <h2 className="text-lg font-extrabold text-gray-900">Selected Configuration</h2>
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    {normalizeAttributeEntries(selectedVariant.attributes).map(([k, v]) => (
+                      <div key={k} className="rounded-2xl border bg-gray-50 p-4">
+                        <p className="text-xs text-gray-500 font-semibold">{prettyAttrKey(k)}</p>
+                        <p className="mt-1 text-sm text-gray-900 font-extrabold">{String(v)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {Array.isArray(product.highlights) && product.highlights.length > 0 && (
                 <div className="rounded-3xl border bg-white p-6 shadow-sm">
                   <h2 className="text-lg font-extrabold text-gray-900">Highlights</h2>
@@ -305,7 +377,7 @@ export default function ProductDetails() {
                     <div className="mt-4 grid sm:grid-cols-2 gap-3">
                       {Object.entries(product.specs).map(([k, v]) => (
                         <div key={k} className="rounded-2xl border bg-gray-50 p-4">
-                          <p className="text-xs text-gray-500 font-semibold">{k}</p>
+                          <p className="text-xs text-gray-500 font-semibold">{prettyAttrKey(k)}</p>
                           <p className="mt-1 text-sm text-gray-900 font-extrabold">
                             {String(v)}
                           </p>
@@ -364,10 +436,77 @@ export default function ProductDetails() {
                   </div>
                 </div>
 
+                <div className="mt-6 grid grid-cols-2 gap-2">
+                  <div className="rounded-2xl border bg-gray-50 p-3">
+                    <p className="text-[11px] text-gray-500 font-semibold">Brand</p>
+                    <p className="text-sm text-gray-900 font-extrabold">{brandName || "N/A"}</p>
+                  </div>
+                  <div className="rounded-2xl border bg-gray-50 p-3">
+                    <p className="text-[11px] text-gray-500 font-semibold">Category</p>
+                    <p className="text-sm text-gray-900 font-extrabold">{catName || "N/A"}</p>
+                  </div>
+                  <div className="rounded-2xl border bg-gray-50 p-3">
+                    <p className="text-[11px] text-gray-500 font-semibold">Warranty</p>
+                    <p className="text-sm text-gray-900 font-extrabold">
+                      {product?.warrantyMonths ? `${product.warrantyMonths} months` : "Standard"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border bg-gray-50 p-3">
+                    <p className="text-[11px] text-gray-500 font-semibold">SKU</p>
+                    <p className="text-sm text-gray-900 font-extrabold">
+                      {selectedVariant?.sku || "Auto"}
+                    </p>
+                  </div>
+                </div>
+
+                {variantAttributeKeys.length > 0 && (
+                  <div className="mt-6 space-y-4">
+                    {variantAttributeKeys.map((key) => {
+                      const selectedValue =
+                        toAttributeMap(selectedVariant?.attributes)?.[key] || "";
+                      const options = variantOptionsByKey[key] || [];
+
+                      return (
+                        <div key={key}>
+                          <p className="text-sm font-extrabold text-gray-900 mb-2">
+                            {prettyAttrKey(key)}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {options.map((value) => {
+                              const preview = findBestVariantForSelection({
+                                ...toAttributeMap(selectedVariant?.attributes),
+                                [key]: value,
+                              });
+                              const disabled = !preview || Number(preview?.countInStock || 0) <= 0;
+                              const active = String(value) === String(selectedValue);
+
+                              return (
+                                <button
+                                  key={`${key}-${value}`}
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={() => onSelectAttribute(key, value)}
+                                  className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                    active
+                                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                                      : "bg-white hover:bg-gray-50 text-gray-800"
+                                  } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+                                >
+                                  {value}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Variants */}
                 {variants.length > 0 && (
                   <div className="mt-6">
-                    <p className="text-sm font-extrabold text-gray-900 mb-2">Choose Variant</p>
+                    <p className="text-sm font-extrabold text-gray-900 mb-2">All Variants</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {variants.map((v) => {
                         const active = String(v._id) === String(selectedVariantId);
@@ -448,7 +587,7 @@ export default function ProductDetails() {
                 </div>
 
                 <p className="mt-4 text-xs text-gray-500">
-                  Tip: Select variant for correct price & stock (like Amazon).
+                  Secure checkout, fast shipping, and easy return support.
                 </p>
               </div>
 
