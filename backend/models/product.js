@@ -53,7 +53,6 @@ const productSchema = new mongoose.Schema({
   metaDescription: String,
 }, { timestamps: true });
 
-productSchema.index({ slug: 1 }, { unique: true });
 productSchema.index({ name: "text", description: "text", tags: "text" });
 productSchema.index({ category: 1, brand: 1, isFeatured: 1, isActive: 1 });
 

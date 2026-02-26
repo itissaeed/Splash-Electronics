@@ -155,6 +155,21 @@ export default function MyOrders() {
               <p className="text-xs uppercase tracking-[0.22em] text-slate-300">Account Center</p>
               <h1 className="mt-2 text-2xl sm:text-3xl font-extrabold">My Orders</h1>
               <p className="mt-2 text-sm text-slate-200">View order history, monitor deliveries, and open full order details.</p>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+                <Link
+                  to="/"
+                  className="rounded-full border border-white/25 bg-white/10 px-4 py-2 font-semibold text-white hover:bg-white/20"
+                >
+                  Home
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => navigate(-1)}
+                  className="rounded-full border border-white/25 bg-white/10 px-4 py-2 font-semibold text-white hover:bg-white/20"
+                >
+                  Back
+                </button>
+              </div>
             </div>
             <button
               onClick={fetchMyOrders}

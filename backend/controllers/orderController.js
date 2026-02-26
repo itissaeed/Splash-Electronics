@@ -1,16 +1,9 @@
 // controllers/orderController.js
 const mongoose = require("mongoose");
-const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const InventoryLedger = require("../models/InventoryLedger");
-const Coupon = require("../models/Coupon");
-const generateOrderNo = require("../utils/orderNo");
-
-const toNum = (v, def) => {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : def;
-};
+const { createOrderFromCartForUser } = require("../services/orderService");
 
 // POST /api/orders
 // body: { shippingAddress, paymentMethod, couponCode? }
@@ -25,137 +18,13 @@ exports.createOrderFromCart = async (req, res) => {
       await session.abortTransaction();
       return res.status(400).json({ message: "shippingAddress (division, district, addressLine1) required" });
     }
-
-    const cart = await Cart.findOne({ user: req.user._id }).session(session);
-    if (!cart || cart.items.length === 0) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Cart is empty" });
-    }
-
-    // Build order items + stock validation
-    const orderItems = [];
-    let itemsTotal = 0;
-
-    for (const ci of cart.items) {
-      const product = await Product.findById(ci.product).session(session);
-      if (!product) throw new Error("Product not found during checkout");
-
-      const variant = product.variants.id(ci.variantId);
-      if (!variant) throw new Error("Variant not found during checkout");
-
-      if (variant.countInStock < ci.qty) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: `Not enough stock for ${product.name} (${variant.sku})` });
-      }
-
-      const unitPrice = toNum(variant.price, ci.priceAtAdd);
-
-      orderItems.push({
-        product: product._id,
-        variantId: variant._id,
-        nameSnapshot: product.name,
-        skuSnapshot: variant.sku,
-        imageSnapshot: variant.images?.[0]?.url || product.images?.[0]?.url || "",
-        qty: ci.qty,
-        price: unitPrice,
-      });
-
-      itemsTotal += unitPrice * ci.qty;
-    }
-
-    // Coupon apply (simple cart-level discount)
-    let discountTotal = 0;
-    let couponApplied = null;
-
-    if (couponCode) {
-      const code = String(couponCode).toUpperCase().trim();
-      const coupon = await Coupon.findOne({ code, isActive: true }).session(session);
-
-      if (!coupon) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: "Invalid coupon" });
-      }
-
-      const now = Date.now();
-      if (coupon.validFrom && now < new Date(coupon.validFrom).getTime()) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: "Coupon not active yet" });
-      }
-      if (coupon.validTo && now > new Date(coupon.validTo).getTime()) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: "Coupon expired" });
-      }
-      if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: "Coupon usage limit reached" });
-      }
-      if (itemsTotal < (coupon.minCartTotal || 0)) {
-        await session.abortTransaction();
-        return res.status(400).json({ message: "Cart total too low for this coupon" });
-      }
-
-      if (coupon.type === "PERCENT") {
-        discountTotal = (itemsTotal * coupon.value) / 100;
-        if (coupon.maxDiscount) discountTotal = Math.min(discountTotal, coupon.maxDiscount);
-      } else {
-        discountTotal = coupon.value;
-      }
-
-      discountTotal = Math.min(discountTotal, itemsTotal);
-      coupon.usedCount = (coupon.usedCount || 0) + 1;
-      await coupon.save({ session });
-
-      couponApplied = { code: coupon.code, discountAmount: discountTotal };
-    }
-
-    const shippingFee = 0; // you can calculate based on division/district later
-    const grandTotal = itemsTotal + shippingFee - discountTotal;
-
-    const orderNo = generateOrderNo();
-
-    const order = await Order.create([{
-      orderNo,
-      user: req.user._id,
-      items: orderItems,
+    const createdOrder = await createOrderFromCartForUser({
+      userId: req.user._id,
       shippingAddress,
-      payment: {
-        method: paymentMethod || "COD",
-        status: paymentMethod === "COD" ? "unpaid" : "unpaid",
-      },
-      pricing: {
-        itemsTotal,
-        shippingFee,
-        discountTotal,
-        grandTotal,
-      },
-      coupon: couponApplied || undefined,
-      status: "pending",
-    }], { session });
-
-    const createdOrder = order[0];
-
-    // Stock OUT + Ledger entries
-    for (const oi of orderItems) {
-      const product = await Product.findById(oi.product).session(session);
-      const variant = product.variants.id(oi.variantId);
-
-      variant.countInStock -= oi.qty;
-      await product.save({ session });
-
-      await InventoryLedger.create([{
-        product: oi.product,
-        variantId: oi.variantId,
-        type: "OUT",
-        reason: "SALE",
-        qty: oi.qty,
-        order: createdOrder._id,
-        note: `Order ${createdOrder.orderNo}`,
-      }], { session });
-    }
-
-    // Clear cart
-    cart.items = [];
-    await cart.save({ session });
+      paymentMethod: paymentMethod || "COD",
+      couponCode,
+      session,
+    });
 
     await session.commitTransaction();
     res.status(201).json(createdOrder);
@@ -163,7 +32,8 @@ exports.createOrderFromCart = async (req, res) => {
   } catch (e) {
     console.error("createOrderFromCart:", e);
     await session.abortTransaction();
-    res.status(500).json({ message: "Failed to create order" });
+    const statusCode = e.statusCode || 500;
+    res.status(statusCode).json({ message: e.message || "Failed to create order" });
   } finally {
     session.endSession();
   }
