@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/api";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
@@ -86,6 +86,7 @@ function Step({ label, active, done }) {
 
 export default function OrderDetails() {
   const { orderNo } = useParams();
+  const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -158,6 +159,19 @@ export default function OrderDetails() {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <Link
+                to="/"
+                className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20"
+              >
+                Home
+              </Link>
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20"
+              >
+                Back
+              </button>
               <Link
                 to="/orders"
                 className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20"
