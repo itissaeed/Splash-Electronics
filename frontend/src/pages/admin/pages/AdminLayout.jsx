@@ -12,6 +12,7 @@ import {
 import {
   LayoutDashboard,
   Package,
+  Shapes,
   ShoppingCart,
   Boxes,
   Users,
@@ -33,12 +34,14 @@ import AdminCoupons from "./AdminCoupons";
 import AdminAnalytics from "./AdminAnalytics";
 import AdminForecasting from "./AdminForecasting";
 import AdminSettings from "./AdminSettings";
+import AdminCategories from "./AdminCategories";
 
 import { UserContext } from "../../context/UserContext";
 
 const navItems = [
   { to: "/admin/overview", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/products", label: "Products", icon: Package },
+  { to: "/admin/categories", label: "Categories", icon: Shapes },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/customers", label: "Customers", icon: Users },
@@ -194,6 +197,7 @@ export default function AdminLayout() {
               <Route path="/" element={<Navigate to="/admin/overview" replace />} />
               <Route path="/overview" element={<AdminOverview />} />
               <Route path="/products" element={<AdminProducts />} />
+              <Route path="/categories" element={<AdminCategories />} />
               <Route path="/orders" element={<AdminOrders />} />
               <Route path="/inventory" element={<AdminInventory />} />
               <Route path="/customers" element={<AdminCustomers />} />
