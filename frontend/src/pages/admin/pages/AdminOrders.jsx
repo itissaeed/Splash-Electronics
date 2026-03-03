@@ -64,9 +64,9 @@ export default function AdminOrders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const openOrder = async (id) => {
+  const openOrder = async (orderNo) => {
     try {
-      const { data } = await api.get(`/admin/orders/${id}`, {
+      const { data } = await api.get(`/orders/${orderNo}`, {
         headers: tokenHeader(),
       });
       setSelected(data);
@@ -76,17 +76,17 @@ export default function AdminOrders() {
     }
   };
 
-  const updateStatus = async ({ id, status, courier, trackingId, notes }) => {
+  const updateStatus = async ({ orderNo, status, courier, trackingId, notes }) => {
     try {
       setUpdating(true);
       await api.put(
-        `/admin/orders/${id}/status`,
+        `/admin/orders/${orderNo}/status`,
         { status, courier, trackingId, notes },
         { headers: tokenHeader() }
       );
       await fetchOrders();
-      if (selected?._id === id) {
-        await openOrder(id);
+      if (selected?.orderNo === orderNo) {
+        await openOrder(orderNo);
       }
     } catch (e) {
       console.error(e);
@@ -222,7 +222,7 @@ export default function AdminOrders() {
 
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => openOrder(o._id)}
+                        onClick={() => openOrder(o.orderNo)}
                         className="rounded-xl border px-3 py-2 text-xs font-semibold hover:bg-gray-50"
                       >
                         View / Update
@@ -438,13 +438,13 @@ function OrderUpdatePanel({ order, updating, onUpdate }) {
         <button
           disabled={updating}
           onClick={() =>
-            onUpdate({
-              id: order._id,
-              status,
-              courier,
-              trackingId,
-              notes,
-            })
+              onUpdate({
+                orderNo: order.orderNo,
+                status,
+                courier,
+                trackingId,
+                notes,
+              })
           }
           className={`w-full rounded-xl py-3 text-sm font-semibold text-white ${
             updating ? "bg-indigo-300" : "bg-indigo-600 hover:bg-indigo-500"
