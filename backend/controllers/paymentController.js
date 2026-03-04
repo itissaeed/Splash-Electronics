@@ -2,7 +2,10 @@ const https = require("https");
 const { URL } = require("url");
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
+const ReturnRefund = require("../models/ReturnRefund");
 const { createOrderFromCartForUser } = require("../services/orderService");
+const { validateShippingPayload } = require("../utils/shippingValidation");
+const { releaseExpiredReservations } = require("../services/stockReservationService");
 
 const postForm = (urlString, payload) =>
   new Promise((resolve, reject) => {
@@ -65,15 +68,18 @@ const getGatewayConfig = () => {
 // POST /api/payments/sslcommerz/init
 // body: { shippingAddress, couponCode? }
 exports.initSslCommerz = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  let session;
 
   try {
-    const { shippingAddress, couponCode } = req.body;
+    await releaseExpiredReservations();
+    session = await mongoose.startSession();
+    session.startTransaction();
 
-    if (!shippingAddress?.division || !shippingAddress?.district || !shippingAddress?.addressLine1) {
+    const { shippingAddress, couponCode, deliveryOption } = req.body;
+    const validation = validateShippingPayload({ shippingAddress, deliveryOption });
+    if (!validation.ok) {
       await session.abortTransaction();
-      return res.status(400).json({ message: "shippingAddress (division, district, addressLine1) required" });
+      return res.status(400).json({ message: validation.message });
     }
 
     const cfg = getGatewayConfig();
@@ -84,10 +90,11 @@ exports.initSslCommerz = async (req, res) => {
 
     const createdOrder = await createOrderFromCartForUser({
       userId: req.user._id,
-      shippingAddress,
+      shippingAddress: validation.shippingAddress,
       paymentMethod: "SSLCOMMERZ",
       paymentProvider: "sslcommerz",
       couponCode,
+      deliveryOption: validation.deliveryOption,
       session,
     });
 
@@ -106,16 +113,16 @@ exports.initSslCommerz = async (req, res) => {
       fail_url: cfg.failUrl,
       cancel_url: cfg.cancelUrl,
       ipn_url: cfg.ipnUrl,
-      cus_name: shippingAddress.recipientName || req.user.name || "Customer",
+      cus_name: validation.shippingAddress.recipientName || req.user.name || "Customer",
       cus_email: req.user.email || "customer@splashelectronics.com",
-      cus_add1: shippingAddress.addressLine1 || "N/A",
-      cus_add2: shippingAddress.addressLine2 || "",
-      cus_city: shippingAddress.district || "",
-      cus_state: shippingAddress.division || "",
-      cus_postcode: shippingAddress.postalCode || "",
+      cus_add1: validation.shippingAddress.addressLine1 || "N/A",
+      cus_add2: validation.shippingAddress.addressLine2 || "",
+      cus_city: validation.shippingAddress.district || "",
+      cus_state: validation.shippingAddress.division || "",
+      cus_postcode: validation.shippingAddress.postalCode || "",
       cus_country: "Bangladesh",
-      cus_phone: shippingAddress.phone || req.user.number || "N/A",
-      shipping_method: "NO",
+      cus_phone: validation.shippingAddress.phone || req.user.number || "N/A",
+      shipping_method: "Courier",
       num_of_item: createdOrder.items?.length || 1,
       product_name: "Splash Electronics Order",
       product_category: "Electronics",
@@ -134,11 +141,15 @@ exports.initSslCommerz = async (req, res) => {
     return res.json({ gatewayUrl, orderNo });
   } catch (e) {
     console.error("initSslCommerz:", e);
-    await session.abortTransaction();
+    if (session?.inTransaction()) {
+      await session.abortTransaction();
+    }
     const statusCode = e.statusCode || 500;
     return res.status(statusCode).json({ message: e.message || "Failed to init SSLCOMMERZ" });
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 };
 
@@ -172,12 +183,44 @@ exports.sslCommerzIpn = async (req, res) => {
     }
 
     if (isValid) {
+      if (String(order.status || "").toLowerCase() === "cancelled") {
+        order.payment.status = "paid";
+        order.payment.provider = "sslcommerz";
+        order.payment.transactionId = validationResp?.tran_id || valId;
+        order.payment.paidAt = new Date();
+        await order.save();
+
+        const existing = await ReturnRefund.findOne({
+          order: order._id,
+          status: { $in: ["requested", "approved", "picked", "received"] },
+        });
+        if (!existing) {
+          const items = (order.items || []).map((it) => ({
+            product: it.product,
+            variantId: it.variantId,
+            qty: it.qty,
+            reason: "late_payment_after_reservation_expiry",
+          }));
+          await ReturnRefund.create({
+            order: order._id,
+            user: order.user,
+            items,
+            status: "requested",
+            customerRefundPreference: {
+              reason: "Payment succeeded after reservation expiry cancellation",
+              refundTimeOption: "WITHIN_7_DAYS",
+            },
+            notes: `Auto-created from late successful payment callback for ${order.orderNo}`,
+          });
+        }
+        return res.status(200).send("OK");
+      }
+
       if (order.payment?.status !== "paid") {
         order.payment.status = "paid";
         order.payment.provider = "sslcommerz";
         order.payment.transactionId = validationResp?.tran_id || valId;
         order.payment.paidAt = new Date();
-        order.status = order.status === "pending" ? "confirmed" : order.status;
         await order.save();
       }
       return res.status(200).send("OK");
@@ -187,6 +230,11 @@ exports.sslCommerzIpn = async (req, res) => {
       order.payment.status = "failed";
       order.payment.provider = "sslcommerz";
       order.payment.transactionId = validationResp?.tran_id || valId;
+      order.status = "cancelled";
+      order.inventory = order.inventory || {};
+      order.inventory.reservationActive = false;
+      order.inventory.reservationReleasedAt = new Date();
+      order.inventory.reservationReleaseReason = "PAYMENT_FAILED";
       await order.save();
     }
 

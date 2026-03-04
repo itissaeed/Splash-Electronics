@@ -187,7 +187,6 @@ const handleSubmit = async (e) => {
                   </div>
 
                   <p className="mt-2 text-xs text-gray-500">
-                    Tip: password is case-sensitive.
                   </p>
                 </div>
 

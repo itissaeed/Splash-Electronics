@@ -59,9 +59,32 @@ const orderSchema = new mongoose.Schema({
     default: "pending",
   },
 
+  inventory: {
+    deducted: { type: Boolean, default: false },
+    deductedAt: Date,
+    restoredAt: Date,
+    reservationActive: { type: Boolean, default: false },
+    reservedUntil: Date,
+    reservationReleasedAt: Date,
+    reservationReleaseReason: String,
+  },
+
   shipment: {
+    deliveryOption: { type: String, enum: ["STANDARD", "EXPRESS"], default: "STANDARD" },
+    estimatedDaysMin: Number,
+    estimatedDaysMax: Number,
+    quote: {
+      serviceable: { type: Boolean, default: true },
+      appliedFreeShipping: { type: Boolean, default: false },
+      freeShippingThreshold: { type: Number, default: 0 },
+    },
     courier: String,         // Pathao/RedX/Sundarban
     trackingId: String,
+    trackingUrl: String,
+    bookingRef: String,
+    courierCharge: Number,
+    pickupDate: Date,
+    expectedDeliveryDate: Date,
     shippedAt: Date,
     deliveredAt: Date,
   },

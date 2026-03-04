@@ -1,5 +1,5 @@
 // src/pages/admin/pages/AdminLayout.jsx
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
   Routes,
   Route,
@@ -19,7 +19,9 @@ import {
   TicketPercent,
   BarChart3,
   LineChart,
+  RotateCcw,
   Settings as SettingsIcon,
+  Bell,
   Menu,
   Home,
   LogOut,
@@ -35,8 +37,10 @@ import AdminAnalytics from "./AdminAnalytics";
 import AdminForecasting from "./AdminForecasting";
 import AdminSettings from "./AdminSettings";
 import AdminCategories from "./AdminCategories";
+import AdminReturns from "./AdminReturns";
 
 import { UserContext } from "../../context/UserContext";
+import api from "../../../utils/api";
 
 const navItems = [
   { to: "/admin/overview", label: "Overview", icon: LayoutDashboard },
@@ -48,12 +52,16 @@ const navItems = [
   { to: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/admin/forecasting", label: "Forecasting", icon: LineChart },
+  { to: "/admin/returns", label: "Returns", icon: RotateCcw },
   { to: "/admin/settings", label: "Settings", icon: SettingsIcon },
 ];
 
 export default function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [newOrders, setNewOrders] = useState([]);
 
   const { user, logout } = useContext(UserContext);
   const navigate = useNavigate();
@@ -70,6 +78,65 @@ export default function AdminLayout() {
   const linkClass = (isActive) =>
     `flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition
      ${isActive ? "bg-indigo-50 text-indigo-700" : "text-gray-700 hover:bg-gray-50"}`;
+
+  useEffect(() => {
+    if (!user?.isAdmin) return;
+
+    const key = "admin_order_notif_last_seen_at";
+    const nowIso = new Date().toISOString();
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, nowIso);
+    }
+
+    let unmounted = false;
+
+    const loadNotifications = async () => {
+      try {
+        const since = localStorage.getItem(key) || nowIso;
+        const { data } = await api.get("/admin/orders/notifications", {
+          params: { since, limit: 8 },
+        });
+
+        if (unmounted) return;
+
+        setNotificationCount(data?.count || 0);
+        setNewOrders(data?.orders || []);
+
+      } catch (e) {
+        console.error("Failed to fetch admin notifications", e);
+      }
+    };
+
+    loadNotifications();
+    const id = setInterval(loadNotifications, 20000);
+
+    return () => {
+      unmounted = true;
+      clearInterval(id);
+    };
+  }, [user?.isAdmin]);
+
+  const openOrdersFromNotif = () => {
+    localStorage.setItem("admin_order_notif_last_seen_at", new Date().toISOString());
+    setNotifOpen(false);
+    setNotificationCount(0);
+    setNewOrders([]);
+    navigate("/admin/orders");
+  };
+
+  const markAllNotificationsRead = () => {
+    localStorage.setItem("admin_order_notif_last_seen_at", new Date().toISOString());
+    setNotificationCount(0);
+    setNewOrders([]);
+  };
+
+  useEffect(() => {
+    if (location.pathname === "/admin/orders") {
+      localStorage.setItem("admin_order_notif_last_seen_at", new Date().toISOString());
+      setNotificationCount(0);
+      setNewOrders([]);
+    }
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -134,6 +201,80 @@ export default function AdminLayout() {
                   placeholder="Search in admin…"
                   className="hidden md:block w-64 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                 />
+
+                {/* Order notifications */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setNotifOpen((o) => !o)}
+                    className="relative h-10 w-10 rounded-full border bg-white hover:bg-gray-50 flex items-center justify-center"
+                    aria-label="Order notifications"
+                  >
+                    <Bell size={18} className="text-gray-700" />
+                    {notificationCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-600 text-white text-[11px] leading-[18px] text-center px-1 font-bold">
+                        {notificationCount > 99 ? "99+" : notificationCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {notifOpen && (
+                    <div className="absolute right-0 mt-2 w-80 rounded-xl border bg-white shadow-lg text-sm z-40 overflow-hidden">
+                      <div className="px-3 py-2 border-b flex items-center justify-between">
+                        <div className="font-semibold text-gray-900">
+                          New Orders
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={markAllNotificationsRead}
+                            className="text-xs font-semibold text-gray-600 hover:text-gray-800"
+                          >
+                            Mark all read
+                          </button>
+                          <button
+                            type="button"
+                            onClick={openOrdersFromNotif}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-500"
+                          >
+                            Open Orders
+                          </button>
+                        </div>
+                      </div>
+
+                      {newOrders.length === 0 ? (
+                        <div className="px-3 py-4 text-gray-500 text-xs">
+                          No new orders since last check.
+                        </div>
+                      ) : (
+                        <div className="max-h-80 overflow-y-auto">
+                          {newOrders.map((o) => (
+                            <button
+                              key={o._id}
+                              type="button"
+                              onClick={openOrdersFromNotif}
+                              className="w-full text-left px-3 py-3 border-b last:border-b-0 hover:bg-gray-50"
+                            >
+                              <div className="font-semibold text-gray-900">
+                                {o.orderNo}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {new Date(o.createdAt).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-gray-700 mt-1">
+                                {o.shippingAddress?.division || "-"},{" "}
+                                {o.shippingAddress?.district || "-"} - ৳
+                                {Number(
+                                  o.pricing?.grandTotal || 0
+                                ).toLocaleString("en-BD")}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* User avatar + dropdown */}
                 <div className="relative">
@@ -204,6 +345,7 @@ export default function AdminLayout() {
               <Route path="/coupons" element={<AdminCoupons />} />
               <Route path="/analytics" element={<AdminAnalytics />} />
               <Route path="/forecasting" element={<AdminForecasting />} />
+              <Route path="/returns" element={<AdminReturns />} />
               <Route path="/settings" element={<AdminSettings />} />
             </Routes>
           </main>

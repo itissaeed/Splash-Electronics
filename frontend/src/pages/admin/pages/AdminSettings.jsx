@@ -32,8 +32,11 @@ export default function AdminSettings() {
 
     // Shipping
     insideDhaka: 60,
-    outsideDhaka: 120,
+    outsideDhaka: 100,
     freeShippingThreshold: 5000,
+    expressExtraInsideDhaka: 80,
+    expressExtraOutsideDhaka: 120,
+    shippingOverrides: [],
 
     // UI
     primaryColor: "#4F46E5",
@@ -104,6 +107,21 @@ export default function AdminSettings() {
           data.shipping?.freeShippingThreshold !== undefined
             ? data.shipping.freeShippingThreshold
             : prev.freeShippingThreshold,
+        expressExtraInsideDhaka:
+          data.shipping?.expressExtraInsideDhaka !== undefined
+            ? data.shipping.expressExtraInsideDhaka
+            : prev.expressExtraInsideDhaka,
+        expressExtraOutsideDhaka:
+          data.shipping?.expressExtraOutsideDhaka !== undefined
+            ? data.shipping.expressExtraOutsideDhaka
+            : prev.expressExtraOutsideDhaka,
+        shippingOverrides: Array.isArray(data.shipping?.regionalOverrides)
+          ? data.shipping.regionalOverrides.map((row) => ({
+              division: row?.division || "",
+              district: row?.district || "",
+              fee: row?.fee ?? "",
+            }))
+          : prev.shippingOverrides,
 
         primaryColor: data.ui?.primaryColor || prev.primaryColor,
         secondaryColor: data.ui?.secondaryColor || prev.secondaryColor,
@@ -158,6 +176,15 @@ export default function AdminSettings() {
           insideDhaka: Number(form.insideDhaka || 0),
           outsideDhaka: Number(form.outsideDhaka || 0),
           freeShippingThreshold: Number(form.freeShippingThreshold || 0),
+          expressExtraInsideDhaka: Number(form.expressExtraInsideDhaka || 0),
+          expressExtraOutsideDhaka: Number(form.expressExtraOutsideDhaka || 0),
+          regionalOverrides: (form.shippingOverrides || [])
+            .filter((row) => String(row?.division || "").trim() && row?.fee !== "")
+            .map((row) => ({
+              division: String(row.division || "").trim(),
+              district: String(row.district || "").trim(),
+              fee: Number(row.fee || 0),
+            })),
         },
         ui: {
           primaryColor: form.primaryColor,
@@ -235,7 +262,7 @@ export default function AdminSettings() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+	          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
               <label className="text-sm font-semibold text-gray-700">
                 Store name
@@ -363,8 +390,94 @@ export default function AdminSettings() {
                 className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
               />
             </div>
-          </div>
-        </section>
+	          </div>
+	          <div className="mt-3 rounded-2xl border p-3">
+	            <div className="flex items-center justify-between">
+	              <div className="text-sm font-semibold text-gray-700">
+	                Regional overrides
+	              </div>
+	              <button
+	                type="button"
+	                onClick={() =>
+	                  setForm((prev) => ({
+	                    ...prev,
+	                    shippingOverrides: [
+	                      ...(prev.shippingOverrides || []),
+	                      { division: "", district: "", fee: "" },
+	                    ],
+	                  }))
+	                }
+	                className="rounded-lg border px-3 py-1 text-xs font-semibold hover:bg-gray-50"
+	              >
+	                Add region
+	              </button>
+	            </div>
+	            <p className="mt-1 text-[11px] text-gray-500">
+	              Set custom fee for specific division/district. Leave district empty for full division.
+	            </p>
+	            <div className="mt-3 space-y-2">
+	              {(form.shippingOverrides || []).length === 0 ? (
+	                <div className="text-xs text-gray-500">No overrides added.</div>
+	              ) : (
+	                (form.shippingOverrides || []).map((row, idx) => (
+	                  <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+	                    <input
+	                      value={row.division}
+	                      onChange={(e) =>
+	                        setForm((prev) => {
+	                          const next = [...(prev.shippingOverrides || [])];
+	                          next[idx] = { ...next[idx], division: e.target.value };
+	                          return { ...prev, shippingOverrides: next };
+	                        })
+	                      }
+	                      placeholder="Division (required)"
+	                      className="rounded-xl border px-3 py-2 text-sm"
+	                    />
+	                    <input
+	                      value={row.district}
+	                      onChange={(e) =>
+	                        setForm((prev) => {
+	                          const next = [...(prev.shippingOverrides || [])];
+	                          next[idx] = { ...next[idx], district: e.target.value };
+	                          return { ...prev, shippingOverrides: next };
+	                        })
+	                      }
+	                      placeholder="District (optional)"
+	                      className="rounded-xl border px-3 py-2 text-sm"
+	                    />
+	                    <input
+	                      type="number"
+	                      value={row.fee}
+	                      onChange={(e) =>
+	                        setForm((prev) => {
+	                          const next = [...(prev.shippingOverrides || [])];
+	                          next[idx] = { ...next[idx], fee: e.target.value };
+	                          return { ...prev, shippingOverrides: next };
+	                        })
+	                      }
+	                      placeholder="Fee (BDT)"
+	                      className="rounded-xl border px-3 py-2 text-sm"
+	                    />
+	                    <button
+	                      type="button"
+	                      onClick={() =>
+	                        setForm((prev) => ({
+	                          ...prev,
+	                          shippingOverrides: (prev.shippingOverrides || []).filter(
+	                            (_, i) => i !== idx
+	                          ),
+	                        }))
+	                      }
+	                      className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
+	                    >
+	                      Remove
+	                    </button>
+	                  </div>
+	                ))
+	              )}
+	            </div>
+	          </div>
+	        </section>
 
         {/* Order & checkout */}
         <section className="bg-white border rounded-3xl shadow-sm p-6 space-y-4">
@@ -499,6 +612,32 @@ export default function AdminSettings() {
               <p className="mt-1 text-[11px] text-gray-500">
                 0 = always charge shipping.
               </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Express extra (inside Dhaka)
+              </label>
+              <input
+                type="number"
+                name="expressExtraInsideDhaka"
+                value={form.expressExtraInsideDhaka}
+                onChange={handleChange}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Express extra (outside Dhaka)
+              </label>
+              <input
+                type="number"
+                name="expressExtraOutsideDhaka"
+                value={form.expressExtraOutsideDhaka}
+                onChange={handleChange}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
             </div>
           </div>
         </section>

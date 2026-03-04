@@ -22,6 +22,14 @@ const returnRefundSchema = new mongoose.Schema({
     refundedAt: Date,
   },
 
+  customerRefundPreference: {
+    reason: String,
+    refundTimeOption: {
+      type: String,
+      enum: ["WITHIN_24_HOURS", "WITHIN_3_DAYS", "WITHIN_7_DAYS"],
+    },
+  },
+
   notes: String,
 }, { timestamps: true });
 
