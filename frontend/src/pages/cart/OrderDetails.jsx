@@ -1,9 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/api";
+import { buildTrackingUrl } from "../../utils/shipmentTracking";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 const tokenHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+const REFUND_TIME_OPTIONS = [
+  { value: "WITHIN_24_HOURS", label: "Within 24 hours" },
+  { value: "WITHIN_3_DAYS", label: "Within 3 days" },
+  { value: "WITHIN_7_DAYS", label: "Within 7 days" },
+];
 
 const STATUS_FLOW = ["pending", "confirmed", "processing", "shipped", "delivered"];
 
@@ -89,6 +95,11 @@ export default function OrderDetails() {
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState("");
+  const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundTimeOption, setRefundTimeOption] = useState("WITHIN_3_DAYS");
+  const [refundFormError, setRefundFormError] = useState("");
 
   const load = async () => {
     try {
@@ -141,6 +152,83 @@ export default function OrderDetails() {
   const pay = order.payment || {};
   const pricing = order.pricing || {};
   const shipment = order.shipment || {};
+  const visibleGrandTotal =
+    Number(pricing?.itemsTotal || 0) +
+    Number(pricing?.shippingFee || 0) +
+    Number(pricing?.discountTotal || 0);
+  const trackingUrl =
+    String(shipment?.trackingUrl || "").trim() ||
+    buildTrackingUrl(shipment?.courier, shipment?.trackingId);
+  const canCancel = ["pending", "confirmed", "processing"].includes(order?.status);
+  const canConfirmDelivery = order?.status === "shipped";
+  const canRequestRefund =
+    ["cancelled", "delivered"].includes(order?.status) && pay?.status === "paid";
+
+  const doCancelOrder = async () => {
+    const ok = window.confirm(
+      "Cancel this order now? If already paid, you can request refund right after cancellation."
+    );
+    if (!ok) return;
+    try {
+      setActionLoading("cancel");
+      await api.post(`/orders/${orderNo}/cancel`, {}, { headers: tokenHeader() });
+      await load();
+      alert("Order cancelled.");
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to cancel order");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const doConfirmDelivery = async () => {
+    const ok = window.confirm("Confirm that you received the product from the courier?");
+    if (!ok) return;
+    try {
+      setActionLoading("confirm");
+      await api.post(`/orders/${orderNo}/confirm-delivery`, {}, { headers: tokenHeader() });
+      await load();
+      alert("Delivery confirmed.");
+    } catch (e) {
+      alert(e?.response?.data?.message || "Failed to confirm delivery");
+    } finally {
+      setActionLoading("");
+    }
+  };
+
+  const doRequestRefund = async () => {
+    setRefundFormError("");
+    setRefundModalOpen(true);
+  };
+
+  const submitRefundRequest = async () => {
+    const reason = refundReason.trim();
+    if (!reason) {
+      setRefundFormError("Please provide a refund reason.");
+      return;
+    }
+    try {
+      setActionLoading("refund");
+      await api.post(
+        `/orders/${orderNo}/refund`,
+        {
+          reason,
+          refundTimeOption,
+          notes: "Requested from customer order details page",
+        },
+        { headers: tokenHeader() }
+      );
+      setRefundModalOpen(false);
+      setRefundReason("");
+      setRefundTimeOption("WITHIN_3_DAYS");
+      alert("Refund request submitted. Our team will review it.");
+    } catch (e) {
+      const msg = e?.response?.data?.message || "Failed to request refund";
+      setRefundFormError(msg);
+    } finally {
+      setActionLoading("");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -200,11 +288,101 @@ export default function OrderDetails() {
             </div>
           )}
 
-          {["cancelled", "returned"].includes(order.status) ? (
-            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              This order is currently marked as {prettyStatus(order.status)}.
-            </div>
-          ) : null}
+              {["cancelled", "returned"].includes(order.status) ? (
+                <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  This order is currently marked as {prettyStatus(order.status)}.
+                </div>
+              ) : null}
+
+              <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+                Delivery partner: This order is fulfilled by Splash Electronics and delivered by a
+                third-party courier service.
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {canCancel ? (
+                  <button
+                    type="button"
+                    onClick={doCancelOrder}
+                    disabled={actionLoading === "cancel"}
+                    className="rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                  >
+                    {actionLoading === "cancel" ? "Cancelling..." : "Cancel Order"}
+                  </button>
+                ) : null}
+                {canConfirmDelivery ? (
+                  <button
+                    type="button"
+                    onClick={doConfirmDelivery}
+                    disabled={actionLoading === "confirm"}
+                    className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                  >
+                    {actionLoading === "confirm" ? "Confirming..." : "Confirm Delivery"}
+                  </button>
+                ) : null}
+                {canRequestRefund ? (
+                  <button
+                    type="button"
+                    onClick={doRequestRefund}
+                    disabled={actionLoading === "refund"}
+                    className="rounded-xl border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                  >
+                    {actionLoading === "refund" ? "Submitting..." : "Request Refund"}
+                  </button>
+                ) : null}
+              </div>
+              {refundModalOpen ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="text-sm font-bold text-amber-900">Refund Request</div>
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-amber-900">Reason *</label>
+                      <textarea
+                        value={refundReason}
+                        onChange={(e) => setRefundReason(e.target.value)}
+                        placeholder="Write the reason for your refund request"
+                        className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800 min-h-[90px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-amber-900">
+                        Preferred refund time *
+                      </label>
+                      <select
+                        value={refundTimeOption}
+                        onChange={(e) => setRefundTimeOption(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                      >
+                        {REFUND_TIME_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {refundFormError ? (
+                      <div className="text-xs font-semibold text-red-700">{refundFormError}</div>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={submitRefundRequest}
+                        disabled={actionLoading === "refund"}
+                        className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+                      >
+                        {actionLoading === "refund" ? "Submitting..." : "Submit Refund Request"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRefundModalOpen(false)}
+                        className="rounded-xl border border-amber-200 bg-white px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -265,7 +443,7 @@ export default function OrderDetails() {
                 </div>
                 <div className="mt-3 border-t pt-3 flex justify-between">
                   <span className="font-extrabold text-gray-900">Grand total</span>
-                  <span className="font-extrabold text-slate-900">{money(pricing?.grandTotal)}</span>
+                  <span className="font-extrabold text-slate-900">{money(visibleGrandTotal)}</span>
                 </div>
               </div>
 
@@ -306,6 +484,52 @@ export default function OrderDetails() {
                   <div className="font-semibold text-gray-900">
                     {shipment?.courier || "Courier"} | {shipment?.trackingId || "-"}
                   </div>
+                  {trackingUrl ? (
+                    <a
+                      href={trackingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs font-semibold text-indigo-600 hover:underline"
+                    >
+                      Track shipment
+                    </a>
+                  ) : null}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Delivered by third-party courier on behalf of Splash Electronics.
+                  </div>
+                  {shipment?.deliveryOption ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Delivery option: {shipment.deliveryOption}
+                      {shipment?.estimatedDaysMin && shipment?.estimatedDaysMax
+                        ? ` (${shipment.estimatedDaysMin}-${shipment.estimatedDaysMax} days ETA)`
+                        : ""}
+                    </div>
+                  ) : null}
+                  {shipment?.bookingRef ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Booking ref: {shipment.bookingRef}
+                    </div>
+                  ) : null}
+                  {shipment?.pickupDate ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Pickup date: {formatDate(shipment.pickupDate)}
+                    </div>
+                  ) : null}
+                  {shipment?.expectedDeliveryDate ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Estimated delivery by: {formatDate(shipment.expectedDeliveryDate)}
+                    </div>
+                  ) : shipment?.estimatedDaysMax ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Estimated delivery in {shipment.estimatedDaysMax} day(s)
+                    </div>
+                  ) : null}
+                  {shipment?.courierCharge !== undefined &&
+                  shipment?.courierCharge !== null ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Courier charge (included in shipping fee): {money(shipment.courierCharge)}
+                    </div>
+                  ) : null}
                   {shipment?.shippedAt ? (
                     <div className="mt-1 text-xs text-gray-500">Shipped: {formatDate(shipment.shippedAt)}</div>
                   ) : null}

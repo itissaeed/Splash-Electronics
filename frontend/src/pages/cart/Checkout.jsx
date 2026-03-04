@@ -5,6 +5,8 @@ import { UserContext } from "../context/UserContext";
 import { DIVISIONS, DISTRICTS_BY_DIVISION, UPAZILAS_BY_DISTRICT } from "../../data/bdLocations";
 
 const tokenHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+const BD_PHONE_REGEX = /^(?:\+?88)?01[3-9]\d{8}$/;
+const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -25,6 +27,10 @@ export default function Checkout() {
   });
 
   const [paymentMethod, setPaymentMethod] = useState("COD");
+  const [deliveryOption, setDeliveryOption] = useState("STANDARD");
+  const [cartTotals, setCartTotals] = useState({ itemsTotal: 0, itemCount: 0 });
+  const [shippingQuote, setShippingQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const formRef = useRef(null);
@@ -82,14 +88,63 @@ export default function Checkout() {
     });
   }, [user, defaultAddress]);
 
+  useEffect(() => {
+    const fetchCartTotals = async () => {
+      try {
+        const { data } = await api.get("/cart", { headers: tokenHeader() });
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const itemsTotal = items.reduce(
+          (sum, item) => sum + Number(item?.priceAtAdd || 0) * Number(item?.qty || 0),
+          0
+        );
+        const itemCount = items.reduce((sum, item) => sum + Number(item?.qty || 0), 0);
+        setCartTotals({ itemsTotal, itemCount });
+      } catch (err) {
+        setCartTotals({ itemsTotal: 0, itemCount: 0 });
+      }
+    };
+
+    fetchCartTotals();
+  }, []);
+
+  useEffect(() => {
+    const loadQuote = async () => {
+      if (!shippingAddress.division) {
+        setShippingQuote(null);
+        return;
+      }
+
+      setQuoteLoading(true);
+      try {
+        const { data } = await api.post("/shipping/quote", {
+          division: shippingAddress.division,
+          district: shippingAddress.district,
+          itemsTotal: cartTotals.itemsTotal,
+          deliveryOption,
+        });
+        setShippingQuote(data || null);
+      } catch (err) {
+        setShippingQuote(null);
+      } finally {
+        setQuoteLoading(false);
+      }
+    };
+
+    loadQuote();
+  }, [shippingAddress.division, cartTotals.itemsTotal, deliveryOption]);
+
   const canSubmit = useMemo(() => {
+    const hasValidPhone = BD_PHONE_REGEX.test(shippingAddress.phone.trim());
     return (
+      shippingAddress.recipientName.trim() &&
+      hasValidPhone &&
       shippingAddress.division.trim() &&
       shippingAddress.district.trim() &&
       shippingAddress.addressLine1.trim() &&
+      !quoteLoading &&
       !loading
     );
-  }, [shippingAddress, loading]);
+  }, [shippingAddress, quoteLoading, loading]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -124,7 +179,11 @@ export default function Checkout() {
       if (paymentMethod === "SSLCOMMERZ") {
         const { data } = await api.post(
           "/payments/sslcommerz/init",
-          { shippingAddress, couponCode: couponCode || undefined },
+          {
+            shippingAddress,
+            deliveryOption,
+            couponCode: couponCode || undefined,
+          },
           { headers: tokenHeader() }
         );
 
@@ -137,7 +196,12 @@ export default function Checkout() {
       } else {
         const { data } = await api.post(
           "/orders",
-          { shippingAddress, paymentMethod, couponCode: couponCode || undefined },
+          {
+            shippingAddress,
+            paymentMethod,
+            deliveryOption,
+            couponCode: couponCode || undefined,
+          },
           { headers: tokenHeader() }
         );
 
@@ -232,7 +296,7 @@ export default function Checkout() {
               <div>
                 <div className="text-xs uppercase tracking-[0.25em] text-cyan-700">Step 1</div>
                 <h2 className="mt-2 text-xl font-extrabold text-gray-900">Shipping details</h2>
-                <p className="text-sm text-gray-500">We’ll use this to deliver your order safely.</p>
+                <p className="text-sm text-gray-500">We will use this address to deliver your order safely.</p>
               </div>
               <div className="hidden sm:block rounded-2xl bg-cyan-50 px-4 py-2 text-xs font-semibold text-cyan-700">
                 Delivery address
@@ -241,19 +305,22 @@ export default function Checkout() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="space-y-1">
-                <span className="text-xs font-semibold text-gray-600">Recipient name</span>
+                <span className="text-xs font-semibold text-gray-600">Recipient name *</span>
                 <input
                   className="rounded-2xl border border-gray-200 px-3 py-2.5 w-full bg-white outline-none focus:ring-2 focus:ring-cyan-400"
                   name="recipientName"
                   value={shippingAddress.recipientName}
                   onChange={handleChange}
-                  placeholder="Full name (optional)"
+                  placeholder="Full name"
                   autoComplete="name"
+                  required
+                  aria-required="true"
+                  aria-invalid={!shippingAddress.recipientName.trim()}
                 />
               </label>
 
               <label className="space-y-1">
-                <span className="text-xs font-semibold text-gray-600">Phone</span>
+                <span className="text-xs font-semibold text-gray-600">Phone *</span>
                 <input
                   className="rounded-2xl border border-gray-200 px-3 py-2.5 w-full bg-white outline-none focus:ring-2 focus:ring-cyan-400"
                   name="phone"
@@ -263,6 +330,13 @@ export default function Checkout() {
                   placeholder="01XXXXXXXXX"
                   autoComplete="tel"
                   inputMode="tel"
+                  required
+                  aria-required="true"
+                  aria-invalid={
+                    shippingAddress.phone.trim()
+                      ? !BD_PHONE_REGEX.test(shippingAddress.phone.trim())
+                      : true
+                  }
                 />
               </label>
 
@@ -385,13 +459,64 @@ export default function Checkout() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs uppercase tracking-[0.25em] text-cyan-700">Step 2</div>
-                  <div className="mt-2 text-lg font-extrabold text-gray-900">Payment method</div>
+                  <div className="mt-2 text-lg font-extrabold text-gray-900">Delivery option</div>
                 </div>
                 {couponCode && (
                   <div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
                     Coupon applied: {couponCode}
                   </div>
                 )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-3">
+                {[
+                  { value: "STANDARD", label: "Standard Delivery", eta: "Estimated 2-6 days" },
+                  { value: "EXPRESS", label: "Express Delivery", eta: "Estimated 1-4 days" },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-2 rounded-2xl border px-4 py-2 cursor-pointer text-sm font-semibold ${
+                      deliveryOption === option.value
+                        ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                        : "border-gray-200 text-gray-700 hover:border-cyan-200"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="deliveryOption"
+                      value={option.value}
+                      checked={deliveryOption === option.value}
+                      onChange={() => setDeliveryOption(option.value)}
+                    />
+                    <span>
+                      {option.label}
+                      <span className="ml-2 text-xs font-medium text-gray-500">{option.eta}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-600 uppercase tracking-[0.2em]">
+                  Live delivery quote
+                </div>
+                {quoteLoading ? (
+                  <p className="mt-2 text-sm text-slate-500">Updating delivery estimate...</p>
+                ) : shippingQuote ? (
+                  <div className="mt-2 text-sm text-slate-700 space-y-1">
+                    <div>Delivery fee: <span className="font-semibold">{money(shippingQuote.shippingFee)}</span></div>
+                    <div>
+                      Estimated delivery: {shippingQuote.estimatedDaysMin}-{shippingQuote.estimatedDaysMax} days
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">Select a division to get a delivery quote.</p>
+                )}
+              </div>
+
+              <div className="mt-4">
+                <div className="text-xs uppercase tracking-[0.25em] text-cyan-700">Step 3</div>
+                <div className="mt-2 text-lg font-extrabold text-gray-900">Payment method</div>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-3">
@@ -431,6 +556,11 @@ export default function Checkout() {
             >
               {loading ? "Placing order..." : "Place Order"}
             </button>
+            {!BD_PHONE_REGEX.test(shippingAddress.phone.trim()) && (
+              <p className="text-xs text-red-600">
+                Use a valid Bangladeshi mobile number, e.g. 017XXXXXXXX.
+              </p>
+            )}
           </form>
 
           <aside className="space-y-4">
@@ -445,6 +575,34 @@ export default function Checkout() {
               <div className="mt-4 space-y-2 text-sm text-gray-600">
                 <div>Address: {shippingAddress.addressLine1 || "Add address line"}</div>
                 <div>Phone: {shippingAddress.phone || "Add phone"}</div>
+                <div>Mode: {deliveryOption === "EXPRESS" ? "Express delivery" : "Standard delivery"}</div>
+              </div>
+              <div className="mt-4 border-t pt-3 space-y-1 text-sm">
+                <div className="flex items-center justify-between text-gray-600">
+                  <span>Items ({cartTotals.itemCount})</span>
+                  <span>{money(cartTotals.itemsTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between text-gray-600">
+                  <span>Delivery fee</span>
+                  <span>
+                    {quoteLoading
+                      ? "Calculating..."
+                      : shippingQuote
+                      ? money(shippingQuote.shippingFee)
+                      : "Select division"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between font-bold text-gray-900">
+                  <span>Estimated total</span>
+                  <span>
+                    {money(cartTotals.itemsTotal + Number(shippingQuote?.shippingFee || 0))}
+                  </span>
+                </div>
+                {shippingQuote && (
+                  <div className="text-xs text-gray-500 pt-1">
+                    ETA: {shippingQuote.estimatedDaysMin}-{shippingQuote.estimatedDaysMax} days
+                  </div>
+                )}
               </div>
             </div>
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../utils/api";
+import { buildTrackingUrl } from "../../utils/shipmentTracking";
 
 const tokenHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
@@ -252,6 +253,13 @@ export default function MyOrders() {
                 const firstImg = o?.items?.[0]?.imageSnapshot || "https://via.placeholder.com/96";
                 const itemCount =
                   o?.items?.reduce((sum, it) => sum + Number(it?.qty || 0), 0) || 0;
+                const trackingUrl =
+                  String(o?.shipment?.trackingUrl || "").trim() ||
+                  buildTrackingUrl(o?.shipment?.courier, o?.shipment?.trackingId);
+                const visibleTotal =
+                  Number(o?.pricing?.itemsTotal || 0) +
+                  Number(o?.pricing?.shippingFee || 0) -
+                  Number(o?.pricing?.discountTotal || 0);
 
                 return (
                   <article
@@ -280,10 +288,26 @@ export default function MyOrders() {
                         <p className="mt-2 text-sm text-gray-700">
                           Shipping: {o?.shippingAddress?.division || "-"}, {o?.shippingAddress?.district || "-"}
                         </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Delivery fee: {money(o?.pricing?.shippingFee)} | Delivery by third-party courier
+                        </p>
 
                         {o?.shipment?.trackingId ? (
                           <p className="mt-1 text-xs text-gray-500">
                             Tracking: <span className="font-semibold text-gray-700">{o?.shipment?.courier || "Courier"} | {o.shipment.trackingId}</span>
+                            {trackingUrl ? (
+                              <>
+                                {" "}
+                                <a
+                                  href={trackingUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-semibold text-indigo-600 hover:underline"
+                                >
+                                  Track
+                                </a>
+                              </>
+                            ) : null}
                           </p>
                         ) : null}
                       </div>
@@ -291,7 +315,7 @@ export default function MyOrders() {
                       <div className="sm:text-right">
                         <div className="text-xs text-gray-500">Total</div>
                         <div className="text-xl font-extrabold text-slate-900">
-                          {money(o?.pricing?.grandTotal)}
+                          {money(visibleTotal)}
                         </div>
                         <Link
                           to={`/order/${o.orderNo}`}

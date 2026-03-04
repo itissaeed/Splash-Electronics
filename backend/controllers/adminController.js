@@ -3,12 +3,16 @@ const User = require("../models/userModel");
 
 exports.getAdminOverview = async (req, res) => {
   try {
+    const revenueStatuses = ["confirmed", "processing", "shipped", "delivered"];
+    const revenueMatch = { status: { $in: revenueStatuses } };
+
     // totals
     const totalOrders = await Order.countDocuments();
     const totalCustomers = await User.countDocuments({ isAdmin: false });
 
-    // revenue (sum of all grandTotal)
+    // revenue (only admin-confirmed order pipeline)
     const revenueAgg = await Order.aggregate([
+      { $match: revenueMatch },
       { $group: { _id: null, revenue: { $sum: "$pricing.grandTotal" } } },
     ]);
     const totalRevenue = revenueAgg[0]?.revenue || 0;
@@ -25,6 +29,7 @@ exports.getAdminOverview = async (req, res) => {
 
     // best sellers (top 10 products)
     const bestSellers = await Order.aggregate([
+      { $match: revenueMatch },
       { $unwind: "$items" },
       {
         $group: {
@@ -41,6 +46,7 @@ exports.getAdminOverview = async (req, res) => {
 
     // sales by division
     const salesByDivision = await Order.aggregate([
+      { $match: revenueMatch },
       {
         $group: {
           _id: "$shippingAddress.division",
@@ -56,7 +62,7 @@ exports.getAdminOverview = async (req, res) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const salesLast7Days = await Order.aggregate([
-      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      { $match: { ...revenueMatch, createdAt: { $gte: sevenDaysAgo } } },
       {
         $group: {
           _id: {

@@ -1,6 +1,11 @@
 // controllers/cartController.js
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
+const {
+  releaseExpiredReservations,
+  getReservedQtyMap,
+  getAvailableStock,
+} = require("../services/stockReservationService");
 
 const toNum = (v, def) => {
   const n = Number(v);
@@ -35,6 +40,8 @@ exports.getMyCart = async (req, res) => {
 // body: { productId, variantId, qty }
 exports.addToCart = async (req, res) => {
   try {
+    await releaseExpiredReservations();
+
     const { productId, variantId, qty } = req.body;
     const Q = toNum(qty, 1);
     if (!productId || !variantId || Q < 1) {
@@ -47,7 +54,18 @@ exports.addToCart = async (req, res) => {
     const variant = product.variants.id(variantId);
     if (!variant) return res.status(404).json({ message: "Variant not found" });
 
-    if (variant.countInStock < Q) {
+    const reservedMap = await getReservedQtyMap({
+      pairs: [{ productId, variantId }],
+      now: new Date(),
+    });
+    const key = `${String(product._id)}|${String(variant._id)}`;
+    const reservedQty = Number(reservedMap.get(key) || 0);
+    const availableStock = getAvailableStock({
+      physicalStock: variant.countInStock,
+      reservedQty,
+    });
+
+    if (availableStock < Q) {
       return res.status(400).json({ message: "Not enough stock" });
     }
 
@@ -60,7 +78,7 @@ exports.addToCart = async (req, res) => {
 
     if (existing) {
       const newQty = existing.qty + Q;
-      if (variant.countInStock < newQty) {
+      if (availableStock < newQty) {
         return res.status(400).json({ message: "Not enough stock for requested quantity" });
       }
       existing.qty = newQty;
@@ -91,6 +109,8 @@ exports.addToCart = async (req, res) => {
 // body: { qty }
 exports.updateCartItemQty = async (req, res) => {
   try {
+    await releaseExpiredReservations();
+
     const { qty } = req.body;
     const Q = toNum(qty, 1);
     if (Q < 1) return res.status(400).json({ message: "qty must be >= 1" });
@@ -107,7 +127,17 @@ exports.updateCartItemQty = async (req, res) => {
     const variant = product.variants.id(item.variantId);
     if (!variant) return res.status(404).json({ message: "Variant not found" });
 
-    if (variant.countInStock < Q) return res.status(400).json({ message: "Not enough stock" });
+    const reservedMap = await getReservedQtyMap({
+      pairs: [{ productId: item.product, variantId: item.variantId }],
+      now: new Date(),
+    });
+    const key = `${String(product._id)}|${String(variant._id)}`;
+    const reservedQty = Number(reservedMap.get(key) || 0);
+    const availableStock = getAvailableStock({
+      physicalStock: variant.countInStock,
+      reservedQty,
+    });
+    if (availableStock < Q) return res.status(400).json({ message: "Not enough stock" });
 
     item.qty = Q;
     item.priceAtAdd = variant.price;

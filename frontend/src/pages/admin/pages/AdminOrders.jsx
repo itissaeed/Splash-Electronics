@@ -1,11 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import api from "../../../utils/api";
+import { buildTrackingUrl } from "../../../utils/shipmentTracking";
 
-const money = (n) => `৳${Number(n || 0).toLocaleString("en-BD")}`;
+const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 
 const tokenHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
+
+const COURIER_OPTIONS = ["Pathao", "RedX", "Sundarban", "eCourier", "Steadfast"];
+const STATUS_FLOW = {
+  pending: ["pending", "confirmed", "processing", "shipped", "cancelled"],
+  confirmed: ["confirmed", "processing", "shipped", "cancelled"],
+  processing: ["processing", "shipped", "cancelled"],
+  shipped: ["shipped", "delivered", "returned"],
+  delivered: ["delivered", "returned"],
+  cancelled: ["cancelled"],
+  returned: ["returned"],
+};
 
 const statusPill = (s) => {
   const base = "px-2 py-1 rounded-full text-xs font-semibold";
@@ -31,6 +43,8 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null); // order details modal
   const [updating, setUpdating] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -76,23 +90,84 @@ export default function AdminOrders() {
     }
   };
 
-  const updateStatus = async ({ orderNo, status, courier, trackingId, notes }) => {
+  const updateStatus = async ({
+    orderNo,
+    status,
+    courier,
+    trackingId,
+    trackingUrl,
+    bookingRef,
+    pickupDate,
+    notes,
+  }) => {
+    const normalizedCourier = String(courier || "").trim();
+    const normalizedTrackingId = String(trackingId || "").trim();
+    if (status === "shipped" && (!normalizedCourier || !normalizedTrackingId)) {
+      alert("To mark as shipped, please provide both courier name and tracking ID.");
+      return;
+    }
+
     try {
       setUpdating(true);
       await api.put(
         `/admin/orders/${orderNo}/status`,
-        { status, courier, trackingId, notes },
+        {
+          status,
+          courier: normalizedCourier,
+          trackingId: normalizedTrackingId,
+          trackingUrl: String(trackingUrl || "").trim(),
+          bookingRef: String(bookingRef || "").trim(),
+          courierCharge: undefined,
+          pickupDate: pickupDate || undefined,
+          notes,
+        },
         { headers: tokenHeader() }
       );
       await fetchOrders();
-      if (selected?.orderNo === orderNo) {
-        await openOrder(orderNo);
-      }
+      setSelected(null);
     } catch (e) {
       console.error(e);
       alert(e?.response?.data?.message || "Failed to update order");
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const dispatchShipment = async (orderNo, courierProvider) => {
+    try {
+      setDispatching(true);
+      await api.post(
+        `/admin/orders/${orderNo}/dispatch`,
+        { courierProvider },
+        { headers: tokenHeader() }
+      );
+      await fetchOrders();
+      await openOrder(orderNo);
+      alert(`Shipment booked successfully using ${courierProvider}.`);
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to book demo shipment");
+    } finally {
+      setDispatching(false);
+    }
+  };
+
+  const deleteOrder = async (orderNo) => {
+    const ok = window.confirm(
+      "Delete this order permanently? Only cancelled or returned orders can be deleted."
+    );
+    if (!ok) return;
+    try {
+      setDeleting(true);
+      await api.delete(`/admin/orders/${orderNo}`, { headers: tokenHeader() });
+      setSelected(null);
+      await fetchOrders();
+      alert("Order deleted.");
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to delete order");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -212,9 +287,16 @@ export default function AdminOrders() {
                       </div>
                     </td>
 
-                    <td className="px-4 py-3 font-bold text-gray-900">
-                      {money(o.pricing?.grandTotal)}
-                    </td>
+	                    <td className="px-4 py-3 font-bold text-gray-900">
+	                      {(() => {
+	                        const itemsTotal = Number(o?.pricing?.itemsTotal || 0);
+	                        const shippingFee = Number(o?.pricing?.shippingFee || 0);
+	                        const legacyCourier = Number(o?.shipment?.courierCharge || 0);
+	                        const effectiveShipping = shippingFee > 0 ? shippingFee : legacyCourier;
+	                        const discountTotal = Number(o?.pricing?.discountTotal || 0);
+	                        return money(itemsTotal + effectiveShipping - discountTotal);
+	                      })()}
+	                    </td>
 
                     <td className="px-4 py-3">
                       <span className={statusPill(o.status)}>{o.status}</span>
@@ -270,7 +352,7 @@ export default function AdminOrders() {
       {/* Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-3xl bg-white rounded-2xl border shadow-xl overflow-hidden">
+          <div className="w-full max-w-3xl bg-white rounded-2xl border shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b flex items-center justify-between">
               <div>
                 <div className="font-extrabold text-gray-900">
@@ -325,22 +407,31 @@ export default function AdminOrders() {
                 </div>
 
                 <div className="mt-4 bg-white border rounded-xl p-3 text-sm">
+                  {(() => {
+                    const itemsTotal = Number(selected?.pricing?.itemsTotal || 0);
+                    const shippingFeeRaw = Number(selected?.pricing?.shippingFee || 0);
+                    const legacyCourier = Number(selected?.shipment?.courierCharge || 0);
+                    const shippingFee = shippingFeeRaw > 0 ? shippingFeeRaw : legacyCourier;
+                    const discountTotal = Number(selected?.pricing?.discountTotal || 0);
+                    const grandTotal = itemsTotal + shippingFee - discountTotal;
+                    return (
+                      <>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Items Total</span>
                     <span className="font-bold">
-                      {money(selected.pricing?.itemsTotal)}
+                      {money(itemsTotal)}
                     </span>
                   </div>
                   <div className="flex justify-between mt-1">
                     <span className="text-gray-600">Shipping</span>
                     <span className="font-bold">
-                      {money(selected.pricing?.shippingFee)}
+                      {money(shippingFee)}
                     </span>
                   </div>
                   <div className="flex justify-between mt-1">
                     <span className="text-gray-600">Discount</span>
                     <span className="font-bold">
-                      -{money(selected.pricing?.discountTotal)}
+                      -{money(discountTotal)}
                     </span>
                   </div>
                   <div className="flex justify-between mt-2 pt-2 border-t">
@@ -348,9 +439,12 @@ export default function AdminOrders() {
                       Grand Total
                     </span>
                     <span className="text-gray-900 font-extrabold">
-                      {money(selected.pricing?.grandTotal)}
+                      {money(grandTotal)}
                     </span>
                   </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -358,7 +452,13 @@ export default function AdminOrders() {
               <OrderUpdatePanel
                 order={selected}
                 updating={updating}
+                dispatching={dispatching}
+                deleting={deleting}
                 onUpdate={(payload) => updateStatus(payload)}
+                onDispatch={(orderNo, courierProvider) =>
+                  dispatchShipment(orderNo, courierProvider)
+                }
+                onDelete={(orderNo) => deleteOrder(orderNo)}
               />
             </div>
           </div>
@@ -368,16 +468,54 @@ export default function AdminOrders() {
   );
 }
 
-function OrderUpdatePanel({ order, updating, onUpdate }) {
+function OrderUpdatePanel({
+  order,
+  updating,
+  dispatching,
+  deleting,
+  onUpdate,
+  onDispatch,
+  onDelete,
+}) {
   const [status, setStatus] = useState(order.status || "pending");
-  const [courier, setCourier] = useState(order.shipment?.courier || "");
+  const initialCourier = String(order.shipment?.courier || "").trim();
+  const [courierOption, setCourierOption] = useState(
+    COURIER_OPTIONS.includes(initialCourier) ? initialCourier : "CUSTOM"
+  );
+  const [customCourier, setCustomCourier] = useState(
+    COURIER_OPTIONS.includes(initialCourier) ? "" : initialCourier
+  );
   const [trackingId, setTrackingId] = useState(order.shipment?.trackingId || "");
+  const [trackingUrl, setTrackingUrl] = useState(order.shipment?.trackingUrl || "");
+  const [bookingRef, setBookingRef] = useState(order.shipment?.bookingRef || "");
+  const [pickupDate, setPickupDate] = useState(
+    order.shipment?.pickupDate
+      ? new Date(order.shipment.pickupDate).toISOString().slice(0, 10)
+      : ""
+  );
   const [notes, setNotes] = useState(order.notes || "");
+  const [dispatchProvider, setDispatchProvider] = useState("demo");
+
+  const effectiveCourier =
+    courierOption === "CUSTOM" ? customCourier.trim() : courierOption;
+  const previewTrackingUrl =
+    String(trackingUrl || "").trim() || buildTrackingUrl(effectiveCourier, trackingId);
+  const currentStatus = String(order.status || "pending").toLowerCase();
+  const statusOptions = STATUS_FLOW[currentStatus] || [currentStatus];
 
   useEffect(() => {
     setStatus(order.status || "pending");
-    setCourier(order.shipment?.courier || "");
+    const nextCourier = String(order.shipment?.courier || "").trim();
+    setCourierOption(COURIER_OPTIONS.includes(nextCourier) ? nextCourier : "CUSTOM");
+    setCustomCourier(COURIER_OPTIONS.includes(nextCourier) ? "" : nextCourier);
     setTrackingId(order.shipment?.trackingId || "");
+    setTrackingUrl(order.shipment?.trackingUrl || "");
+    setBookingRef(order.shipment?.bookingRef || "");
+    setPickupDate(
+      order.shipment?.pickupDate
+        ? new Date(order.shipment.pickupDate).toISOString().slice(0, 10)
+        : ""
+    );
     setNotes(order.notes || "");
   }, [order]);
 
@@ -393,24 +531,44 @@ function OrderUpdatePanel({ order, updating, onUpdate }) {
             onChange={(e) => setStatus(e.target.value)}
             className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-white"
           >
-            <option value="pending">pending</option>
-            <option value="confirmed">confirmed</option>
-            <option value="processing">processing</option>
-            <option value="shipped">shipped</option>
-            <option value="delivered">delivered</option>
-            <option value="cancelled">cancelled</option>
-            <option value="returned">returned</option>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
+          <p className="mt-1 text-xs text-gray-500">
+            Allowed transitions are limited by current status.
+          </p>
         </div>
 
         <div>
           <label className="text-sm font-semibold text-gray-700">Courier</label>
-          <input
-            value={courier}
-            onChange={(e) => setCourier(e.target.value)}
-            placeholder="Pathao / RedX / Sundarban"
-            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
-          />
+          <select
+            value={courierOption}
+            onChange={(e) => setCourierOption(e.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-white"
+          >
+            {COURIER_OPTIONS.map((courier) => (
+              <option key={courier} value={courier}>
+                {courier}
+              </option>
+            ))}
+            <option value="CUSTOM">Other courier</option>
+          </select>
+          {courierOption === "CUSTOM" ? (
+            <input
+              value={customCourier}
+              onChange={(e) => setCustomCourier(e.target.value)}
+              placeholder="Type courier name"
+              className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+            />
+          ) : null}
+          {status === "shipped" ? (
+            <p className="mt-1 text-xs text-amber-700">
+              Required for shipped status.
+            </p>
+          ) : null}
         </div>
 
         <div>
@@ -423,6 +581,65 @@ function OrderUpdatePanel({ order, updating, onUpdate }) {
             placeholder="Tracking number"
             className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
           />
+          {previewTrackingUrl ? (
+            <a
+              href={previewTrackingUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-block text-xs font-semibold text-indigo-600 hover:underline"
+            >
+              Open tracking link
+            </a>
+          ) : null}
+          {status === "shipped" ? (
+            <p className="mt-1 text-xs text-amber-700">
+              Tracking ID is required before saving shipped status.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="border-t pt-3">
+          <div className="text-xs uppercase tracking-[0.2em] text-gray-500">
+            Dispatch details
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Default courier fee: Dhaka 60 BDT, outside Dhaka 100 BDT.
+          </p>
+          <div className="mt-2 grid grid-cols-1 gap-3">
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Booking Ref / Consignment</label>
+              <input
+                value={bookingRef}
+                onChange={(e) => setBookingRef(e.target.value)}
+                placeholder="Courier booking reference"
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Pickup Date</label>
+              <input
+                type="date"
+                value={pickupDate}
+                onChange={(e) => setPickupDate(e.target.value)}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Courier Charge (BDT)</label>
+              <div className="mt-1 w-full rounded-xl border bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                {money(order?.pricing?.shippingFee || 0)} (same as shipping fee)
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Tracking URL</label>
+              <input
+                value={trackingUrl}
+                onChange={(e) => setTrackingUrl(e.target.value)}
+                placeholder="https://..."
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
         </div>
 
         <div>
@@ -441,8 +658,11 @@ function OrderUpdatePanel({ order, updating, onUpdate }) {
               onUpdate({
                 orderNo: order.orderNo,
                 status,
-                courier,
+                courier: effectiveCourier,
                 trackingId,
+                trackingUrl,
+                bookingRef,
+                pickupDate,
                 notes,
               })
           }
@@ -452,6 +672,46 @@ function OrderUpdatePanel({ order, updating, onUpdate }) {
         >
           {updating ? "Updating..." : "Save Changes"}
         </button>
+        <button
+          type="button"
+          disabled={dispatching}
+          onClick={() => onDispatch(order.orderNo, dispatchProvider)}
+          className={`w-full rounded-xl py-3 text-sm font-semibold text-white ${
+            dispatching ? "bg-cyan-300" : "bg-cyan-600 hover:bg-cyan-500"
+          }`}
+        >
+          {dispatching ? "Booking shipment..." : "Book Shipment"}
+        </button>
+        <button
+          type="button"
+          disabled={deleting || !["cancelled", "returned"].includes(String(order?.status || ""))}
+          onClick={() => onDelete(order.orderNo)}
+          className={`w-full rounded-xl py-3 text-sm font-semibold text-white ${
+            deleting
+              ? "bg-red-300"
+              : ["cancelled", "returned"].includes(String(order?.status || ""))
+              ? "bg-red-600 hover:bg-red-500"
+              : "bg-gray-300 cursor-not-allowed"
+          }`}
+        >
+          {deleting ? "Deleting order..." : "Delete Order"}
+        </button>
+        {!["cancelled", "returned"].includes(String(order?.status || "")) ? (
+          <p className="text-xs text-gray-500">
+            Only cancelled or returned orders can be deleted.
+          </p>
+        ) : null}
+        <div>
+          <label className="text-xs font-semibold text-gray-700">Dispatch provider</label>
+          <select
+            value={dispatchProvider}
+            onChange={(e) => setDispatchProvider(e.target.value)}
+            className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-white"
+          >
+            <option value="demo">Demo Courier</option>
+            <option value="pathao_sandbox">Pathao Sandbox</option>
+          </select>
+        </div>
 
         <div className="text-xs text-gray-500">
           Payment:{" "}

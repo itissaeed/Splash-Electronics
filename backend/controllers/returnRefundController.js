@@ -88,6 +88,18 @@ exports.adminUpdateReturnStatus = async (req, res) => {
       if (status === "refunded") rr.refund.refundedAt = new Date();
     }
 
+    if (status === "refunded" && rr.order) {
+      const refundedAmount = Number(rr?.refund?.amount || 0);
+      const orderGrandTotal = Number(rr?.order?.pricing?.grandTotal || 0);
+      rr.order.payment = rr.order.payment || {};
+      if (refundedAmount > 0 && refundedAmount < orderGrandTotal) {
+        rr.order.payment.status = "partial_refund";
+      } else {
+        rr.order.payment.status = "refunded";
+      }
+      await rr.order.save();
+    }
+
     const updated = await rr.save();
     res.json(updated);
   } catch (e) {

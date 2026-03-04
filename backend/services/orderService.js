@@ -1,14 +1,130 @@
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
-const InventoryLedger = require("../models/InventoryLedger");
 const Coupon = require("../models/Coupon");
 const User = require("../models/userModel");
+const Settings = require("../models/Settings");
 const generateOrderNo = require("../utils/orderNo");
+const {
+  PREPAID_METHODS,
+  getReservedQtyMap,
+  getAvailableStock,
+  getReservationUntil,
+} = require("./stockReservationService");
 
 const toNum = (v, def) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
+};
+
+const getShippingConfig = async ({ session }) => {
+  const defaultShipping = {
+    insideDhaka: 60,
+    outsideDhaka: 100,
+    freeShippingThreshold: 0,
+    expressExtraInsideDhaka: 80,
+    expressExtraOutsideDhaka: 120,
+    regionalOverrides: [],
+  };
+
+  const settingsQuery = Settings.findOne({ key: "default" }).lean();
+  if (session) {
+    settingsQuery.session(session);
+  }
+  const settingsDoc = await settingsQuery;
+
+  const insideDhaka = Math.max(
+    0,
+    toNum(settingsDoc?.shipping?.insideDhaka, defaultShipping.insideDhaka)
+  );
+  const outsideDhaka = Math.max(
+    0,
+    toNum(settingsDoc?.shipping?.outsideDhaka, defaultShipping.outsideDhaka)
+  );
+  const freeShippingThreshold = Math.max(
+    0,
+    toNum(settingsDoc?.shipping?.freeShippingThreshold, defaultShipping.freeShippingThreshold)
+  );
+  const expressExtraInsideDhaka = Math.max(
+    0,
+    toNum(
+      settingsDoc?.shipping?.expressExtraInsideDhaka,
+      defaultShipping.expressExtraInsideDhaka
+    )
+  );
+  const expressExtraOutsideDhaka = Math.max(
+    0,
+    toNum(
+      settingsDoc?.shipping?.expressExtraOutsideDhaka,
+      defaultShipping.expressExtraOutsideDhaka
+    )
+  );
+  const regionalOverrides = Array.isArray(settingsDoc?.shipping?.regionalOverrides)
+    ? settingsDoc.shipping.regionalOverrides
+    : defaultShipping.regionalOverrides;
+
+  return {
+    insideDhaka,
+    outsideDhaka,
+    freeShippingThreshold,
+    expressExtraInsideDhaka,
+    expressExtraOutsideDhaka,
+    regionalOverrides,
+  };
+};
+
+const getShippingQuote = async ({
+  division,
+  district,
+  itemsTotal = 0,
+  deliveryOption = "STANDARD",
+  session,
+}) => {
+  const config = await getShippingConfig({ session });
+  const normalizedDivision = String(division || "").trim().toLowerCase();
+  const normalizedDistrict = String(district || "").trim().toLowerCase();
+  const isDhaka = normalizedDivision === "dhaka";
+  const normalizedOption = String(deliveryOption || "STANDARD").toUpperCase();
+
+  const override = (config.regionalOverrides || []).find((row) => {
+    const rowDivision = String(row?.division || "").trim().toLowerCase();
+    const rowDistrict = String(row?.district || "").trim().toLowerCase();
+    if (!rowDivision) return false;
+    if (rowDistrict) {
+      return rowDivision === normalizedDivision && rowDistrict === normalizedDistrict;
+    }
+    return rowDivision === normalizedDivision;
+  });
+  const baseShippingFee = Number.isFinite(Number(override?.fee))
+    ? Math.max(0, Number(override.fee))
+    : isDhaka
+    ? config.insideDhaka
+    : config.outsideDhaka;
+  const expressExtra = normalizedOption === "EXPRESS"
+    ? (isDhaka ? config.expressExtraInsideDhaka : config.expressExtraOutsideDhaka)
+    : 0;
+  const shippingFee = baseShippingFee + expressExtra;
+
+  let estimatedDaysMin = 2;
+  let estimatedDaysMax = 4;
+  if (!isDhaka) {
+    estimatedDaysMin = 3;
+    estimatedDaysMax = 6;
+  }
+  if (normalizedOption === "EXPRESS") {
+    estimatedDaysMin = Math.max(1, estimatedDaysMin - 1);
+    estimatedDaysMax = Math.max(2, estimatedDaysMax - 2);
+  }
+
+  return {
+    serviceable: true,
+    deliveryOption: normalizedOption === "EXPRESS" ? "EXPRESS" : "STANDARD",
+    shippingFee,
+    estimatedDaysMin,
+    estimatedDaysMax,
+    appliedFreeShipping: false,
+    freeShippingThreshold: config.freeShippingThreshold,
+  };
 };
 
 const createOrderFromCartForUser = async ({
@@ -17,6 +133,7 @@ const createOrderFromCartForUser = async ({
   paymentMethod,
   couponCode,
   paymentProvider,
+  deliveryOption,
   session,
 }) => {
   const user = await User.findById(userId).session(session);
@@ -36,6 +153,11 @@ const createOrderFromCartForUser = async ({
   // Build order items + stock validation
   const orderItems = [];
   let itemsTotal = 0;
+  const requestedPairs = cart.items.map((ci) => ({
+    productId: ci.product,
+    variantId: ci.variantId,
+  }));
+  const reservedMap = await getReservedQtyMap({ pairs: requestedPairs, now: new Date() });
 
   for (const ci of cart.items) {
     const product = await Product.findById(ci.product).session(session);
@@ -44,7 +166,14 @@ const createOrderFromCartForUser = async ({
     const variant = product.variants.id(ci.variantId);
     if (!variant) throw new Error("Variant not found during checkout");
 
-    if (variant.countInStock < ci.qty) {
+    const key = `${String(product._id)}|${String(variant._id)}`;
+    const reservedQty = Number(reservedMap.get(key) || 0);
+    const availableStock = getAvailableStock({
+      physicalStock: variant.countInStock,
+      reservedQty,
+    });
+
+    if (availableStock < ci.qty) {
       const err = new Error(`Not enough stock for ${product.name} (${variant.sku})`);
       err.statusCode = 400;
       throw err;
@@ -115,7 +244,14 @@ const createOrderFromCartForUser = async ({
     couponApplied = { code: coupon.code, discountAmount: discountTotal };
   }
 
-  const shippingFee = 0; // you can calculate based on division/district later
+  const shippingQuote = await getShippingQuote({
+    division: shippingAddress?.division,
+    district: shippingAddress?.district,
+    itemsTotal,
+    deliveryOption,
+    session,
+  });
+  const shippingFee = shippingQuote.shippingFee;
   const grandTotal = itemsTotal + shippingFee - discountTotal;
 
   const orderNo = generateOrderNo();
@@ -138,6 +274,22 @@ const createOrderFromCartForUser = async ({
     },
     coupon: couponApplied || undefined,
     status: "pending",
+    inventory: {
+      reservationActive: true,
+      reservedUntil: PREPAID_METHODS.includes(String(paymentMethod || "").toUpperCase())
+        ? getReservationUntil()
+        : undefined,
+    },
+    shipment: {
+      deliveryOption: shippingQuote.deliveryOption,
+      estimatedDaysMin: shippingQuote.estimatedDaysMin,
+      estimatedDaysMax: shippingQuote.estimatedDaysMax,
+      quote: {
+        serviceable: shippingQuote.serviceable,
+        appliedFreeShipping: shippingQuote.appliedFreeShipping,
+        freeShippingThreshold: shippingQuote.freeShippingThreshold,
+      },
+    },
   }], { session });
 
   const createdOrder = order[0];
@@ -200,25 +352,6 @@ const createOrderFromCartForUser = async ({
 
   await user.save({ session });
 
-  // Stock OUT + Ledger entries
-  for (const oi of orderItems) {
-    const product = await Product.findById(oi.product).session(session);
-    const variant = product.variants.id(oi.variantId);
-
-    variant.countInStock -= oi.qty;
-    await product.save({ session });
-
-    await InventoryLedger.create([{
-      product: oi.product,
-      variantId: oi.variantId,
-      type: "OUT",
-      reason: "SALE",
-      qty: oi.qty,
-      order: createdOrder._id,
-      note: `Order ${createdOrder.orderNo}`,
-    }], { session });
-  }
-
   // Clear cart
   cart.items = [];
   await cart.save({ session });
@@ -228,4 +361,5 @@ const createOrderFromCartForUser = async ({
 
 module.exports = {
   createOrderFromCartForUser,
+  getShippingQuote,
 };

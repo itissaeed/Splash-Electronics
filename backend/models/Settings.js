@@ -30,8 +30,17 @@ const orderSettingsSchema = new mongoose.Schema(
 const shippingSettingsSchema = new mongoose.Schema(
   {
     insideDhaka: { type: Number, default: 60 },
-    outsideDhaka: { type: Number, default: 120 },
+    outsideDhaka: { type: Number, default: 100 },
     freeShippingThreshold: { type: Number, default: 5000 },
+    expressExtraInsideDhaka: { type: Number, default: 80 },
+    expressExtraOutsideDhaka: { type: Number, default: 120 },
+    regionalOverrides: [
+      {
+        division: String,
+        district: String,
+        fee: Number,
+      },
+    ],
   },
   { _id: false }
 );

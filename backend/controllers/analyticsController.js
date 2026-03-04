@@ -17,6 +17,7 @@ const toNum = (v, def) => {
 // GET /api/admin/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
 exports.adminAnalyticsOverview = async (req, res) => {
   try {
+    const revenueStatuses = ["confirmed", "processing", "shipped", "delivered"];
     const now = new Date();
 
     // default: last 30 days
@@ -41,7 +42,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
 
     const matchStage = {
       createdAt: { $gte: from, $lte: to },
-      status: { $nin: ["cancelled", "returned"] },
+      status: { $in: revenueStatuses },
     };
 
     const [agg] = await Order.aggregate([
@@ -158,6 +159,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
 // GET /api/admin/analytics/forecasting?daysBack=90&horizonDays=30&top=30
 exports.adminDemandForecast = async (req, res) => {
   try {
+    const revenueStatuses = ["confirmed", "processing", "shipped", "delivered"];
     const now = new Date();
 
     const daysBack = Math.max(7, toNum(req.query.daysBack, 90)); // min 7 days
@@ -168,7 +170,7 @@ exports.adminDemandForecast = async (req, res) => {
 
     const matchStage = {
       createdAt: { $gte: from, $lte: now },
-      status: { $nin: ["cancelled", "returned"] },
+      status: { $in: revenueStatuses },
     };
 
     // Aggregate per product from order items
