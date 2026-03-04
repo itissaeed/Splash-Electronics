@@ -15,8 +15,10 @@ import AdminLayout from "./pages/admin/pages/AdminLayout";
 
 import "./index.css";
 import { UserProvider } from "./pages/context/UserContext";
+import { ThemeProvider } from "./pages/context/ThemeContext";
 import AdminRoute from "./pages/admin/AdminRoutes";
 import ProtectedRoute from "./pages/ProtectedRoute";
+import ThemeToggle from "./ThemeToggle";
 
 import Cart from "./pages/cart/Cart";
 import Checkout from "./pages/cart/Checkout";
@@ -28,9 +30,10 @@ import MyOrders from "./pages/orders/MyOrders";
 
 function App() {
   return (
-    <div className="App">
-      <UserProvider>
-        <Routes>
+    <ThemeProvider>
+      <div className="App min-h-screen bg-gray-50 dark:bg-slate-950 transition-colors">
+        <UserProvider>
+          <Routes>
           {/* Public */}
           <Route path="/" element={<Home />} />
           <Route path="/products" element={<ProductList />} />
@@ -70,9 +73,11 @@ function App() {
             }
           />
 
-        </Routes>
-      </UserProvider>
-    </div>
+          </Routes>
+        </UserProvider>
+        <ThemeToggle />
+      </div>
+    </ThemeProvider>
   );
 }
 
