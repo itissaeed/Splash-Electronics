@@ -34,12 +34,19 @@ export const UserProvider = ({ children }) => {
     setToken(null);
   };
 
+  const updateUser = (nextUser) => {
+    if (!nextUser) return;
+    localStorage.setItem("userInfo", JSON.stringify(nextUser));
+    setUser(nextUser);
+  };
+
   return (
     <UserContext.Provider
       value={{
         user,
         token,
         login,
+        updateUser,
         logout,
         authLoading, // 🔥 important
         isAuthenticated: !!user,

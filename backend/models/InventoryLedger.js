@@ -6,7 +6,11 @@ const inventoryLedgerSchema = new mongoose.Schema({
   variantId: { type: mongoose.Schema.Types.ObjectId, required: true },
 
   type: { type: String, enum: ["IN", "OUT", "ADJUST"], required: true },
-  reason: { type: String, enum: ["PURCHASE", "SALE", "RETURN", "DAMAGE", "MANUAL", "CANCELLED_ORDER"], required: true },
+  reason: {
+    type: String,
+    enum: ["PURCHASE", "SALE", "SALE_CONFIRMED", "RETURN", "DAMAGE", "MANUAL", "CANCELLED_ORDER"],
+    required: true,
+  },
 
   qty: { type: Number, required: true }, // positive number
   unitCost: { type: Number }, // for purchases

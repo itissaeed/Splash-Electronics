@@ -39,7 +39,11 @@ const protect = asyncHandler(async (req, res, next) => {
 
 const admin = (req, res, next) => {
   const isAdmin = req.user?.isAdmin === true;
-  const hasAdminRole = Array.isArray(req.user?.roles) && req.user.roles.includes('admin');
+  const normalizedRoles = Array.isArray(req.user?.roles)
+    ? req.user.roles.map((r) => String(r || "").toLowerCase().trim())
+    : [];
+  const roleField = String(req.user?.role || "").toLowerCase().trim();
+  const hasAdminRole = normalizedRoles.includes("admin") || roleField === "admin";
 
   if (req.user && (isAdmin || hasAdminRole)) {
     return next();

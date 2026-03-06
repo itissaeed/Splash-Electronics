@@ -115,3 +115,81 @@ exports.login = async (req, res) => {
     return res.status(500).json({ status: "error", message: "An error occurred during login" });
   }
 };
+
+exports.getMe = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ status: "fail", message: "Not authorized" });
+    }
+    return res.status(200).json({ status: "success", user: req.user });
+  } catch (error) {
+    console.error("getMe Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to load profile" });
+  }
+};
+
+exports.updateMe = async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ status: "fail", message: "Not authorized" });
+    }
+
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ status: "fail", message: "User not found" });
+    }
+
+    const nextName = req.body?.name !== undefined ? String(req.body.name || "").trim() : currentUser.name;
+    const nextEmailRaw = req.body?.email !== undefined ? String(req.body.email || "").trim().toLowerCase() : currentUser.email;
+    const nextNumberRaw = req.body?.number !== undefined ? String(req.body.number || "").trim() : currentUser.number;
+
+    if (!nextName || !nextEmailRaw || !nextNumberRaw) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Name, email and phone are required.",
+      });
+    }
+
+    const normalizedNumber = normalizeBangladeshNumber(nextNumberRaw);
+    if (!normalizedNumber) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Invalid Bangladeshi phone number format.",
+      });
+    }
+
+    const duplicateUser = await User.findOne({
+      _id: { $ne: currentUser._id },
+      $or: [{ email: nextEmailRaw }, { number: normalizedNumber }],
+    });
+    if (duplicateUser) {
+      return res.status(409).json({
+        status: "fail",
+        message: "Email or phone already in use.",
+      });
+    }
+
+    currentUser.name = nextName;
+    currentUser.email = nextEmailRaw;
+    currentUser.number = normalizedNumber;
+    await currentUser.save({ validateBeforeSave: false });
+
+    const userObj = currentUser.toObject();
+    delete userObj.password;
+    delete userObj.resetPasswordToken;
+    delete userObj.resetPasswordExpires;
+    delete userObj.__v;
+
+    return res.status(200).json({
+      status: "success",
+      message: "Profile updated successfully.",
+      user: userObj,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ status: "fail", message: "Email or phone already in use." });
+    }
+    console.error("updateMe Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to update profile." });
+  }
+};

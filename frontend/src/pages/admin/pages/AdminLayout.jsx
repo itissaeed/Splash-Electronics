@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   Boxes,
   Users,
+  User,
   TicketPercent,
   BarChart3,
   LineChart,
@@ -38,6 +39,7 @@ import AdminForecasting from "./AdminForecasting";
 import AdminSettings from "./AdminSettings";
 import AdminCategories from "./AdminCategories";
 import AdminReturns from "./AdminReturns";
+import AdminProfile from "./AdminProfile";
 
 import { UserContext } from "../../context/UserContext";
 import api from "../../../utils/api";
@@ -53,6 +55,7 @@ const navItems = [
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/admin/forecasting", label: "Forecasting", icon: LineChart },
   { to: "/admin/returns", label: "Returns", icon: RotateCcw },
+  { to: "/admin/profile", label: "Profile", icon: User },
   { to: "/admin/settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -309,6 +312,18 @@ export default function AdminLayout() {
                         type="button"
                         onClick={() => {
                           setUserMenuOpen(false);
+                          navigate("/admin/profile");
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200"
+                      >
+                        <User size={16} />
+                        <span>Profile</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
                           navigate("/");
                         }}
                         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200"
@@ -350,6 +365,7 @@ export default function AdminLayout() {
               <Route path="/analytics" element={<AdminAnalytics />} />
               <Route path="/forecasting" element={<AdminForecasting />} />
               <Route path="/returns" element={<AdminReturns />} />
+              <Route path="/profile" element={<AdminProfile />} />
               <Route path="/settings" element={<AdminSettings />} />
             </Routes>
           </main>
