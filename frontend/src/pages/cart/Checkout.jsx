@@ -131,7 +131,7 @@ export default function Checkout() {
     };
 
     loadQuote();
-  }, [shippingAddress.division, cartTotals.itemsTotal, deliveryOption]);
+  }, [shippingAddress.division, shippingAddress.district, cartTotals.itemsTotal, deliveryOption]);
 
   const canSubmit = useMemo(() => {
     const hasValidPhone = BD_PHONE_REGEX.test(shippingAddress.phone.trim());

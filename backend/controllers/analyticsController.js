@@ -42,7 +42,6 @@ exports.adminAnalyticsOverview = async (req, res) => {
 
     const matchStage = {
       createdAt: { $gte: from, $lte: to },
-      status: { $in: revenueStatuses },
     };
 
     const [agg] = await Order.aggregate([
@@ -53,9 +52,22 @@ exports.adminAnalyticsOverview = async (req, res) => {
             {
               $group: {
                 _id: null,
-                totalRevenue: { $sum: "$pricing.grandTotal" },
                 totalOrders: { $sum: 1 },
                 customersSet: { $addToSet: "$user" },
+                revenueOrderCount: {
+                  $sum: {
+                    $cond: [{ $in: ["$status", revenueStatuses] }, 1, 0],
+                  },
+                },
+                totalRevenue: {
+                  $sum: {
+                    $cond: [
+                      { $in: ["$status", revenueStatuses] },
+                      "$pricing.grandTotal",
+                      0,
+                    ],
+                  },
+                },
               },
             },
             {
@@ -66,8 +78,8 @@ exports.adminAnalyticsOverview = async (req, res) => {
                 uniqueCustomers: { $size: "$customersSet" },
                 averageOrderValue: {
                   $cond: [
-                    { $gt: ["$totalOrders", 0] },
-                    { $divide: ["$totalRevenue", "$totalOrders"] },
+                    { $gt: ["$revenueOrderCount", 0] },
+                    { $divide: ["$totalRevenue", "$revenueOrderCount"] },
                     0,
                   ],
                 },
@@ -82,16 +94,41 @@ exports.adminAnalyticsOverview = async (req, res) => {
                   $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
                 },
                 orders: { $sum: 1 },
-                revenue: { $sum: "$pricing.grandTotal" },
+                revenue: {
+                  $sum: {
+                    $cond: [
+                      { $in: ["$status", revenueStatuses] },
+                      "$pricing.grandTotal",
+                      0,
+                    ],
+                  },
+                },
               },
             },
             { $sort: { _id: 1 } },
           ],
 
           byDivision: [
+            { $match: { status: { $in: revenueStatuses } } },
+            {
+              $addFields: {
+                divisionName: {
+                  $let: {
+                    vars: {
+                      d: {
+                        $trim: {
+                          input: { $ifNull: ["$shippingAddress.division", ""] },
+                        },
+                      },
+                    },
+                    in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
+                  },
+                },
+              },
+            },
             {
               $group: {
-                _id: "$shippingAddress.division",
+                _id: "$divisionName",
                 orders: { $sum: 1 },
                 revenue: { $sum: "$pricing.grandTotal" },
               },
@@ -99,7 +136,43 @@ exports.adminAnalyticsOverview = async (req, res) => {
             { $sort: { revenue: -1 } },
           ],
 
+          byDivisionProductOrders: [
+            {
+              $match: {
+                status: {
+                  $in: ["pending", "confirmed", "processing", "shipped", "delivered"],
+                },
+              },
+            },
+            {
+              $addFields: {
+                divisionName: {
+                  $let: {
+                    vars: {
+                      d: {
+                        $trim: {
+                          input: { $ifNull: ["$shippingAddress.division", ""] },
+                        },
+                      },
+                    },
+                    in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
+                  },
+                },
+              },
+            },
+            { $unwind: "$items" },
+            {
+              $group: {
+                _id: "$divisionName",
+                qty: { $sum: "$items.qty" },
+                orderCount: { $sum: 1 },
+              },
+            },
+            { $sort: { qty: -1 } },
+          ],
+
           topProducts: [
+            { $match: { status: { $in: revenueStatuses } } },
             { $unwind: "$items" },
             {
               $group: {
@@ -115,6 +188,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
           ],
 
           paymentMethods: [
+            { $match: { status: { $in: revenueStatuses } } },
             {
               $group: {
                 _id: "$payment.method",
@@ -146,6 +220,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
       overview,
       daily: agg?.daily || [],
       byDivision: agg?.byDivision || [],
+      byDivisionProductOrders: agg?.byDivisionProductOrders || [],
       topProducts: agg?.topProducts || [],
       paymentMethods: agg?.paymentMethods || [],
     });
@@ -217,6 +292,8 @@ exports.adminDemandForecast = async (req, res) => {
 
     const forecasts = [];
     const categoryMap = {};
+    let stockoutRiskCount = 0;
+    let projectedStockoutCount = 0;
 
     for (const row of perProduct) {
       const prodId = row._id.product;
@@ -234,6 +311,27 @@ exports.adminDemandForecast = async (req, res) => {
       const brandName = prodDoc?.brand?.name || null;
       const categoryId = prodDoc?.category?._id || null;
       const categoryName = prodDoc?.category?.name || "Unknown";
+      const currentStock = (prodDoc?.variants || []).reduce(
+        (sum, v) => sum + Number(v?.countInStock || 0),
+        0
+      );
+      const daysOfCover = avgDailyQty > 0 ? currentStock / avgDailyQty : null;
+      const projectedStockAtHorizon = currentStock - forecastQty;
+      const safetyStockDays = 7;
+      const safetyStockUnits = avgDailyQty * safetyStockDays;
+      const targetStockLevel = forecastQty + safetyStockUnits;
+      const suggestedReorderQty = Math.max(0, targetStockLevel - currentStock);
+      const riskLevel =
+        avgDailyQty <= 0
+          ? "stable"
+          : currentStock <= 0
+          ? "stockout"
+          : projectedStockAtHorizon < 0
+          ? "at_risk"
+          : "stable";
+
+      if (riskLevel === "stockout") stockoutRiskCount += 1;
+      if (riskLevel === "stockout" || riskLevel === "at_risk") projectedStockoutCount += 1;
 
       const f = {
         productId: prodId,
@@ -246,6 +344,12 @@ exports.adminDemandForecast = async (req, res) => {
         avgDailyQty,
         forecastQty,
         forecastRevenue,
+        currentStock,
+        daysOfCover,
+        projectedStockAtHorizon,
+        safetyStockUnits,
+        suggestedReorderQty,
+        riskLevel,
       };
 
       forecasts.push(f);
@@ -279,6 +383,12 @@ exports.adminDemandForecast = async (req, res) => {
       ),
       productCount: forecasts.length,
       categoryCount: categoryForecasts.length,
+      stockoutRiskCount,
+      projectedStockoutCount,
+      totalSuggestedReorderQty: forecasts.reduce(
+        (sum, f) => sum + (f.suggestedReorderQty || 0),
+        0
+      ),
     };
 
     res.json({

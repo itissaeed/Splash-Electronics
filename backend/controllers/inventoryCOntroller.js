@@ -23,6 +23,7 @@ exports.getInventoryOverview = async (req, res) => {
     let totalStockValue = 0;
 
     const lowStock = [];
+    const allStock = [];
 
     for (const p of products) {
       const variants = p.variants || [];
@@ -35,18 +36,20 @@ exports.getInventoryOverview = async (req, res) => {
 
         const price = toNum(v.price ?? p.basePrice ?? 0, 0);
         totalStockValue += price * stock;
+        const row = {
+          productId: p._id,
+          variantId: v._id,
+          name: p.name,
+          sku: v.sku,
+          stock,
+          price,
+          brand: p.brand?.name || null,
+          category: p.category?.name || null,
+        };
+        allStock.push(row);
 
         if (stock <= threshold) {
-          lowStock.push({
-            productId: p._id,
-            variantId: v._id,
-            name: p.name,
-            sku: v.sku,
-            stock,
-            price,
-            brand: p.brand?.name || null,
-            category: p.category?.name || null,
-          });
+          lowStock.push(row);
         }
       }
     }
@@ -66,6 +69,7 @@ exports.getInventoryOverview = async (req, res) => {
         totalStockValue,
       },
       lowStock,
+      allStock,
       recentMovements,
     });
   } catch (err) {

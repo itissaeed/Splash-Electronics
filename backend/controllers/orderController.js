@@ -293,17 +293,17 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     } = req.body;
 
     const allowed = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "returned"];
-    if (!allowed.includes(status)) return res.status(400).json({ message: "Invalid status" });
+    const nextStatus = String(status || "").toLowerCase().trim();
+    if (!allowed.includes(nextStatus)) return res.status(400).json({ message: "Invalid status" });
 
     const order = await Order.findOne({ orderNo: req.params.orderNo });
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     const current = String(order.status || "").toLowerCase();
-    const nextStatus = String(status || "").toLowerCase();
     const nextList = allowedAdminTransitions[current] || [];
-    if (status !== current && !nextList.includes(status)) {
+    if (nextStatus !== current && !nextList.includes(nextStatus)) {
       return res.status(400).json({
-        message: `Invalid status transition from ${current} to ${status}`,
+        message: `Invalid status transition from ${current} to ${nextStatus}`,
       });
     }
 
@@ -320,7 +320,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     }
 
     // If cancelling a not-yet-delivered order, restock it
-    if (status === "cancelled" && order.status !== "cancelled") {
+    if (nextStatus === "cancelled" && current !== "cancelled") {
       await restockOrderItems(order);
       await ensureRefundRequestForCancelledPaidOrder(
         order,
@@ -328,7 +328,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       );
     }
 
-    order.status = status;
+    order.status = nextStatus;
     order.shipment = order.shipment || {};
 
     const nextCourier = String(courier ?? order.shipment?.courier ?? "").trim();
@@ -336,7 +336,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     const nextTrackingUrl = String(trackingUrl ?? order.shipment?.trackingUrl ?? "").trim();
     const nextBookingRef = String(bookingRef ?? order.shipment?.bookingRef ?? "").trim();
 
-    if (status === "shipped" && (!nextCourier || !nextTrackingId)) {
+    if (nextStatus === "shipped" && (!nextCourier || !nextTrackingId)) {
       return res.status(400).json({
         message: "Courier and tracking ID are required before marking as shipped",
       });
@@ -358,13 +358,13 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       }
     }
 
-    if (status === "shipped" && !order.shipment.shippedAt) {
+    if (nextStatus === "shipped" && !order.shipment.shippedAt) {
       order.shipment.shippedAt = new Date();
     }
-    if (status === "shipped") {
+    if (nextStatus === "shipped") {
       order.shipment.pickupDate = order.shipment.shippedAt || new Date();
     }
-    if (status === "shipped" && !order.shipment.expectedDeliveryDate) {
+    if (nextStatus === "shipped" && !order.shipment.expectedDeliveryDate) {
       const fallbackDays = Number(order.shipment?.estimatedDaysMax || 4);
       order.shipment.expectedDeliveryDate = addDays(
         order.shipment.shippedAt || new Date(),
@@ -372,7 +372,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       );
     }
 
-    if (status === "delivered") {
+    if (nextStatus === "delivered") {
       order.shipment.deliveredAt = new Date();
       if (order.payment?.method === "COD") {
         order.payment.status = "paid";
@@ -380,7 +380,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       }
     }
 
-    if (status === "returned") {
+    if (nextStatus === "returned") {
       const returnReason = "admin_marked_returned_in_orders";
       const rr = await ReturnRefund.findOne({ order: order._id });
 

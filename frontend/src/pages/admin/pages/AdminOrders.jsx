@@ -20,13 +20,14 @@ const STATUS_FLOW = {
 };
 
 const statusPill = (s) => {
+  const normalized = String(s || "").toLowerCase();
   const base = "px-2 py-1 rounded-full text-xs font-semibold";
-  if (s === "pending") return `${base} bg-yellow-100 text-yellow-700`;
-  if (s === "confirmed") return `${base} bg-blue-100 text-blue-700`;
-  if (s === "processing") return `${base} bg-indigo-100 text-indigo-700`;
-  if (s === "shipped") return `${base} bg-purple-100 text-purple-700`;
-  if (s === "delivered") return `${base} bg-green-100 text-green-700`;
-  if (s === "cancelled") return `${base} bg-red-100 text-red-700`;
+  if (normalized === "pending") return `${base} bg-yellow-100 text-yellow-700`;
+  if (normalized === "confirmed") return `${base} bg-blue-100 text-blue-700`;
+  if (normalized === "processing") return `${base} bg-indigo-100 text-indigo-700`;
+  if (normalized === "shipped") return `${base} bg-purple-100 text-purple-700`;
+  if (normalized === "delivered") return `${base} bg-green-100 text-green-700`;
+  if (normalized === "cancelled") return `${base} bg-red-100 text-red-700`;
   return `${base} bg-gray-100 text-gray-700`;
 };
 
@@ -67,7 +68,7 @@ export default function AdminOrders() {
       setPages(data.pages || 1);
     } catch (e) {
       console.error(e);
-      alert("Failed to load orders. Check /api/admin/orders route.");
+      alert(e?.response?.data?.message || "Failed to load orders.");
     } finally {
       setLoading(false);
     }
@@ -100,9 +101,10 @@ export default function AdminOrders() {
     pickupDate,
     notes,
   }) => {
+    const normalizedStatus = String(status || "").toLowerCase().trim();
     const normalizedCourier = String(courier || "").trim();
     const normalizedTrackingId = String(trackingId || "").trim();
-    if (status === "shipped" && (!normalizedCourier || !normalizedTrackingId)) {
+    if (normalizedStatus === "shipped" && (!normalizedCourier || !normalizedTrackingId)) {
       alert("To mark as shipped, please provide both courier name and tracking ID.");
       return;
     }
@@ -112,7 +114,7 @@ export default function AdminOrders() {
       await api.put(
         `/admin/orders/${orderNo}/status`,
         {
-          status,
+          status: normalizedStatus,
           courier: normalizedCourier,
           trackingId: normalizedTrackingId,
           trackingUrl: String(trackingUrl || "").trim(),
@@ -477,7 +479,7 @@ function OrderUpdatePanel({
   onDispatch,
   onDelete,
 }) {
-  const [status, setStatus] = useState(order.status || "pending");
+  const [status, setStatus] = useState(String(order.status || "pending").toLowerCase());
   const initialCourier = String(order.shipment?.courier || "").trim();
   const [courierOption, setCourierOption] = useState(
     COURIER_OPTIONS.includes(initialCourier) ? initialCourier : "CUSTOM"
@@ -504,7 +506,7 @@ function OrderUpdatePanel({
   const statusOptions = STATUS_FLOW[currentStatus] || [currentStatus];
 
   useEffect(() => {
-    setStatus(order.status || "pending");
+    setStatus(String(order.status || "pending").toLowerCase());
     const nextCourier = String(order.shipment?.courier || "").trim();
     setCourierOption(COURIER_OPTIONS.includes(nextCourier) ? nextCourier : "CUSTOM");
     setCustomCourier(COURIER_OPTIONS.includes(nextCourier) ? "" : nextCourier);
