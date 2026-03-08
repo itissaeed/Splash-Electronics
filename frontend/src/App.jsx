@@ -9,6 +9,7 @@ import ResetPassword from "./pages/auth/ResetPassword";
 
 import ProductList from "./pages/ProductList";
 import ProductDetails from "./pages/ProductDetails";
+import SmartAdvisor from "./pages/SmartAdvisor";
 import Profile from "./pages/Profile";
 import AdminLayout from "./pages/admin/pages/AdminLayout";
 
@@ -38,6 +39,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/products" element={<ProductList />} />
           <Route path="/product/:slug" element={<ProductDetails />} />
+          <Route path="/advisor" element={<SmartAdvisor />} />
 
           {/* Auth */}
           <Route path="/login" element={<Login />} />
