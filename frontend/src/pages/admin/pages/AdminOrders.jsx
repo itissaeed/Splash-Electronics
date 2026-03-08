@@ -192,7 +192,7 @@ export default function AdminOrders() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white border rounded-2xl p-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+      <div className="premium-card rounded-2xl p-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
         <div className="flex flex-col sm:flex-row gap-3">
           <select
             value={status}
@@ -232,7 +232,7 @@ export default function AdminOrders() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border rounded-2xl overflow-hidden">
+      <div className="premium-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
@@ -354,7 +354,7 @@ export default function AdminOrders() {
       {/* Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-3xl bg-white rounded-2xl border shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="premium-card w-full max-w-3xl rounded-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b flex items-center justify-between">
               <div>
                 <div className="font-extrabold text-gray-900">
@@ -522,7 +522,7 @@ function OrderUpdatePanel({
   }, [order]);
 
   return (
-    <div className="bg-white border rounded-2xl p-4">
+    <div className="premium-card rounded-2xl p-4">
       <div className="font-extrabold text-gray-900 mb-3">Update Order</div>
 
       <div className="space-y-3">

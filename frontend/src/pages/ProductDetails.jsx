@@ -62,6 +62,53 @@ function VariantLabel({ v }) {
   );
 }
 
+function StarRating({ value = 0, sizeClass = "h-4 w-4", interactive = false, onChange }) {
+  const roundedValue = Math.round(Number(value) || 0);
+
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const active = interactive ? star <= value : star <= roundedValue;
+
+        if (interactive) {
+          return (
+            <button
+              key={star}
+              type="button"
+              onClick={() => onChange?.(star)}
+              className={`transition ${active ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+              aria-label={`Rate ${star} star${star > 1 ? "s" : ""}`}
+            >
+              <svg viewBox="0 0 20 20" fill="currentColor" className={sizeClass} aria-hidden="true">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 0 0 .95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 0 0-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 0 0-1.176 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 0 0-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81H7.03a1 1 0 0 0 .95-.69l1.07-3.292Z" />
+              </svg>
+            </button>
+          );
+        }
+
+        return (
+          <span key={star} className={active ? "text-amber-400" : "text-gray-300"}>
+            <svg viewBox="0 0 20 20" fill="currentColor" className={sizeClass} aria-hidden="true">
+              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 0 0 .95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 0 0-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 0 0-1.176 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 0 0-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81H7.03a1 1 0 0 0 .95-.69l1.07-3.292Z" />
+            </svg>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function formatReviewDate(date) {
+  if (!date) return "";
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("en-BD", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function ProductDetails() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -72,6 +119,12 @@ export default function ProductDetails() {
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [activeImg, setActiveImg] = useState("");
   const [qty, setQty] = useState(1);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewTitle, setReviewTitle] = useState("");
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewSuccess, setReviewSuccess] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -172,6 +225,48 @@ export default function ProductDetails() {
 
   const rating = Number(product?.rating || 0);
   const reviews = Number(product?.numReviews || 0);
+  const currentUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("userInfo") || "null");
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const sortedReviews = useMemo(() => {
+    return [...(product?.reviews || [])].sort(
+      (a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime()
+    );
+  }, [product]);
+
+  const existingUserReview = useMemo(() => {
+    if (!currentUser?._id) return null;
+    return sortedReviews.find((review) => String(review.user) === String(currentUser._id)) || null;
+  }, [currentUser, sortedReviews]);
+
+  const ratingBreakdown = useMemo(() => {
+    const buckets = [5, 4, 3, 2, 1].map((star) => ({
+      star,
+      count: sortedReviews.filter((review) => Number(review.rating) === star).length,
+    }));
+
+    return buckets.map((bucket) => ({
+      ...bucket,
+      percent: reviews ? Math.round((bucket.count / reviews) * 100) : 0,
+    }));
+  }, [reviews, sortedReviews]);
+
+  useEffect(() => {
+    if (!existingUserReview) {
+      setReviewRating(5);
+      setReviewTitle("");
+      setReviewComment("");
+      return;
+    }
+    setReviewRating(Number(existingUserReview.rating) || 5);
+    setReviewTitle(existingUserReview.title || "");
+    setReviewComment(existingUserReview.comment || "");
+  }, [existingUserReview]);
 
   const onSelectVariant = (v) => {
     setSelectedVariantId(v._id);
@@ -238,6 +333,43 @@ export default function ProductDetails() {
     }
   };
 
+  const submitReview = async (e) => {
+    e.preventDefault();
+    setReviewError("");
+    setReviewSuccess("");
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    if (!reviewComment.trim()) {
+      setReviewError("Please write a review comment.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    try {
+      const { data } = await api.post(`/products/${product._id}/reviews`, {
+        rating: reviewRating,
+        title: reviewTitle,
+        comment: reviewComment,
+      });
+
+      setProduct(data || product);
+      setReviewSuccess(existingUserReview ? "Your review was updated." : "Your review was posted.");
+      setReviewTitle("");
+      setReviewComment("");
+      setReviewRating(5);
+    } catch (e) {
+      console.error("Failed to submit review:", e);
+      setReviewError(e?.response?.data?.message || "Failed to submit review");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -273,7 +405,7 @@ export default function ProductDetails() {
   const outOfStock = variants.length ? stock <= 0 : false;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="page-ambient min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {/* Breadcrumb */}
         <div className="text-sm text-gray-600 mb-6">
@@ -295,7 +427,7 @@ export default function ProductDetails() {
         <div className="grid lg:grid-cols-12 gap-8">
           {/* LEFT: gallery */}
           <div className="lg:col-span-7">
-            <div className="rounded-3xl border bg-white shadow-sm overflow-hidden">
+            <div className="premium-card rounded-3xl overflow-hidden">
               <div className="p-4 sm:p-6">
                 <div className="rounded-2xl bg-gray-50 overflow-hidden">
                   <img
@@ -334,7 +466,7 @@ export default function ProductDetails() {
 
             {/* Description + Specs */}
             <div className="mt-8 grid gap-6">
-              <div className="rounded-3xl border bg-white p-6 shadow-sm">
+              <div className="premium-card rounded-3xl p-6">
                 <h2 className="text-lg font-extrabold text-gray-900">Description</h2>
                 <p className="mt-3 text-gray-700 leading-relaxed whitespace-pre-line">
                   {product.description}
@@ -342,7 +474,7 @@ export default function ProductDetails() {
               </div>
 
               {selectedVariant && normalizeAttributeEntries(selectedVariant.attributes).length > 0 && (
-                <div className="rounded-3xl border bg-white p-6 shadow-sm">
+                <div className="premium-card rounded-3xl p-6">
                   <h2 className="text-lg font-extrabold text-gray-900">Selected Configuration</h2>
                   <div className="mt-4 grid sm:grid-cols-2 gap-3">
                     {normalizeAttributeEntries(selectedVariant.attributes).map(([k, v]) => (
@@ -356,7 +488,7 @@ export default function ProductDetails() {
               )}
 
               {Array.isArray(product.highlights) && product.highlights.length > 0 && (
-                <div className="rounded-3xl border bg-white p-6 shadow-sm">
+                <div className="premium-card rounded-3xl p-6">
                   <h2 className="text-lg font-extrabold text-gray-900">Highlights</h2>
                   <ul className="mt-3 grid sm:grid-cols-2 gap-2 text-gray-700">
                     {product.highlights.map((h, i) => (
@@ -372,7 +504,7 @@ export default function ProductDetails() {
               {product.specs &&
                 typeof product.specs === "object" &&
                 Object.keys(product.specs).length > 0 && (
-                  <div className="rounded-3xl border bg-white p-6 shadow-sm">
+                  <div className="premium-card rounded-3xl p-6">
                     <h2 className="text-lg font-extrabold text-gray-900">Specifications</h2>
                     <div className="mt-4 grid sm:grid-cols-2 gap-3">
                       {Object.entries(product.specs).map(([k, v]) => (
@@ -392,7 +524,7 @@ export default function ProductDetails() {
           {/* RIGHT: buy box */}
           <div className="lg:col-span-5">
             <div className="lg:sticky lg:top-6 space-y-6">
-              <div className="rounded-3xl border bg-white p-6 shadow-sm">
+              <div className="premium-card rounded-3xl p-6">
                 {/* Top meta */}
                 <div className="flex flex-wrap gap-2 mb-4">
                   {brandName ? chip(`Brand: ${brandName}`) : null}
@@ -598,7 +730,151 @@ export default function ProductDetails() {
             </div>
           </div>
         </div>
+
+        <section className="premium-card mt-10 rounded-3xl p-6">
+          <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+            <div className="lg:w-[340px]">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
+                Ratings & Reviews
+              </p>
+              <div className="mt-3 flex items-end gap-3">
+                <p className="text-5xl font-extrabold text-gray-900">{rating.toFixed(1)}</p>
+                <div className="pb-1">
+                  <StarRating value={rating} sizeClass="h-5 w-5" />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Based on {reviews} review{reviews === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                {ratingBreakdown.map((bucket) => (
+                  <div key={bucket.star} className="flex items-center gap-3">
+                    <span className="w-12 text-sm font-semibold text-gray-700">{bucket.star} star</span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full bg-amber-400 transition-all"
+                        style={{ width: `${bucket.percent}%` }}
+                      />
+                    </div>
+                    <span className="w-10 text-right text-sm text-gray-500">{bucket.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 rounded-3xl border bg-gray-50 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-extrabold text-gray-900">
+                    {existingUserReview ? "Edit your review" : "Write a review"}
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Share your experience with build quality, performance, and delivery.
+                  </p>
+                </div>
+                {!currentUser ? (
+                  <Link
+                    to="/login"
+                    className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                  >
+                    Login to review
+                  </Link>
+                ) : null}
+              </div>
+
+              <form onSubmit={submitReview} className="mt-5 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Your rating</p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <StarRating
+                      value={reviewRating}
+                      sizeClass="h-7 w-7"
+                      interactive
+                      onChange={setReviewRating}
+                    />
+                    <span className="text-sm font-semibold text-gray-600">{reviewRating}/5</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">Review title</label>
+                  <input
+                    value={reviewTitle}
+                    onChange={(e) => setReviewTitle(e.target.value)}
+                    maxLength={120}
+                    placeholder="Summarize your experience"
+                    disabled={!currentUser || reviewSubmitting}
+                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold text-gray-700">Your review</label>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    rows={5}
+                    placeholder="How is the product in real use?"
+                    disabled={!currentUser || reviewSubmitting}
+                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-60"
+                  />
+                </div>
+
+                {reviewError ? <p className="text-sm font-semibold text-red-600">{reviewError}</p> : null}
+                {reviewSuccess ? <p className="text-sm font-semibold text-green-700">{reviewSuccess}</p> : null}
+
+                <button
+                  type="submit"
+                  disabled={!currentUser || reviewSubmitting}
+                  className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {reviewSubmitting ? "Submitting..." : existingUserReview ? "Update Review" : "Post Review"}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div className="mt-8 border-t pt-8">
+            <h3 className="text-xl font-extrabold text-gray-900">Customer comments</h3>
+            {!sortedReviews.length ? (
+              <div className="mt-4 rounded-2xl border border-dashed bg-gray-50 p-6 text-sm text-gray-500">
+                No reviews yet. Be the first to comment on this product.
+              </div>
+            ) : (
+              <div className="mt-5 space-y-4">
+                {sortedReviews.map((review) => (
+                  <article key={review._id} className="rounded-3xl border bg-white p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-base font-extrabold text-gray-900">{review.name}</p>
+                          {review.verifiedPurchase ? (
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                              Verified Purchase
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="mt-2 flex items-center gap-3">
+                          <StarRating value={review.rating} />
+                          <span className="text-xs text-gray-500">{formatReviewDate(review.createdAt)}</span>
+                        </div>
+                        {review.title ? (
+                          <p className="mt-3 text-sm font-extrabold text-gray-900">{review.title}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className="mt-3 whitespace-pre-line text-sm leading-6 text-gray-700">
+                      {review.comment}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
+
     </div>
   );
 }
@@ -623,7 +899,7 @@ function RelatedProducts({ categoryId, currentSlug }) {
   if (!items.length) return null;
 
   return (
-    <div className="rounded-3xl border bg-white p-6 shadow-sm">
+    <div className="premium-card rounded-3xl p-6">
       <h2 className="text-lg font-extrabold text-gray-900 mb-4">Related Products</h2>
       <div className="grid grid-cols-2 gap-3">
         {items.map((p) => {
@@ -637,7 +913,7 @@ function RelatedProducts({ categoryId, currentSlug }) {
             <Link
               key={p.slug || p._id}
               to={`/product/${p.slug}`}
-              className="rounded-2xl border bg-white p-3 hover:shadow-sm transition"
+              className="premium-card premium-card-hover rounded-2xl p-3"
             >
               <div className="rounded-xl bg-gray-50 overflow-hidden">
                 <img

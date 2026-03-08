@@ -2,9 +2,14 @@
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const Cart = require("../models/Cart");
 const InventoryLedger = require("../models/InventoryLedger");
 const ReturnRefund = require("../models/ReturnRefund");
-const { createOrderFromCartForUser } = require("../services/orderService");
+const {
+  createOrderFromCartForUser,
+  getShippingQuote,
+  validateCouponForItems,
+} = require("../services/orderService");
 const { validateShippingPayload } = require("../utils/shippingValidation");
 const { getCourierProvider } = require("../services/courier");
 const {
@@ -194,6 +199,95 @@ exports.createOrderFromCart = async (req, res) => {
     if (session) {
       session.endSession();
     }
+  }
+};
+
+// POST /api/orders/validate-coupon
+// body: { couponCode, shippingAddress?, deliveryOption? }
+exports.validateCoupon = async (req, res) => {
+  try {
+    await releaseExpiredReservations();
+
+    const cart = await Cart.findOne({ user: req.user._id }).lean();
+    if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+      return res.status(400).json({ message: "Cart is empty" });
+    }
+
+    let itemsTotal = 0;
+    const productIds = [];
+    const categoryIds = [];
+
+    for (const item of cart.items) {
+      const product = await Product.findById(item.product).select("category variants name");
+      if (!product) {
+        return res.status(400).json({ message: "A cart item no longer exists" });
+      }
+
+      const variant = product.variants.id(item.variantId);
+      if (!variant) {
+        return res.status(400).json({ message: `A variant for ${product.name} is no longer available` });
+      }
+
+      const unitPrice = Number(variant.price ?? item.priceAtAdd ?? 0);
+      itemsTotal += unitPrice * Number(item.qty || 0);
+      productIds.push(product._id);
+      if (product.category) {
+        categoryIds.push(product.category);
+      }
+    }
+
+    const shippingAddress = req.body?.shippingAddress || {};
+    const deliveryOption = req.body?.deliveryOption || "STANDARD";
+    const couponCode = String(req.body?.couponCode || "").trim();
+
+    const couponResult = couponCode
+      ? await validateCouponForItems({
+          couponCode,
+          itemsTotal,
+          productIds,
+          categoryIds,
+        })
+      : null;
+
+    const shippingQuote =
+      shippingAddress?.division
+        ? await getShippingQuote({
+            division: shippingAddress.division,
+            district: shippingAddress.district,
+            itemsTotal,
+            deliveryOption,
+          })
+        : null;
+
+    const shippingFee = Number(shippingQuote?.shippingFee || 0);
+    const discountTotal = Number(couponResult?.discountTotal || 0);
+
+    return res.json({
+      valid: true,
+      coupon: couponResult
+        ? {
+            code: couponResult.couponApplied.code,
+            discountAmount: discountTotal,
+            type: couponResult.coupon.type,
+            value: couponResult.coupon.value,
+            minCartTotal: couponResult.coupon.minCartTotal || 0,
+            maxDiscount: couponResult.coupon.maxDiscount || null,
+          }
+        : null,
+      totals: {
+        itemsTotal,
+        shippingFee,
+        discountTotal,
+        grandTotal: itemsTotal + shippingFee - discountTotal,
+      },
+      shippingQuote,
+    });
+  } catch (e) {
+    console.error("validateCoupon:", e);
+    return res.status(e.statusCode || 500).json({
+      valid: false,
+      message: e.message || "Failed to validate coupon",
+    });
   }
 };
 

@@ -6,6 +6,11 @@ const toNum = (v, def) => {
   return Number.isFinite(n) ? n : def;
 };
 
+const normalizeCouponType = (value) => {
+  const type = String(value || "").toUpperCase().trim();
+  return type === "FLAT" ? "FIXED" : type;
+};
+
 // GET /api/admin/coupons?keyword=&page=&limit=
 exports.adminListCoupons = async (req, res) => {
   try {
@@ -119,7 +124,7 @@ exports.adminCreateCoupon = async (req, res) => {
     const payload = {
       code: String(code).toUpperCase().trim(),
       description: description?.trim() || "",
-      type: String(type).toUpperCase(), // "PERCENT" or "FLAT"
+      type: normalizeCouponType(type), // "PERCENT" or "FIXED"
       value: toNum(value, 0),
       maxDiscount: maxDiscount !== undefined ? toNum(maxDiscount, 0) : undefined,
       minCartTotal: minCartTotal !== undefined ? toNum(minCartTotal, 0) : undefined,
@@ -164,7 +169,7 @@ exports.adminUpdateCoupon = async (req, res) => {
 
     if (code !== undefined) coupon.code = String(code).toUpperCase().trim();
     if (description !== undefined) coupon.description = description.trim();
-    if (type !== undefined) coupon.type = String(type).toUpperCase();
+    if (type !== undefined) coupon.type = normalizeCouponType(type);
     if (value !== undefined) coupon.value = toNum(value, coupon.value);
     if (maxDiscount !== undefined)
       coupon.maxDiscount = maxDiscount === null ? undefined : toNum(maxDiscount, 0);

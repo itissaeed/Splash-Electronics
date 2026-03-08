@@ -17,6 +17,11 @@ const toNum = (v, def) => {
   return Number.isFinite(n) ? n : def;
 };
 
+const normalizeCouponType = (value) => {
+  const type = String(value || "").toUpperCase().trim();
+  return type === "FLAT" ? "FIXED" : type;
+};
+
 const getShippingConfig = async ({ session }) => {
   const defaultShipping = {
     insideDhaka: 60,
@@ -127,6 +132,98 @@ const getShippingQuote = async ({
   };
 };
 
+const validateCouponForItems = async ({
+  couponCode,
+  itemsTotal,
+  productIds = [],
+  categoryIds = [],
+  session,
+}) => {
+  const code = String(couponCode || "").toUpperCase().trim();
+  if (!code) return null;
+
+  const coupon = await Coupon.findOne({ code, isActive: true }).session(session);
+  if (!coupon) {
+    const err = new Error("Invalid coupon");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const now = Date.now();
+  if (coupon.validFrom && now < new Date(coupon.validFrom).getTime()) {
+    const err = new Error("Coupon not active yet");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (coupon.validTo && now > new Date(coupon.validTo).getTime()) {
+    const err = new Error("Coupon expired");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) {
+    const err = new Error("Coupon usage limit reached");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (itemsTotal < (coupon.minCartTotal || 0)) {
+    const err = new Error("Cart total too low for this coupon");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const applicableProducts = (coupon.applicableProducts || []).map((id) => String(id));
+  const applicableCategories = (coupon.applicableCategories || []).map((id) => String(id));
+  const hasProductScope = applicableProducts.length > 0;
+  const hasCategoryScope = applicableCategories.length > 0;
+
+  if (hasProductScope || hasCategoryScope) {
+    const productMatch = productIds.some((id) => applicableProducts.includes(String(id)));
+    const categoryMatch = categoryIds.some((id) => applicableCategories.includes(String(id)));
+    if (!productMatch && !categoryMatch) {
+      const err = new Error("Coupon is not applicable to the items in your cart");
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
+  let discountTotal = 0;
+  const couponType = normalizeCouponType(coupon.type);
+  if (couponType === "PERCENT") {
+    discountTotal = (itemsTotal * coupon.value) / 100;
+    if (coupon.maxDiscount) {
+      discountTotal = Math.min(discountTotal, coupon.maxDiscount);
+    }
+  } else {
+    discountTotal = coupon.value;
+  }
+
+  discountTotal = Math.min(discountTotal, itemsTotal);
+
+  return {
+    coupon,
+    discountTotal,
+    couponApplied: {
+      couponId: coupon._id,
+      code: coupon.code,
+      discountAmount: discountTotal,
+    },
+  };
+};
+
+const applyCouponUsageIfNeeded = async ({ order, session }) => {
+  if (!order?.coupon?.couponId || order?.coupon?.usageCountedAt) return order;
+
+  const coupon = await Coupon.findById(order.coupon.couponId).session(session);
+  if (!coupon) return order;
+
+  coupon.usedCount = (coupon.usedCount || 0) + 1;
+  await coupon.save({ session });
+
+  order.coupon.usageCountedAt = new Date();
+  await order.save({ session });
+  return order;
+};
+
 const createOrderFromCartForUser = async ({
   userId,
   shippingAddress,
@@ -153,6 +250,8 @@ const createOrderFromCartForUser = async ({
   // Build order items + stock validation
   const orderItems = [];
   let itemsTotal = 0;
+  const productIds = [];
+  const categoryIds = [];
   const requestedPairs = cart.items.map((ci) => ({
     productId: ci.product,
     variantId: ci.variantId,
@@ -191,57 +290,26 @@ const createOrderFromCartForUser = async ({
       price: unitPrice,
     });
 
+    productIds.push(product._id);
+    if (product.category) {
+      categoryIds.push(product.category);
+    }
     itemsTotal += unitPrice * ci.qty;
   }
 
-  // Coupon apply (simple cart-level discount)
   let discountTotal = 0;
   let couponApplied = null;
 
   if (couponCode) {
-    const code = String(couponCode).toUpperCase().trim();
-    const coupon = await Coupon.findOne({ code, isActive: true }).session(session);
-
-    if (!coupon) {
-      const err = new Error("Invalid coupon");
-      err.statusCode = 400;
-      throw err;
-    }
-
-    const now = Date.now();
-    if (coupon.validFrom && now < new Date(coupon.validFrom).getTime()) {
-      const err = new Error("Coupon not active yet");
-      err.statusCode = 400;
-      throw err;
-    }
-    if (coupon.validTo && now > new Date(coupon.validTo).getTime()) {
-      const err = new Error("Coupon expired");
-      err.statusCode = 400;
-      throw err;
-    }
-    if (coupon.usageLimit > 0 && coupon.usedCount >= coupon.usageLimit) {
-      const err = new Error("Coupon usage limit reached");
-      err.statusCode = 400;
-      throw err;
-    }
-    if (itemsTotal < (coupon.minCartTotal || 0)) {
-      const err = new Error("Cart total too low for this coupon");
-      err.statusCode = 400;
-      throw err;
-    }
-
-    if (coupon.type === "PERCENT") {
-      discountTotal = (itemsTotal * coupon.value) / 100;
-      if (coupon.maxDiscount) discountTotal = Math.min(discountTotal, coupon.maxDiscount);
-    } else {
-      discountTotal = coupon.value;
-    }
-
-    discountTotal = Math.min(discountTotal, itemsTotal);
-    coupon.usedCount = (coupon.usedCount || 0) + 1;
-    await coupon.save({ session });
-
-    couponApplied = { code: coupon.code, discountAmount: discountTotal };
+    const couponResult = await validateCouponForItems({
+      couponCode,
+      itemsTotal,
+      productIds,
+      categoryIds,
+      session,
+    });
+    discountTotal = couponResult.discountTotal;
+    couponApplied = couponResult.couponApplied;
   }
 
   const shippingQuote = await getShippingQuote({
@@ -293,6 +361,10 @@ const createOrderFromCartForUser = async ({
   }], { session });
 
   const createdOrder = order[0];
+
+  if (!PREPAID_METHODS.includes(String(paymentMethod || "").toUpperCase())) {
+    await applyCouponUsageIfNeeded({ order: createdOrder, session });
+  }
 
   const normalizedAddress = {
     label: "Default",
@@ -362,4 +434,6 @@ const createOrderFromCartForUser = async ({
 module.exports = {
   createOrderFromCartForUser,
   getShippingQuote,
+  validateCouponForItems,
+  applyCouponUsageIfNeeded,
 };

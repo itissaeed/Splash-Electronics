@@ -355,13 +355,13 @@ export default function AdminAnalytics() {
           label="Avg Order Value"
           value={money(overview?.averageOrderValue ?? 0)}
           hint="Revenue per order"
-          accent="bg-amber-400/40"
+          accent="bg-sky-400/40"
         />
         <StatCard
           label="Unique Customers"
           value={niceNumber(overview?.uniqueCustomers ?? 0)}
           hint="Purchasing customers only"
-          accent="bg-sky-400/40"
+          accent="bg-teal-400/40"
         />
       </div>
 

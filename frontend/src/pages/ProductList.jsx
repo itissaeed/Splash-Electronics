@@ -127,11 +127,13 @@ export default function ProductListPage() {
   };
 
   return (
-    <div className="bg-gray-50 min-h-screen">
+    <div className="page-ambient min-h-screen">
       {/* Header */}
-      <header className="bg-gray-950 text-white py-7 shadow-lg mb-8">
+      <header className="relative overflow-hidden bg-[#0b1220] text-white py-8 shadow-lg mb-8">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.18),transparent_24rem),radial-gradient(circle_at_left,rgba(99,102,241,0.2),transparent_22rem)]" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+          <div className="relative">
+            <p className="section-kicker text-cyan-200/80">Catalog</p>
             <h1 className="text-2xl sm:text-3xl font-extrabold">Products</h1>
             <p className="text-white/70 text-sm mt-1">
               Browse the latest gadgets & electronics
@@ -159,6 +161,24 @@ export default function ProductListPage() {
         </div>
       </header>
 
+      <div className="fixed top-20 right-4 sm:top-24 sm:right-6 z-40 group">
+        <Link
+          to="/advisor"
+          className="premium-card inline-flex items-center gap-2 rounded-full bg-slate-900/85 px-3 py-3 sm:pl-4 sm:pr-5 text-white transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2"
+          aria-label="Open Smart Product Advisor"
+          title="Open Smart Product Advisor"
+        >
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/15">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden="true">
+              <path d="M12 2a1 1 0 0 1 .95.68l1.17 3.5 3.5 1.17a1 1 0 0 1 0 1.9l-3.5 1.17-1.17 3.5a1 1 0 0 1-1.9 0l-1.17-3.5-3.5-1.17a1 1 0 0 1 0-1.9l3.5-1.17 1.17-3.5A1 1 0 0 1 12 2Zm6.5 12a.75.75 0 0 1 .71.51l.55 1.64 1.64.55a.75.75 0 0 1 0 1.42l-1.64.55-.55 1.64a.75.75 0 0 1-1.42 0l-.55-1.64-1.64-.55a.75.75 0 0 1 0-1.42l1.64-.55.55-1.64a.75.75 0 0 1 .71-.51Z" />
+            </svg>
+          </span>
+          <span className="hidden sm:inline-block max-w-0 overflow-hidden whitespace-nowrap opacity-0 -translate-x-1 transition-all duration-300 group-hover:max-w-[220px] group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:max-w-[220px] group-focus-within:opacity-100 group-focus-within:translate-x-0">
+            Smart Product Advisor
+          </span>
+        </Link>
+      </div>
+
       {/* Breadcrumb */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <Breadcrumb
@@ -170,7 +190,8 @@ export default function ProductListPage() {
       </div>
 
       {/* Filters Row */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6 flex flex-col gap-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
+        <div className="premium-card rounded-[1.75rem] p-5 sm:p-6 flex flex-col gap-4">
         {/* Category Pills */}
         <div className="flex flex-wrap gap-2">
           <button
@@ -226,6 +247,7 @@ export default function ProductListPage() {
             </select>
           </div>
         </div>
+        </div>
       </div>
 
       {/* Grid */}
@@ -237,7 +259,7 @@ export default function ProductListPage() {
             ))}
           </div>
         ) : products.length === 0 ? (
-          <div className="rounded-2xl border bg-white p-8 text-center text-gray-700">
+          <div className="premium-card rounded-2xl p-8 text-center text-gray-700">
             No products found.
           </div>
         ) : (
@@ -257,9 +279,9 @@ export default function ProductListPage() {
                 <Link
                   key={p.slug || p._id}
                   to={url}
-                  className="group rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition"
+                  className="premium-card premium-card-hover group rounded-[1.6rem] p-4"
                 >
-                  <div className="relative overflow-hidden rounded-xl bg-gray-50">
+                  <div className="relative overflow-hidden rounded-[1.2rem] bg-gray-50">
                     <img
                       src={img}
                       alt={p.name}
@@ -270,6 +292,11 @@ export default function ProductListPage() {
                   </div>
 
                   <div className="mt-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+                        {p?.brand?.name || "Tech"}
+                      </span>
+                    </div>
                     <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-indigo-600 font-extrabold">{money(price)}</p>
@@ -279,8 +306,8 @@ export default function ProductListPage() {
                     </div>
 
                     {/* Optional hints */}
-                    <p className="mt-1 text-xs text-gray-500">
-                      {p?.brand?.name ? p.brand.name : ""}
+                    <p className="mt-2 text-xs text-gray-500">
+                      Premium picks, curated for everyday browsing.
                     </p>
                   </div>
                 </Link>

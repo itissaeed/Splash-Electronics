@@ -10,9 +10,16 @@ export default function ThemeToggle() {
       onClick={toggleTheme}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="fixed bottom-5 right-5 z-[100] rounded-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-lg px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-100 hover:scale-[1.02] transition"
+      className="fixed bottom-5 right-5 z-[100] premium-card premium-card-hover inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-100"
     >
-      {isDark ? "Light" : "Dark"}
+      <span
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+          isDark ? "bg-cyan-100 text-cyan-700" : "bg-slate-900 text-white"
+        }`}
+      >
+        {isDark ? "L" : "D"}
+      </span>
+      {isDark ? "Light Mode" : "Dark Mode"}
     </button>
   );
 }

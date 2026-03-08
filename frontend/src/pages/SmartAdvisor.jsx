@@ -356,7 +356,7 @@ export default function SmartAdvisor() {
             )}
 
             {step === 3 && (
-              <div className="mt-5 rounded-2xl border border-slate-200 p-4 bg-gradient-to-r from-orange-50 to-amber-50">
+              <div className="mt-5 rounded-2xl border border-slate-200 p-4 bg-gradient-to-r from-cyan-50 to-teal-50">
                 <label className="text-sm font-semibold text-slate-700">Usage</label>
                 <p className="text-xs text-slate-500 mt-1">Pick one or more scenarios.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -369,8 +369,8 @@ export default function SmartAdvisor() {
                         onClick={() => toggleUsage(u)}
                         className={`rounded-full px-4 py-2 text-sm font-semibold border transition ${
                           active
-                            ? "bg-orange-500 text-white border-orange-500 shadow"
-                            : "bg-white text-slate-700 border-slate-300 hover:border-orange-400"
+                            ? "bg-cyan-600 text-white border-cyan-600 shadow"
+                            : "bg-white text-slate-700 border-slate-300 hover:border-cyan-400"
                         }`}
                       >
                         {u.charAt(0).toUpperCase() + u.slice(1)}
