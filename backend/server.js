@@ -23,6 +23,7 @@ const adminSettingsRoutes = require('./routes/adminSettingsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const shippingRoutes = require('./routes/shippingRoutes');
+const advisorRoutes = require('./routes/advisorRoutes');
 
 const app = express();
 
@@ -66,6 +67,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/returns', returnRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/shipping', shippingRoutes);
+app.use('/api/advisor', advisorRoutes);
 
 // 404 handler
 app.use((req, res) => {

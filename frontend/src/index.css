@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=Sora:wght@500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -10,6 +12,7 @@
   }
 
   body {
+    font-family: "Plus Jakarta Sans", sans-serif;
     @apply bg-gray-50 text-slate-900 transition-colors duration-200;
   }
 
@@ -64,6 +67,12 @@
   .dark input::placeholder,
   .dark textarea::placeholder {
     @apply text-slate-500;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Sora", sans-serif;
   }
 }
 

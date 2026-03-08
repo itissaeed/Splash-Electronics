@@ -414,6 +414,12 @@ export default function Home() {
                     Shop Now
                   </Link>
                   <Link
+                    to="/advisor"
+                    className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-300 transition"
+                  >
+                    Help me choose
+                  </Link>
+                  <Link
                     to="/products?featured=true"
                     className="rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/15 transition"
                   >
