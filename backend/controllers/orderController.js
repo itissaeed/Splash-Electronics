@@ -12,6 +12,7 @@ const {
 } = require("../services/orderService");
 const { validateShippingPayload } = require("../utils/shippingValidation");
 const { getCourierProvider } = require("../services/courier");
+const { getVisitorKey } = require("../utils/visitorKey");
 const {
   PREPAID_METHODS,
   releaseExpiredReservations,
@@ -182,6 +183,7 @@ exports.createOrderFromCart = async (req, res) => {
       paymentMethod: paymentMethod || "COD",
       couponCode,
       deliveryOption: validation.deliveryOption,
+      visitorKey: getVisitorKey(req),
       session,
     });
 

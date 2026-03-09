@@ -1,6 +1,8 @@
 // controllers/analyticsController.js
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const ProductView = require("../models/ProductView");
+const Cart = require("../models/Cart");
 
 const parseDate = (str, fallback) => {
   if (!str) return fallback;
@@ -44,168 +46,272 @@ exports.adminAnalyticsOverview = async (req, res) => {
       createdAt: { $gte: from, $lte: to },
     };
 
-    const [agg] = await Order.aggregate([
-      { $match: matchStage },
-      {
-        $facet: {
-          overview: [
-            {
-              $group: {
-                _id: null,
-                totalOrders: { $sum: 1 },
-                customersSet: { $addToSet: "$user" },
-                revenueOrderCount: {
-                  $sum: {
-                    $cond: [{ $in: ["$status", revenueStatuses] }, 1, 0],
-                  },
-                },
-                totalRevenue: {
-                  $sum: {
-                    $cond: [
-                      { $in: ["$status", revenueStatuses] },
-                      "$pricing.grandTotal",
-                      0,
-                    ],
-                  },
-                },
-              },
-            },
-            {
-              $project: {
-                _id: 0,
-                totalRevenue: 1,
-                totalOrders: 1,
-                uniqueCustomers: { $size: "$customersSet" },
-                averageOrderValue: {
-                  $cond: [
-                    { $gt: ["$revenueOrderCount", 0] },
-                    { $divide: ["$totalRevenue", "$revenueOrderCount"] },
-                    0,
-                  ],
-                },
-              },
-            },
-          ],
-
-          daily: [
-            {
-              $group: {
-                _id: {
-                  $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-                },
-                orders: { $sum: 1 },
-                revenue: {
-                  $sum: {
-                    $cond: [
-                      { $in: ["$status", revenueStatuses] },
-                      "$pricing.grandTotal",
-                      0,
-                    ],
-                  },
-                },
-              },
-            },
-            { $sort: { _id: 1 } },
-          ],
-
-          byDivision: [
-            { $match: { status: { $in: revenueStatuses } } },
-            {
-              $addFields: {
-                divisionName: {
-                  $let: {
-                    vars: {
-                      d: {
-                        $trim: {
-                          input: { $ifNull: ["$shippingAddress.division", ""] },
-                        },
-                      },
-                    },
-                    in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
-                  },
-                },
-              },
-            },
-            {
-              $group: {
-                _id: "$divisionName",
-                orders: { $sum: 1 },
-                revenue: { $sum: "$pricing.grandTotal" },
-              },
-            },
-            { $sort: { revenue: -1 } },
-          ],
-
-          byDivisionProductOrders: [
-            {
-              $match: {
-                status: {
-                  $in: ["pending", "confirmed", "processing", "shipped", "delivered"],
-                },
-              },
-            },
-            {
-              $addFields: {
-                divisionName: {
-                  $let: {
-                    vars: {
-                      d: {
-                        $trim: {
-                          input: { $ifNull: ["$shippingAddress.division", ""] },
-                        },
-                      },
-                    },
-                    in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
-                  },
-                },
-              },
-            },
-            { $unwind: "$items" },
-            {
-              $group: {
-                _id: "$divisionName",
-                qty: { $sum: "$items.qty" },
-                orderCount: { $sum: 1 },
-              },
-            },
-            { $sort: { qty: -1 } },
-          ],
-
-          topProducts: [
-            { $match: { status: { $in: revenueStatuses } } },
-            { $unwind: "$items" },
-            {
-              $group: {
-                _id: { product: "$items.product", name: "$items.nameSnapshot" },
-                qty: { $sum: "$items.qty" },
-                revenue: {
-                  $sum: { $multiply: ["$items.qty", "$items.price"] },
-                },
-              },
-            },
-            { $sort: { revenue: -1 } },
-            { $limit: 10 },
-          ],
-
-          paymentMethods: [
-            { $match: { status: { $in: revenueStatuses } } },
-            {
-              $group: {
-                _id: "$payment.method",
-                orders: { $sum: 1 },
-                revenue: { $sum: "$pricing.grandTotal" },
-                paidCount: {
-                  $sum: {
-                    $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
-                  },
-                },
-              },
-            },
-            { $sort: { revenue: -1 } },
-          ],
-        },
-      },
+    const [collectionTotalOrders, matchedOrderCount, latestOrder] = await Promise.all([
+      Order.countDocuments({}),
+      Order.countDocuments(matchStage),
+      Order.findOne({})
+        .sort({ createdAt: -1 })
+        .select("orderNo createdAt status")
+        .lean(),
     ]);
+
+    const [aggResult, topViewedProducts, uniqueViewers, orderingVisitors, abandonedCartAgg] = await Promise.all([
+      Order.aggregate([
+        { $match: matchStage },
+        {
+          $facet: {
+            overview: [
+              {
+                $group: {
+                  _id: null,
+                  totalOrders: { $sum: 1 },
+                  customersSet: { $addToSet: "$user" },
+                  revenueOrderCount: {
+                    $sum: {
+                      $cond: [{ $in: ["$status", revenueStatuses] }, 1, 0],
+                    },
+                  },
+                  totalRevenue: {
+                    $sum: {
+                      $cond: [
+                        { $in: ["$status", revenueStatuses] },
+                        "$pricing.grandTotal",
+                        0,
+                      ],
+                    },
+                  },
+                },
+              },
+              {
+                $project: {
+                  _id: 0,
+                  totalRevenue: 1,
+                  totalOrders: 1,
+                  uniqueCustomers: { $size: "$customersSet" },
+                  averageOrderValue: {
+                    $cond: [
+                      { $gt: ["$revenueOrderCount", 0] },
+                      { $divide: ["$totalRevenue", "$revenueOrderCount"] },
+                      0,
+                    ],
+                  },
+                },
+              },
+            ],
+            daily: [
+              {
+                $group: {
+                  _id: {
+                    $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+                  },
+                  orders: { $sum: 1 },
+                  revenue: {
+                    $sum: {
+                      $cond: [
+                        { $in: ["$status", revenueStatuses] },
+                        "$pricing.grandTotal",
+                        0,
+                      ],
+                    },
+                  },
+                },
+              },
+              { $sort: { _id: 1 } },
+            ],
+            byDivision: [
+              { $match: { status: { $in: revenueStatuses } } },
+              {
+                $addFields: {
+                  divisionName: {
+                    $let: {
+                      vars: {
+                        d: {
+                          $trim: {
+                            input: { $ifNull: ["$shippingAddress.division", ""] },
+                          },
+                        },
+                      },
+                      in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
+                    },
+                  },
+                },
+              },
+              {
+                $group: {
+                  _id: "$divisionName",
+                  orders: { $sum: 1 },
+                  revenue: { $sum: "$pricing.grandTotal" },
+                },
+              },
+              { $sort: { revenue: -1 } },
+            ],
+            byDivisionProductOrders: [
+              {
+                $match: {
+                  status: {
+                    $in: ["pending", "confirmed", "processing", "shipped", "delivered"],
+                  },
+                },
+              },
+              {
+                $addFields: {
+                  divisionName: {
+                    $let: {
+                      vars: {
+                        d: {
+                          $trim: {
+                            input: { $ifNull: ["$shippingAddress.division", ""] },
+                          },
+                        },
+                      },
+                      in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
+                    },
+                  },
+                },
+              },
+              { $unwind: "$items" },
+              {
+                $group: {
+                  _id: "$divisionName",
+                  qty: { $sum: "$items.qty" },
+                  orderCount: { $sum: 1 },
+                },
+              },
+              { $sort: { qty: -1 } },
+            ],
+            topProducts: [
+              { $match: { status: { $in: revenueStatuses } } },
+              { $unwind: "$items" },
+              {
+                $group: {
+                  _id: { product: "$items.product", name: "$items.nameSnapshot" },
+                  qty: { $sum: "$items.qty" },
+                  revenue: {
+                    $sum: { $multiply: ["$items.qty", "$items.price"] },
+                  },
+                },
+              },
+              { $sort: { revenue: -1 } },
+              { $limit: 10 },
+            ],
+            paymentMethods: [
+              { $match: { status: { $in: revenueStatuses } } },
+              {
+                $group: {
+                  _id: "$payment.method",
+                  orders: { $sum: 1 },
+                  revenue: { $sum: "$pricing.grandTotal" },
+                  paidCount: {
+                    $sum: {
+                      $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
+                    },
+                  },
+                },
+              },
+              { $sort: { revenue: -1 } },
+            ],
+            peakOrderHours: [
+              {
+                $group: {
+                  _id: { $hour: "$createdAt" },
+                  orders: { $sum: 1 },
+                },
+              },
+              { $sort: { orders: -1, _id: 1 } },
+            ],
+          },
+        },
+      ]),
+      ProductView.aggregate([
+        { $match: { viewedAt: { $gte: from, $lte: to } } },
+        {
+          $group: {
+            _id: "$product",
+            views: { $sum: 1 },
+            visitorSet: { $addToSet: "$visitorKey" },
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "_id",
+            foreignField: "_id",
+            as: "productDoc",
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            views: 1,
+            uniqueViewers: { $size: "$visitorSet" },
+            name: {
+              $ifNull: [
+                { $arrayElemAt: ["$productDoc.name", 0] },
+                "Unknown product",
+              ],
+            },
+            slug: {
+              $ifNull: [{ $arrayElemAt: ["$productDoc.slug", 0] }, ""],
+            },
+          },
+        },
+        { $sort: { views: -1, uniqueViewers: -1 } },
+        { $limit: 10 },
+      ]),
+      ProductView.distinct("visitorKey", {
+        viewedAt: { $gte: from, $lte: to },
+        visitorKey: { $nin: ["", null] },
+      }),
+      Order.distinct("analytics.visitorKey", {
+        createdAt: { $gte: from, $lte: to },
+        "analytics.visitorKey": { $nin: ["", null] },
+      }),
+      Cart.aggregate([
+        {
+          $match: {
+            updatedAt: {
+              $gte: from,
+              $lte: new Date(Math.min(to.getTime(), now.getTime()) - 24 * 60 * 60 * 1000),
+            },
+            "items.0": { $exists: true },
+          },
+        },
+        {
+          $lookup: {
+            from: "orders",
+            let: { userId: "$user", cartUpdatedAt: "$updatedAt" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$user", "$$userId"] },
+                      { $gt: ["$createdAt", "$$cartUpdatedAt"] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+            ],
+            as: "followUpOrders",
+          },
+        },
+        {
+          $match: {
+            $expr: { $eq: [{ $size: "$followUpOrders" }, 0] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            abandonedCarts: { $sum: 1 },
+            abandonedItems: { $sum: { $size: "$items" } },
+          },
+        },
+      ]),
+    ]);
+
+    const agg = Array.isArray(aggResult) ? aggResult[0] : aggResult;
 
     const overview =
       (agg?.overview && agg.overview[0]) || {
@@ -215,14 +321,43 @@ exports.adminAnalyticsOverview = async (req, res) => {
         averageOrderValue: 0,
       };
 
+    const peakOrderHour = Array.isArray(agg?.peakOrderHours) && agg.peakOrderHours.length
+      ? agg.peakOrderHours[0]
+      : null;
+    const uniqueViewerCount = uniqueViewers.length;
+    const orderingVisitorCount = orderingVisitors.length;
+    const conversionRate = uniqueViewerCount > 0
+      ? (orderingVisitorCount / uniqueViewerCount) * 100
+      : 0;
+    const abandonedCartSummary = abandonedCartAgg?.[0] || {
+      abandonedCarts: 0,
+      abandonedItems: 0,
+    };
+
     res.json({
       range: { from, to },
-      overview,
+      overview: {
+        ...overview,
+        uniqueViewers: uniqueViewerCount,
+        orderingVisitors: orderingVisitorCount,
+        conversionRate,
+        abandonedCarts: abandonedCartSummary.abandonedCarts || 0,
+        abandonedItems: abandonedCartSummary.abandonedItems || 0,
+        peakOrderTime: peakOrderHour
+          ? {
+              hour: peakOrderHour._id,
+              orders: peakOrderHour.orders,
+              label: `${String(peakOrderHour._id).padStart(2, "0")}:00 - ${String((peakOrderHour._id + 1) % 24).padStart(2, "0")}:00`,
+            }
+          : null,
+      },
       daily: agg?.daily || [],
       byDivision: agg?.byDivision || [],
       byDivisionProductOrders: agg?.byDivisionProductOrders || [],
       topProducts: agg?.topProducts || [],
       paymentMethods: agg?.paymentMethods || [],
+      mostViewedProducts: topViewedProducts || [],
+      peakOrderHours: agg?.peakOrderHours || [],
     });
   } catch (err) {
     console.error("adminAnalyticsOverview error:", err);

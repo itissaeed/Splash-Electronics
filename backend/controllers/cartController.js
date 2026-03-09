@@ -6,6 +6,7 @@ const {
   getReservedQtyMap,
   getAvailableStock,
 } = require("../services/stockReservationService");
+const { getVisitorKey } = require("../utils/visitorKey");
 
 const toNum = (v, def) => {
   const n = Number(v);
@@ -23,6 +24,13 @@ const buildSnapshots = (product, variant) => ({
   skuSnapshot: variant?.sku || "",
   imageSnapshot: getVariantImage(variant),
 });
+
+const applyCartVisitorKey = (cart, req) => {
+  const visitorKey = getVisitorKey(req);
+  if (!visitorKey || !cart) return;
+  cart.analytics = cart.analytics || {};
+  cart.analytics.visitorKey = visitorKey;
+};
 
 exports.getMyCart = async (req, res) => {
   try {
@@ -71,6 +79,7 @@ exports.addToCart = async (req, res) => {
 
     let cart = await Cart.findOne({ user: req.user._id });
     if (!cart) cart = await Cart.create({ user: req.user._id, items: [] });
+    applyCartVisitorKey(cart, req);
 
     const existing = cart.items.find(
       (it) => String(it.product) === String(productId) && String(it.variantId) === String(variantId)
@@ -117,6 +126,7 @@ exports.updateCartItemQty = async (req, res) => {
 
     const cart = await Cart.findOne({ user: req.user._id });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
+    applyCartVisitorKey(cart, req);
 
     const item = cart.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ message: "Cart item not found" });
@@ -158,6 +168,7 @@ exports.removeCartItem = async (req, res) => {
   try {
     const cart = await Cart.findOne({ user: req.user._id });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
+    applyCartVisitorKey(cart, req);
 
     const item = cart.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ message: "Cart item not found" });
@@ -176,6 +187,7 @@ exports.clearMyCart = async (req, res) => {
   try {
     const cart = await Cart.findOne({ user: req.user._id });
     if (!cart) return res.json({ message: "Cart already empty" });
+    applyCartVisitorKey(cart, req);
 
     cart.items = [];
     await cart.save();

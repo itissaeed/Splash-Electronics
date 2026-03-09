@@ -12,7 +12,7 @@ const money = (n) => {
 };
 
 const chip = (text) => (
-  <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-700">
+  <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-slate-900 dark:text-slate-300">
     {text}
   </span>
 );
@@ -107,6 +107,229 @@ function formatReviewDate(date) {
     month: "short",
     day: "numeric",
   });
+}
+
+function normalizeSummaryText(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sentenceCase(text) {
+  const normalized = normalizeSummaryText(text).replace(/^[^a-zA-Z0-9]+/, "");
+  if (!normalized) return "";
+  const withPunctuation = /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+  return withPunctuation.charAt(0).toUpperCase() + withPunctuation.slice(1);
+}
+
+function collectReviewPhrases(review) {
+  const source = [review?.title, review?.comment].filter(Boolean).join(". ");
+  return source
+    .split(/[\n\r]+|[.!?]+\s+/)
+    .map((part) => sentenceCase(part))
+    .filter((part) => part && part.length >= 8 && part.length <= 120);
+}
+
+const REVIEW_ASPECTS = [
+  {
+    key: "battery",
+    label: "Battery",
+    keywords: ["battery", "charge", "charging", "backup", "screen on time"],
+    positiveLabel: "Good battery life",
+    negativeLabel: "Battery life needs improvement",
+  },
+  {
+    key: "performance",
+    label: "Performance",
+    keywords: ["performance", "fast", "speed", "smooth", "lag", "gaming", "processor"],
+    positiveLabel: "Fast performance",
+    negativeLabel: "Performance feels inconsistent",
+  },
+  {
+    key: "camera",
+    label: "Camera",
+    keywords: ["camera", "photo", "photos", "video", "portrait", "selfie"],
+    positiveLabel: "Camera quality is appreciated",
+    negativeLabel: "Camera is average",
+  },
+  {
+    key: "display",
+    label: "Display",
+    keywords: ["display", "screen", "brightness", "panel", "resolution"],
+    positiveLabel: "Display quality stands out",
+    negativeLabel: "Display quality could be better",
+  },
+  {
+    key: "build",
+    label: "Build",
+    keywords: ["build", "design", "premium", "finish", "materials", "durable"],
+    positiveLabel: "Build quality feels solid",
+    negativeLabel: "Build quality gets mixed feedback",
+  },
+  {
+    key: "price",
+    label: "Price",
+    keywords: ["price", "value", "cost", "budget", "expensive", "worth"],
+    positiveLabel: "Good value for the price",
+    negativeLabel: "Price feels high for what you get",
+  },
+  {
+    key: "delivery",
+    label: "Delivery",
+    keywords: ["delivery", "shipping", "packaging", "packed", "courier"],
+    positiveLabel: "Delivery and packaging are well received",
+    negativeLabel: "Delivery experience needs improvement",
+  },
+];
+
+const POSITIVE_REVIEW_WORDS = [
+  "good",
+  "great",
+  "excellent",
+  "amazing",
+  "fast",
+  "smooth",
+  "solid",
+  "premium",
+  "worth",
+  "best",
+  "love",
+  "loved",
+  "reliable",
+  "impressive",
+  "bright",
+  "sharp",
+  "clear",
+];
+
+const NEGATIVE_REVIEW_WORDS = [
+  "bad",
+  "poor",
+  "slow",
+  "lag",
+  "lags",
+  "heating",
+  "heat",
+  "drain",
+  "issue",
+  "issues",
+  "problem",
+  "problems",
+  "average",
+  "weak",
+  "worse",
+  "worst",
+  "disappointing",
+  "expensive",
+  "delay",
+  "delayed",
+];
+
+function countKeywordMatches(text, keywords) {
+  return keywords.reduce((count, keyword) => {
+    return text.includes(keyword) ? count + 1 : count;
+  }, 0);
+}
+
+function inferSentenceSentiment(text, ratingValue) {
+  const positiveHits = countKeywordMatches(text, POSITIVE_REVIEW_WORDS);
+  const negativeHits = countKeywordMatches(text, NEGATIVE_REVIEW_WORDS);
+
+  if (positiveHits > negativeHits) return 1;
+  if (negativeHits > positiveHits) return -1;
+  if (ratingValue >= 4) return 1;
+  if (ratingValue <= 2) return -1;
+  return 0;
+}
+
+function buildAspectSummary(aspect, sentiment, sentence) {
+  if (sentence) return sentence;
+  return sentiment > 0 ? aspect.positiveLabel : aspect.negativeLabel;
+}
+
+function summarizeReviews(reviews = []) {
+  if (!Array.isArray(reviews) || !reviews.length) return null;
+
+  const aspectScores = REVIEW_ASPECTS.reduce((acc, aspect) => {
+    acc[aspect.key] = {
+      ...aspect,
+      positiveScore: 0,
+      negativeScore: 0,
+      positiveMentions: 0,
+      negativeMentions: 0,
+      positiveSummary: aspect.positiveLabel,
+      negativeSummary: aspect.negativeLabel,
+    };
+    return acc;
+  }, {});
+
+  reviews.forEach((review) => {
+    const ratingValue = Number(review?.rating || 0);
+    const phrases = collectReviewPhrases(review);
+
+    phrases.forEach((phrase) => {
+      const lower = phrase.toLowerCase();
+      const sentiment = inferSentenceSentiment(lower, ratingValue);
+
+      REVIEW_ASPECTS.forEach((aspect) => {
+        const mentionsAspect = aspect.keywords.some((keyword) => lower.includes(keyword));
+        if (!mentionsAspect || sentiment === 0) return;
+
+        const aspectScore = aspectScores[aspect.key];
+        const weightedScore = 1 + Math.max(0, Math.abs(ratingValue - 3) * 0.25);
+
+        if (sentiment > 0) {
+          aspectScore.positiveScore += weightedScore;
+          aspectScore.positiveMentions += 1;
+          if (aspectScore.positiveSummary === aspect.positiveLabel) {
+            aspectScore.positiveSummary = buildAspectSummary(aspect, sentiment, phrase);
+          }
+          return;
+        }
+
+        aspectScore.negativeScore += weightedScore;
+        aspectScore.negativeMentions += 1;
+        if (aspectScore.negativeSummary === aspect.negativeLabel) {
+          aspectScore.negativeSummary = buildAspectSummary(aspect, sentiment, phrase);
+        }
+      });
+    });
+  });
+
+  const averageRating =
+    reviews.reduce((sum, review) => sum + Number(review?.rating || 0), 0) / reviews.length;
+
+  const rankedPros = Object.values(aspectScores)
+    .filter((aspect) => aspect.positiveMentions > 0 && aspect.positiveScore > aspect.negativeScore)
+    .sort((a, b) => b.positiveScore - a.positiveScore || b.positiveMentions - a.positiveMentions)
+    .slice(0, 2)
+    .map((aspect) => sentenceCase(aspect.positiveSummary || aspect.positiveLabel));
+
+  const rankedCons = Object.values(aspectScores)
+    .filter((aspect) => aspect.negativeMentions > 0 && aspect.negativeScore >= aspect.positiveScore)
+    .sort((a, b) => b.negativeScore - a.negativeScore || b.negativeMentions - a.negativeMentions)
+    .slice(0, 2)
+    .map((aspect) => sentenceCase(aspect.negativeSummary || aspect.negativeLabel));
+
+  if (!rankedPros.length) {
+    if (averageRating >= 4.2) rankedPros.push("Customers consistently praise the overall experience.");
+    else if (averageRating >= 3.5) rankedPros.push("Most buyers report a solid day-to-day experience.");
+  }
+
+  if (!rankedCons.length) {
+    if (averageRating < 3.5) rankedCons.push("Some buyers report a mixed experience.");
+    else if (reviews.length >= 3) rankedCons.push("A few reviews mention room for improvement.");
+    else rankedCons.push("Not enough repeat criticism to identify a clear downside yet.");
+  }
+
+  if (!rankedPros.length) {
+    rankedPros.push("Not enough review detail yet to identify a clear strength.");
+  }
+
+  return {
+    pros: rankedPros,
+    cons: rankedCons,
+  };
 }
 
 export default function ProductDetails() {
@@ -256,6 +479,8 @@ export default function ProductDetails() {
     }));
   }, [reviews, sortedReviews]);
 
+  const reviewSummary = useMemo(() => summarizeReviews(sortedReviews), [sortedReviews]);
+
   useEffect(() => {
     if (!existingUserReview) {
       setReviewRating(5);
@@ -393,7 +618,7 @@ export default function ProductDetails() {
             <p className="text-gray-600 mt-2">
               This product may be unavailable or the link is incorrect.
             </p>
-            <Link to="/products" className="inline-block mt-5 text-indigo-600 font-bold">
+            <Link to="/products" className="inline-block mt-5 font-bold text-slate-800 hover:text-amber-700 dark:text-slate-200 dark:hover:text-amber-300">
               ← Back to products
             </Link>
           </div>
@@ -447,7 +672,7 @@ export default function ProductDetails() {
                         key={`${u}-${idx}`}
                         onClick={() => setActiveImg(u)}
                         className={`h-20 w-20 flex-shrink-0 rounded-2xl border overflow-hidden transition ${
-                          isActive ? "ring-2 ring-indigo-500" : "hover:shadow-sm"
+                          isActive ? "ring-2 ring-amber-500/70 dark:ring-cyan-400" : "hover:shadow-sm"
                         }`}
                         title="View image"
                       >
@@ -551,7 +776,7 @@ export default function ProductDetails() {
                 <div className="mt-5 flex items-end justify-between">
                   <div>
                     <p className="text-sm text-gray-500 font-semibold">Price</p>
-                    <p className="text-3xl font-extrabold text-indigo-600">{money(price)}</p>
+                    <p className="text-3xl font-extrabold text-slate-900 dark:text-amber-200">{money(price)}</p>
                   </div>
 
                   <div className="text-right">
@@ -569,21 +794,21 @@ export default function ProductDetails() {
                 </div>
 
                 <div className="mt-6 grid grid-cols-2 gap-2">
-                  <div className="rounded-2xl border bg-gray-50 p-3">
+                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
                     <p className="text-[11px] text-gray-500 font-semibold">Brand</p>
                     <p className="text-sm text-gray-900 font-extrabold">{brandName || "N/A"}</p>
                   </div>
-                  <div className="rounded-2xl border bg-gray-50 p-3">
+                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
                     <p className="text-[11px] text-gray-500 font-semibold">Category</p>
                     <p className="text-sm text-gray-900 font-extrabold">{catName || "N/A"}</p>
                   </div>
-                  <div className="rounded-2xl border bg-gray-50 p-3">
+                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
                     <p className="text-[11px] text-gray-500 font-semibold">Warranty</p>
                     <p className="text-sm text-gray-900 font-extrabold">
                       {product?.warrantyMonths ? `${product.warrantyMonths} months` : "Standard"}
                     </p>
                   </div>
-                  <div className="rounded-2xl border bg-gray-50 p-3">
+                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
                     <p className="text-[11px] text-gray-500 font-semibold">SKU</p>
                     <p className="text-sm text-gray-900 font-extrabold">
                       {selectedVariant?.sku || "Auto"}
@@ -620,8 +845,8 @@ export default function ProductDetails() {
                                   onClick={() => onSelectAttribute(key, value)}
                                   className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                                     active
-                                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                                      : "bg-white hover:bg-gray-50 text-gray-800"
+                                      ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-cyan-400 dark:bg-cyan-500/15 dark:text-cyan-200"
+                                      : "bg-white text-gray-800 hover:bg-gray-50 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                                   } ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
                                 >
                                   {value}
@@ -652,8 +877,8 @@ export default function ProductDetails() {
                             onClick={() => onSelectVariant(v)}
                             className={`text-left rounded-2xl border px-4 py-3 transition ${
                               active
-                                ? "border-indigo-600 ring-2 ring-indigo-200 bg-indigo-50"
-                                : "bg-white hover:bg-gray-50"
+                                ? "border-amber-300 ring-2 ring-amber-200 bg-amber-50 dark:border-cyan-400 dark:ring-cyan-500/30 dark:bg-cyan-500/10"
+                                : "bg-white hover:bg-gray-50 dark:bg-slate-900 dark:hover:bg-slate-800"
                             } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                             title={disabled ? "Out of stock" : "Select variant"}
                           >
@@ -676,9 +901,9 @@ export default function ProductDetails() {
                 {/* Quantity */}
                 <div className="mt-6 flex items-center justify-between gap-3">
                   <p className="text-sm font-extrabold text-gray-900">Quantity</p>
-                  <div className="flex items-center rounded-2xl border bg-white overflow-hidden">
+                  <div className="flex items-center rounded-2xl border bg-white overflow-hidden dark:bg-slate-900">
                     <button
-                      className="px-4 py-2 hover:bg-gray-50"
+                      className="px-4 py-2 text-gray-900 hover:bg-gray-50 dark:text-slate-100 dark:hover:bg-slate-800"
                       onClick={() => setQty((q) => clamp(q - 1, 1, stock || 999))}
                     >
                       −
@@ -690,10 +915,10 @@ export default function ProductDetails() {
                         if (!Number.isFinite(v)) return;
                         setQty(clamp(v, 1, stock || 999));
                       }}
-                      className="w-16 text-center py-2 outline-none font-bold"
+                      className="w-16 bg-transparent py-2 text-center font-bold text-gray-900 outline-none dark:text-slate-100"
                     />
                     <button
-                      className="px-4 py-2 hover:bg-gray-50"
+                      className="px-4 py-2 text-gray-900 hover:bg-gray-50 dark:text-slate-100 dark:hover:bg-slate-800"
                       onClick={() => setQty((q) => clamp(q + 1, 1, stock || 999))}
                     >
                       +
@@ -706,13 +931,13 @@ export default function ProductDetails() {
                   <button
                     onClick={addToCart}
                     disabled={variants.length ? outOfStock : false}
-                    className="rounded-2xl px-5 py-3 font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                    className="rounded-2xl bg-slate-900 px-5 py-3 font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
                   >
                     Add to Cart
                   </button>
                   <Link
                     to="/products"
-                    className="rounded-2xl px-5 py-3 font-extrabold border bg-white hover:bg-gray-50 text-center"
+                    className="rounded-2xl border bg-white px-5 py-3 text-center font-extrabold hover:bg-gray-50 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
                   >
                     Back
                   </Link>
@@ -763,7 +988,7 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            <div className="flex-1 rounded-3xl border bg-gray-50 p-5">
+            <div className="flex-1 rounded-3xl border bg-gray-50 p-5 dark:bg-slate-950">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-extrabold text-gray-900">
@@ -776,7 +1001,7 @@ export default function ProductDetails() {
                 {!currentUser ? (
                   <Link
                     to="/login"
-                    className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                    className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
                   >
                     Login to review
                   </Link>
@@ -805,7 +1030,7 @@ export default function ProductDetails() {
                     maxLength={120}
                     placeholder="Summarize your experience"
                     disabled={!currentUser || reviewSubmitting}
-                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-60"
+                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
                   />
                 </div>
 
@@ -817,7 +1042,7 @@ export default function ProductDetails() {
                     rows={5}
                     placeholder="How is the product in real use?"
                     disabled={!currentUser || reviewSubmitting}
-                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-60"
+                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
                   />
                 </div>
 
@@ -827,7 +1052,7 @@ export default function ProductDetails() {
                 <button
                   type="submit"
                   disabled={!currentUser || reviewSubmitting}
-                  className="rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
                 >
                   {reviewSubmitting ? "Submitting..." : existingUserReview ? "Update Review" : "Post Review"}
                 </button>
@@ -836,21 +1061,50 @@ export default function ProductDetails() {
           </div>
 
           <div className="mt-8 border-t pt-8">
-            <h3 className="text-xl font-extrabold text-gray-900">Customer comments</h3>
+            {reviewSummary ? (
+              <div className="rounded-3xl border bg-gradient-to-br from-slate-50 via-white to-amber-50 p-5 shadow-sm dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full bg-gray-900 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">
+                    AI Review Summarizer
+                  </span>
+                  <p className="text-sm font-semibold text-gray-500">
+                    Snapshot from recent customer reviews
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+                    <p className="text-sm font-extrabold text-emerald-800 dark:text-emerald-300">Pros</p>
+                    <p className="mt-2 text-sm leading-6 text-emerald-950 dark:text-emerald-100">
+                      {reviewSummary.pros.join(" ")}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4 dark:border-rose-900/60 dark:bg-rose-950/30">
+                    <p className="text-sm font-extrabold text-rose-800 dark:text-rose-300">Cons</p>
+                    <p className="mt-2 text-sm leading-6 text-rose-950 dark:text-rose-100">
+                      {reviewSummary.cons.join(" ")}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <h3 className={`text-xl font-extrabold text-gray-900 ${reviewSummary ? "mt-6" : ""}`}>
+              Customer comments
+            </h3>
             {!sortedReviews.length ? (
-              <div className="mt-4 rounded-2xl border border-dashed bg-gray-50 p-6 text-sm text-gray-500">
+              <div className="mt-4 rounded-2xl border border-dashed bg-gray-50 p-6 text-sm text-gray-500 dark:bg-slate-950">
                 No reviews yet. Be the first to comment on this product.
               </div>
             ) : (
               <div className="mt-5 space-y-4">
                 {sortedReviews.map((review) => (
-                  <article key={review._id} className="rounded-3xl border bg-white p-5">
+                  <article key={review._id} className="rounded-3xl border bg-white p-5 dark:bg-slate-900">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-base font-extrabold text-gray-900">{review.name}</p>
                           {review.verifiedPurchase ? (
-                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
                               Verified Purchase
                             </span>
                           ) : null}
@@ -925,7 +1179,7 @@ function RelatedProducts({ categoryId, currentSlug }) {
               </div>
               <div className="mt-2">
                 <p className="text-sm font-bold text-gray-900 line-clamp-2">{p.name}</p>
-                <p className="text-sm font-extrabold text-indigo-600">{money(price)}</p>
+                <p className="text-sm font-extrabold text-slate-900 dark:text-amber-200">{money(price)}</p>
               </div>
             </Link>
           );

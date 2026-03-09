@@ -231,6 +231,7 @@ const createOrderFromCartForUser = async ({
   couponCode,
   paymentProvider,
   deliveryOption,
+  visitorKey,
   session,
 }) => {
   const user = await User.findById(userId).session(session);
@@ -357,6 +358,9 @@ const createOrderFromCartForUser = async ({
         appliedFreeShipping: shippingQuote.appliedFreeShipping,
         freeShippingThreshold: shippingQuote.freeShippingThreshold,
       },
+    },
+    analytics: {
+      visitorKey: String(visitorKey || "").trim(),
     },
   }], { session });
 

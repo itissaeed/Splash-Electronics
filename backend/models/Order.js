@@ -92,10 +92,14 @@ const orderSchema = new mongoose.Schema({
   },
 
   notes: String,
+  analytics: {
+    visitorKey: { type: String, default: "" },
+  },
 }, { timestamps: true });
 
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ "analytics.visitorKey": 1, createdAt: -1 });
 // Region analytics
 orderSchema.index({ "shippingAddress.division": 1, "shippingAddress.district": 1, createdAt: -1 });
 

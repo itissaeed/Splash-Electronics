@@ -1,11 +1,13 @@
 // controllers/productController.js
 const Product = require("../models/Product");
+const ProductView = require("../models/ProductView");
 const Category = require("../models/Category");
 const Brand = require("../models/Brand");
 const Order = require("../models/Order");
 const mongoose = require("mongoose");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
+const { getVisitorKey } = require("../utils/visitorKey");
 
 // helper: safe number parsing
 const toNum = (v, def) => {
@@ -40,6 +42,24 @@ const assertUniqueSkus = (variants = []) => {
 };
 
 const roundToTenth = (value) => Math.round(value * 10) / 10;
+
+const recordProductView = async ({ product, req }) => {
+  const visitorKey = getVisitorKey(req);
+  if (!visitorKey || !product?._id) return;
+
+  const viewedAt = new Date();
+  product.viewCount = Number(product.viewCount || 0) + 1;
+  product.lastViewedAt = viewedAt;
+
+  await Promise.all([
+    product.save(),
+    ProductView.create({
+      product: product._id,
+      visitorKey,
+      viewedAt,
+    }),
+  ]);
+};
 
 const updateReviewMetrics = (product) => {
   const totalReviews = product.reviews.length;
@@ -147,6 +167,7 @@ exports.getProductById = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
+    await recordProductView({ product, req });
     res.json(product);
   } catch (error) {
     console.error("getProductById Error:", error);
@@ -163,6 +184,7 @@ exports.getProductBySlug = async (req, res) => {
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
+    await recordProductView({ product, req });
     res.json(product);
   } catch (error) {
     console.error("getProductBySlug Error:", error);

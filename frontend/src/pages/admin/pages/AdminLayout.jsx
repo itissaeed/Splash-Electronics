@@ -82,7 +82,7 @@ export default function AdminLayout() {
     `flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition
      ${
        isActive
-         ? "bg-white text-slate-950 shadow-[0_12px_30px_rgba(8,15,30,0.18)] ring-1 ring-white/60"
+         ? "bg-[rgba(255,255,255,0.96)] text-slate-950 shadow-[0_12px_30px_rgba(8,15,30,0.18)] ring-1 ring-white/60"
          : "text-slate-200/88 hover:bg-white/10 hover:text-white"
      }`;
 

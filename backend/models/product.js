@@ -46,6 +46,8 @@ const productSchema = new mongoose.Schema({
   rating: { type: Number, required: true, default: 0 },
   numReviews: { type: Number, required: true, default: 0 },
   reviews: [reviewSchema],
+  viewCount: { type: Number, required: true, default: 0 },
+  lastViewedAt: { type: Date },
 
   isFeatured: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },

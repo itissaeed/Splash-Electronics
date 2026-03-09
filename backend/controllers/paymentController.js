@@ -9,6 +9,7 @@ const {
 } = require("../services/orderService");
 const { validateShippingPayload } = require("../utils/shippingValidation");
 const { releaseExpiredReservations } = require("../services/stockReservationService");
+const { getVisitorKey } = require("../utils/visitorKey");
 
 const postForm = (urlString, payload) =>
   new Promise((resolve, reject) => {
@@ -98,6 +99,7 @@ exports.initSslCommerz = async (req, res) => {
       paymentProvider: "sslcommerz",
       couponCode,
       deliveryOption: validation.deliveryOption,
+      visitorKey: getVisitorKey(req),
       session,
     });
 
