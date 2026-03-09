@@ -1202,7 +1202,7 @@ export default function AdminProducts() {
       )}
 
       {/* Filters */}
-      <div className="bg-white border rounded-2xl p-4">
+      <div className="premium-card rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
           <div className="md:col-span-2 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -1265,7 +1265,7 @@ export default function AdminProducts() {
       </div>
 
       {/* Table */}
-      <div className="bg-white border rounded-2xl overflow-hidden">
+      <div className="premium-card rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div className="text-sm text-gray-600">
             Showing <span className="font-semibold">{filteredProducts.length}</span> of{" "}
@@ -1630,7 +1630,7 @@ export default function AdminProducts() {
               </div>
 
               {/* Variants */}
-              <div className="rounded-2xl border p-4">
+              <div className="premium-card rounded-2xl p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-extrabold text-gray-900">Variants</div>
@@ -1652,7 +1652,7 @@ export default function AdminProducts() {
 
                 <div className="mt-4 space-y-4">
                   {variants.map((v, idx) => (
-                    <div key={v._id || idx} className="rounded-2xl border p-4">
+                    <div key={v._id || idx} className="premium-card rounded-2xl p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="font-semibold text-gray-900">
                           Variant #{idx + 1}{" "}
@@ -1771,7 +1771,7 @@ export default function AdminProducts() {
               </div>
 
               {/* Upload images per variant */}
-              <div className="rounded-2xl border p-4">
+              <div className="premium-card rounded-2xl p-4">
                 <div className="flex items-center gap-2 font-extrabold text-gray-900">
                   <ImageIcon size={18} /> Upload Variant Images
                 </div>
@@ -1781,7 +1781,7 @@ export default function AdminProducts() {
 
                 <div className="mt-4 space-y-3">
                   {variants.map((v, idx) => (
-                    <div key={v._id || idx} className="rounded-2xl border p-4">
+                    <div key={v._id || idx} className="premium-card rounded-2xl p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="font-extrabold text-gray-900">

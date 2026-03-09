@@ -3,8 +3,10 @@ const mongoose = require("mongoose");
 
 const reviewSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  title: { type: String, trim: true, default: "" },
   rating: { type: Number, required: true, min: 1, max: 5 },
   comment: { type: String, required: true },
+  verifiedPurchase: { type: Boolean, default: false },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 }, { timestamps: true });
 
@@ -44,6 +46,8 @@ const productSchema = new mongoose.Schema({
   rating: { type: Number, required: true, default: 0 },
   numReviews: { type: Number, required: true, default: 0 },
   reviews: [reviewSchema],
+  viewCount: { type: Number, required: true, default: 0 },
+  lastViewedAt: { type: Date },
 
   isFeatured: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },

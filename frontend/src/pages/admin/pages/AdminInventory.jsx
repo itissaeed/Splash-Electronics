@@ -323,12 +323,12 @@ export default function AdminInventory() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard label="Total SKUs" value={nice(metrics?.totalSkus ?? 0)} hint="Active variants tracked" accent="bg-cyan-400/40" />
         <StatCard label="Units In Stock" value={nice(metrics?.totalUnitsInStock ?? 0)} hint="Across all active products" accent="bg-emerald-400/40" />
-        <StatCard label="Stock Value" value={money(metrics?.totalStockValue ?? 0)} hint="Based on sell prices" accent="bg-amber-400/40" />
+        <StatCard label="Stock Value" value={money(metrics?.totalStockValue ?? 0)} hint="Based on sell prices" accent="bg-sky-400/40" />
         <StatCard
           label={`Low Stock <= ${threshold}`}
           value={`${nice(metrics?.lowStockCount ?? 0)} variants`}
           hint={`${nice(totalLowStockUnits)} units within low-stock group`}
-          accent="bg-orange-400/40"
+          accent="bg-teal-400/40"
         />
       </div>
 

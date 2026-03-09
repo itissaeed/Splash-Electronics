@@ -22,6 +22,8 @@ function LoadingState() {
 export default function Cart() {
   const [cart, setCart] = useState(null);
   const [couponCode, setCouponCode] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponStatus, setCouponStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -87,15 +89,45 @@ export default function Cart() {
     }
   };
 
-  const goCheckout = () => {
+  const applyCoupon = async () => {
     const code = couponCode.trim();
+    if (!code) {
+      setCouponStatus(null);
+      return;
+    }
+
+    try {
+      setCouponLoading(true);
+      const { data } = await api.post(
+        "/orders/validate-coupon",
+        { couponCode: code },
+        { headers: tokenHeader() }
+      );
+      setCouponStatus({
+        valid: true,
+        message: `${data?.coupon?.code || code} applied successfully.`,
+        coupon: data?.coupon || null,
+        totals: data?.totals || null,
+      });
+    } catch (e) {
+      setCouponStatus({
+        valid: false,
+        message: e?.response?.data?.message || "Coupon could not be applied.",
+      });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const goCheckout = () => {
+    const code = couponStatus?.valid ? couponStatus?.coupon?.code || couponCode.trim() : couponCode.trim();
     navigate("/checkout", { state: { couponCode: code || "" } });
   };
 
   if (loading) return <LoadingState />;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="page-ambient min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <section className="rounded-3xl border border-cyan-900/20 bg-gradient-to-r from-sky-900 via-cyan-800 to-sky-900 text-white shadow-xl">
           <div className="p-6 sm:p-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -136,7 +168,7 @@ export default function Cart() {
         </div>
 
         {!cart?.items?.length ? (
-          <section className="mt-6 rounded-3xl border bg-white p-10 text-center shadow-sm">
+          <section className="premium-card mt-6 rounded-3xl p-10 text-center">
             <div className="mx-auto h-16 w-16 rounded-2xl bg-cyan-50 border border-cyan-100" />
             <h2 className="mt-4 text-xl font-extrabold text-gray-900">Your cart is empty</h2>
             <p className="mt-2 text-sm text-gray-500">Find something you love and it will appear here.</p>
@@ -149,7 +181,7 @@ export default function Cart() {
           </section>
         ) : (
           <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <section className="lg:col-span-2 rounded-3xl border bg-white shadow-sm overflow-hidden">
+            <section className="premium-card lg:col-span-2 rounded-3xl overflow-hidden">
               <div className="border-b px-5 py-4 font-extrabold text-gray-900">Cart items</div>
               <div className="divide-y">
                 {cart.items.map((it) => {
@@ -211,7 +243,7 @@ export default function Cart() {
               </div>
             </section>
 
-            <aside className="rounded-3xl border bg-white p-5 shadow-sm h-fit lg:sticky lg:top-24">
+            <aside className="premium-card rounded-3xl p-5 h-fit lg:sticky lg:top-24">
               <div className="text-lg font-extrabold text-gray-900">Order summary</div>
 
               <div className="mt-4 space-y-2 text-sm">
@@ -223,9 +255,19 @@ export default function Cart() {
                   <span className="text-gray-600">Shipping</span>
                   <span className="font-bold text-gray-900">{money(0)}</span>
                 </div>
+                {couponStatus?.valid && couponStatus?.totals?.discountTotal > 0 ? (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Discount</span>
+                    <span className="font-bold text-green-700">
+                      -{money(couponStatus.totals.discountTotal)}
+                    </span>
+                  </div>
+                ) : null}
                 <div className="pt-3 mt-3 border-t flex justify-between">
                   <span className="font-extrabold text-gray-900">Estimated total</span>
-                  <span className="font-extrabold text-cyan-700">{money(itemsTotal)}</span>
+                  <span className="font-extrabold text-cyan-700">
+                    {money(couponStatus?.valid ? couponStatus?.totals?.grandTotal : itemsTotal)}
+                  </span>
                 </div>
               </div>
 
@@ -233,11 +275,51 @@ export default function Cart() {
                 <label className="text-sm font-semibold text-gray-700">Coupon code</label>
                 <input
                   value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value);
+                    setCouponStatus(null);
+                  }}
                   placeholder="e.g. SAVE200"
                   className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-200"
                 />
-                <p className="mt-2 text-xs text-gray-500">Coupon will be validated at checkout.</p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={applyCoupon}
+                    disabled={couponLoading || !couponCode.trim()}
+                    className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-2 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50"
+                  >
+                    {couponLoading ? "Checking..." : "Apply"}
+                  </button>
+                  {couponStatus?.valid ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCouponCode("");
+                        setCouponStatus(null);
+                      }}
+                      className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                {couponStatus ? (
+                  <p
+                    className={`mt-2 text-xs font-semibold ${
+                      couponStatus.valid ? "text-green-700" : "text-red-600"
+                    }`}
+                  >
+                    {couponStatus.message}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-500">Apply a code here to preview the discount.</p>
+                )}
+                {couponStatus?.valid && couponStatus?.totals ? (
+                  <div className="mt-3 rounded-2xl border border-green-100 bg-green-50 p-3 text-xs text-green-900">
+                    Estimated discount: {money(couponStatus.totals.discountTotal)}
+                  </div>
+                ) : null}
               </div>
 
               <button

@@ -390,10 +390,10 @@ export default function Home() {
       </header>
 
       {/* MAIN */}
-      <main className="bg-gray-50">
+      <main className="page-ambient">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
           {/* HERO */}
-          <section className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 text-white shadow-xl">
+          <section className="relative overflow-hidden rounded-3xl border border-white/40 bg-gradient-to-br from-[#08111f] via-[#0f3556] to-[#126b78] text-white shadow-xl">
             <div className="p-8 sm:p-12">
               <div className="max-w-2xl">
                 <p className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
@@ -415,7 +415,7 @@ export default function Home() {
                   </Link>
                   <Link
                     to="/advisor"
-                    className="rounded-xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-300 transition"
+                    className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-200 transition"
                   >
                     Help me choose
                   </Link>
@@ -429,21 +429,21 @@ export default function Home() {
 
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
-                    <FaMoneyBillWave />
+                    <FaMoneyBillWave className="text-cyan-200" />
                     <div>
                       <div className="text-sm font-semibold">Cash on Delivery</div>
                       <div className="text-xs text-white/80">Easy checkout</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
-                    <FaShieldAlt />
+                    <FaShieldAlt className="text-cyan-200" />
                     <div>
                       <div className="text-sm font-semibold">Warranty Support</div>
                       <div className="text-xs text-white/80">Genuine products</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4 ring-1 ring-white/20">
-                    <FaTruck />
+                    <FaTruck className="text-emerald-200" />
                     <div>
                       <div className="text-sm font-semibold">Fast Delivery</div>
                       <div className="text-xs text-white/80">Nationwide</div>
@@ -467,7 +467,7 @@ export default function Home() {
             </div>
 
             <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-              <Link to="/products" className="group rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition">
+              <Link to="/products" className="premium-card premium-card-hover group rounded-2xl p-4">
                 <div className="h-1 w-10 rounded-full bg-gradient-to-r from-indigo-500 to-fuchsia-500 mb-3" />
                 <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition">All</div>
                 <div className="mt-1 text-xs text-gray-500">Browse everything</div>
@@ -479,7 +479,7 @@ export default function Home() {
                     <Link
                       key={cat._id || cat.slug || cat.name}
                       to={`/products?category=${encodeURIComponent(cat.slug || cat.name)}`}
-                      className="group rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition"
+                      className="premium-card premium-card-hover group rounded-2xl p-4"
                     >
                       <div className="h-1 w-10 rounded-full bg-gradient-to-r from-indigo-500 to-fuchsia-500 mb-3" />
                       <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-600 transition">
@@ -518,7 +518,7 @@ export default function Home() {
                     <Link
                       key={productKey}
                       to={url}
-                      className="group rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition"
+                      className="premium-card premium-card-hover group rounded-2xl p-4"
                     >
                       <div className="relative overflow-hidden rounded-xl bg-gray-50">
                         <img
@@ -558,14 +558,14 @@ export default function Home() {
               <FaPhone className="mr-3" />
               <div>
                 <p className="text-xs">{supportHours}</p>
-                <p className="text-orange-500 font-bold text-lg">{supportPhone}</p>
+                <p className="text-cyan-300 font-bold text-lg">{supportPhone}</p>
               </div>
             </div>
             <div className="flex items-center">
               <FaMapMarkerAlt className="mr-3" />
               <div>
                 <p className="text-xs">Store Address</p>
-                <p className="text-orange-500 font-semibold">{addressText}</p>
+                <p className="text-cyan-300 font-semibold">{addressText}</p>
               </div>
             </div>
           </div>
@@ -596,7 +596,7 @@ export default function Home() {
             <h3 className="text-white text-sm font-semibold mb-4">STAY CONNECTED</h3>
             <p className="text-sm font-bold">{storeName}</p>
             <p className="text-xs text-gray-400">{addressText}</p>
-            <p className="mt-2 text-orange-500 font-semibold">{supportEmail}</p>
+            <p className="mt-2 text-cyan-300 font-semibold">{supportEmail}</p>
           </div>
         </div>
       </footer>

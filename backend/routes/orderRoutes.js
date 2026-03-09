@@ -4,6 +4,7 @@ const { protect, admin } = require("../middleware/authMiddleware");
 
 const {
   createOrderFromCart,
+  validateCoupon,
   getMyOrders,
   getOrderByOrderNo,
   adminGetOrders,
@@ -14,6 +15,7 @@ const {
 } = require("../controllers/orderController");
 
 router.post("/", protect, createOrderFromCart);
+router.post("/validate-coupon", protect, validateCoupon);
 router.get("/my", protect, getMyOrders);
 router.post("/:orderNo/cancel", protect, cancelMyOrder);
 router.post("/:orderNo/confirm-delivery", protect, confirmMyDelivery);

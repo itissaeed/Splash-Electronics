@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useContext, useEffect, useRef } from "react";
+import React, { useMemo, useState, useContext, useEffect, useRef, useCallback } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../../utils/api";
 import { UserContext } from "../context/UserContext";
@@ -11,7 +11,7 @@ const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 export default function Checkout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const couponCode = location?.state?.couponCode || "";
+  const initialCouponCode = location?.state?.couponCode || "";
   const { user } = useContext(UserContext);
 
   const [shippingAddress, setShippingAddress] = useState({
@@ -33,6 +33,9 @@ export default function Checkout() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState("");
+  const [couponCode, setCouponCode] = useState(initialCouponCode);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponState, setCouponState] = useState(null);
   const formRef = useRef(null);
 
   const districts = useMemo(
@@ -133,6 +136,58 @@ export default function Checkout() {
     loadQuote();
   }, [shippingAddress.division, shippingAddress.district, cartTotals.itemsTotal, deliveryOption]);
 
+  const validateCouponCode = useCallback(async (codeOverride) => {
+    const code = String(codeOverride ?? couponCode).trim();
+    if (!code) {
+      setCouponState(null);
+      return null;
+    }
+
+    try {
+      setCouponLoading(true);
+      const { data } = await api.post(
+        "/orders/validate-coupon",
+        {
+          couponCode: code,
+          shippingAddress,
+          deliveryOption,
+        },
+        { headers: tokenHeader() }
+      );
+
+      const nextState = {
+        valid: true,
+        message: `${data?.coupon?.code || code} applied successfully.`,
+        coupon: data?.coupon || null,
+        totals: data?.totals || null,
+      };
+      setCouponState(nextState);
+      return nextState;
+    } catch (err) {
+      const nextState = {
+        valid: false,
+        message: err?.response?.data?.message || "Coupon could not be applied.",
+      };
+      setCouponState(nextState);
+      return nextState;
+    } finally {
+      setCouponLoading(false);
+    }
+  }, [couponCode, shippingAddress, deliveryOption]);
+
+  useEffect(() => {
+    if (!couponCode.trim()) {
+      setCouponState(null);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      validateCouponCode();
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [couponCode, shippingAddress.division, shippingAddress.district, deliveryOption, cartTotals.itemsTotal, validateCouponCode]);
+
   const canSubmit = useMemo(() => {
     const hasValidPhone = BD_PHONE_REGEX.test(shippingAddress.phone.trim());
     return (
@@ -145,6 +200,18 @@ export default function Checkout() {
       !loading
     );
   }, [shippingAddress, quoteLoading, loading]);
+
+  const discountTotal = Number(couponState?.valid ? couponState?.totals?.discountTotal : 0);
+  const shippingFee = Number(
+    couponState?.valid
+      ? couponState?.totals?.shippingFee
+      : shippingQuote?.shippingFee || 0
+  );
+  const grandTotal = Number(
+    couponState?.valid
+      ? couponState?.totals?.grandTotal
+      : cartTotals.itemsTotal + shippingFee
+  );
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -182,7 +249,7 @@ export default function Checkout() {
           {
             shippingAddress,
             deliveryOption,
-            couponCode: couponCode || undefined,
+            couponCode: couponState?.valid ? couponState?.coupon?.code || couponCode : undefined,
           },
           { headers: tokenHeader() }
         );
@@ -200,7 +267,7 @@ export default function Checkout() {
             shippingAddress,
             paymentMethod,
             deliveryOption,
-            couponCode: couponCode || undefined,
+            couponCode: couponState?.valid ? couponState?.coupon?.code || couponCode : undefined,
           },
           { headers: tokenHeader() }
         );
@@ -239,9 +306,9 @@ export default function Checkout() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 relative overflow-hidden">
+    <div className="page-ambient min-h-screen relative overflow-hidden">
       <div className="absolute -top-24 -right-20 h-72 w-72 rounded-full bg-cyan-200/40 blur-3xl" />
-      <div className="absolute top-40 -left-16 h-80 w-80 rounded-full bg-amber-200/40 blur-3xl" />
+      <div className="absolute top-40 -left-16 h-80 w-80 rounded-full bg-teal-200/40 blur-3xl" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
         <div className="rounded-3xl border border-cyan-900/10 bg-gradient-to-r from-slate-900 via-cyan-900 to-slate-900 p-6 sm:p-8 text-white shadow-xl">
@@ -290,7 +357,7 @@ export default function Checkout() {
             ref={formRef}
             onSubmit={placeOrder}
             onKeyDown={handleFormKeyDown}
-            className="bg-white border rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm"
+            className="premium-card rounded-3xl p-6 sm:p-8 space-y-6"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -461,10 +528,48 @@ export default function Checkout() {
                   <div className="text-xs uppercase tracking-[0.25em] text-cyan-700">Step 2</div>
                   <div className="mt-2 text-lg font-extrabold text-gray-900">Delivery option</div>
                 </div>
-                {couponCode && (
-                  <div className="rounded-2xl bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                    Coupon applied: {couponCode}
+                {couponState?.valid ? (
+                  <div className="rounded-2xl bg-green-50 px-3 py-2 text-xs font-semibold text-green-700">
+                    Coupon applied: {couponState?.coupon?.code || couponCode}
                   </div>
+                ) : null}
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">
+                  Coupon code
+                </label>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value);
+                      setCouponState(null);
+                    }}
+                    placeholder="Enter coupon code"
+                    className="flex-1 rounded-2xl border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => validateCouponCode()}
+                    disabled={couponLoading || !couponCode.trim()}
+                    className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-2.5 text-sm font-semibold text-cyan-700 hover:bg-cyan-100 disabled:opacity-50"
+                  >
+                    {couponLoading ? "Checking..." : "Apply"}
+                  </button>
+                </div>
+                {couponState ? (
+                  <p
+                    className={`mt-2 text-sm font-semibold ${
+                      couponState.valid ? "text-green-700" : "text-red-600"
+                    }`}
+                  >
+                    {couponState.message}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    Valid coupons update your order total before payment.
+                  </p>
                 )}
               </div>
 
@@ -564,7 +669,7 @@ export default function Checkout() {
           </form>
 
           <aside className="space-y-4">
-            <div className="rounded-3xl border bg-white p-5 shadow-sm">
+            <div className="premium-card rounded-3xl p-5">
               <div className="text-sm font-semibold text-gray-700">Delivering to</div>
               <div className="mt-2 text-lg font-extrabold text-gray-900">
                 {shippingAddress.district || "Select district"}
@@ -587,16 +692,20 @@ export default function Checkout() {
                   <span>
                     {quoteLoading
                       ? "Calculating..."
-                      : shippingQuote
-                      ? money(shippingQuote.shippingFee)
+                      : shippingAddress.division
+                      ? money(shippingFee)
                       : "Select division"}
                   </span>
                 </div>
+                {discountTotal > 0 ? (
+                  <div className="flex items-center justify-between text-green-700">
+                    <span>Coupon discount</span>
+                    <span>-{money(discountTotal)}</span>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between font-bold text-gray-900">
                   <span>Estimated total</span>
-                  <span>
-                    {money(cartTotals.itemsTotal + Number(shippingQuote?.shippingFee || 0))}
-                  </span>
+                  <span>{money(grandTotal)}</span>
                 </div>
                 {shippingQuote && (
                   <div className="text-xs text-gray-500 pt-1">
@@ -606,7 +715,7 @@ export default function Checkout() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-cyan-900/10 bg-gradient-to-br from-cyan-50 via-white to-amber-50 p-5">
+            <div className="rounded-3xl border border-cyan-900/10 bg-gradient-to-br from-cyan-50 via-white to-teal-50 p-5">
               <div className="text-xs uppercase tracking-[0.25em] text-cyan-700">Why choose us</div>
               <ul className="mt-3 space-y-2 text-sm text-gray-700">
                 <li>Verified tech products and warranty support.</li>

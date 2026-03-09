@@ -1,10 +1,13 @@
 // controllers/productController.js
 const Product = require("../models/Product");
+const ProductView = require("../models/ProductView");
 const Category = require("../models/Category");
 const Brand = require("../models/Brand");
+const Order = require("../models/Order");
 const mongoose = require("mongoose");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
+const { getVisitorKey } = require("../utils/visitorKey");
 
 // helper: safe number parsing
 const toNum = (v, def) => {
@@ -36,6 +39,39 @@ const assertUniqueSkus = (variants = []) => {
     }
     seen.add(key);
   }
+};
+
+const roundToTenth = (value) => Math.round(value * 10) / 10;
+
+const recordProductView = async ({ product, req }) => {
+  const visitorKey = getVisitorKey(req);
+  if (!visitorKey || !product?._id) return;
+
+  const viewedAt = new Date();
+  product.viewCount = Number(product.viewCount || 0) + 1;
+  product.lastViewedAt = viewedAt;
+
+  await Promise.all([
+    product.save(),
+    ProductView.create({
+      product: product._id,
+      visitorKey,
+      viewedAt,
+    }),
+  ]);
+};
+
+const updateReviewMetrics = (product) => {
+  const totalReviews = product.reviews.length;
+  product.numReviews = totalReviews;
+
+  if (!totalReviews) {
+    product.rating = 0;
+    return;
+  }
+
+  const totalRating = product.reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0);
+  product.rating = roundToTenth(totalRating / totalReviews);
 };
 
 // --- Public: GET /api/products (pagination + filters) ---
@@ -131,6 +167,7 @@ exports.getProductById = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
+    await recordProductView({ product, req });
     res.json(product);
   } catch (error) {
     console.error("getProductById Error:", error);
@@ -147,6 +184,7 @@ exports.getProductBySlug = async (req, res) => {
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
+    await recordProductView({ product, req });
     res.json(product);
   } catch (error) {
     console.error("getProductBySlug Error:", error);
@@ -310,6 +348,67 @@ exports.getFeaturedProducts = async (req, res) => {
  * - single upload: req.file (multer.single("image"))
  * - multiple upload: req.files (multer.array("images") OR multer.array("image"))
  */
+// --- Protected: POST /api/products/:id/reviews ---
+exports.createProductReview = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product || product.isActive === false) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const rating = Number(req.body?.rating);
+    const title = String(req.body?.title || "").trim();
+    const comment = String(req.body?.comment || "").trim();
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: "Rating must be an integer between 1 and 5" });
+    }
+
+    if (!comment) {
+      return res.status(400).json({ message: "Comment is required" });
+    }
+
+    const verifiedPurchase = await Order.exists({
+      user: req.user._id,
+      status: "delivered",
+      "items.product": product._id,
+    });
+
+    const existingReview = product.reviews.find(
+      (review) => String(review.user) === String(req.user._id)
+    );
+
+    if (existingReview) {
+      existingReview.name = req.user.name;
+      existingReview.title = title;
+      existingReview.rating = rating;
+      existingReview.comment = comment;
+      existingReview.verifiedPurchase = Boolean(verifiedPurchase);
+    } else {
+      product.reviews.push({
+        name: req.user.name,
+        title,
+        rating,
+        comment,
+        verifiedPurchase: Boolean(verifiedPurchase),
+        user: req.user._id,
+      });
+    }
+
+    updateReviewMetrics(product);
+    await product.save();
+
+    const freshProduct = await Product.findById(product._id)
+      .populate("category", "name slug parent")
+      .populate("brand", "name slug");
+
+    res.status(existingReview ? 200 : 201).json(freshProduct);
+  } catch (error) {
+    console.error("createProductReview Error:", error);
+    res.status(500).json({ message: "Failed to submit review" });
+  }
+};
+
 exports.uploadProductImage = async (req, res) => {
   try {
     const { variantId } = req.query;

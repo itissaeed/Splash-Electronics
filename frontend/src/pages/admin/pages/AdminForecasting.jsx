@@ -374,7 +374,7 @@ export default function AdminForecasting() {
           label="Products Considered"
           value={nice(roundedSummary?.productCount || 0)}
           subtitle={`History: last ${daysBack} days`}
-          accent="bg-amber-400/40"
+          accent="bg-sky-400/40"
         />
         <StatCard
           label="Projected Risk SKUs"
@@ -395,7 +395,7 @@ export default function AdminForecasting() {
           label="Total Reorder Qty"
           value={nice(Math.round(roundedSummary?.totalSuggestedReorderQty || 0))}
           subtitle="Across forecasted products"
-          accent="bg-orange-400/30"
+          accent="bg-teal-400/30"
         />
         <StatCard
           label="Categories Covered"

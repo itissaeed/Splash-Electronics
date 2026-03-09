@@ -14,6 +14,7 @@ const {
   uploadProductImage,
   deleteProductImage,
   getFeaturedProducts,
+  createProductReview,
 } = require("../controllers/productController");
 
 // --- multer ---
@@ -47,6 +48,7 @@ router.delete("/:id/images", protect, admin, deleteProductImage);
 // -------------------- PUBLIC ROUTES --------------------
 router.get("/featured", getFeaturedProducts);
 router.get("/id/:id", getProductById);
+router.post("/:id/reviews", protect, createProductReview);
 router.get("/", getProducts);
 router.get("/:slug", getProductBySlug);
 

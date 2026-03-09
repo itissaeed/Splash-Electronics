@@ -5,6 +5,14 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --ambient-top: rgba(14, 165, 233, 0.08);
+    --ambient-mid: rgba(15, 23, 42, 0.08);
+    --ambient-low: rgba(20, 184, 166, 0.08);
+    --surface-border: rgba(94, 109, 132, 0.18);
+    --surface-shadow: 0 22px 70px rgba(15, 23, 42, 0.08);
+  }
+
   html,
   body,
   #root {
@@ -13,11 +21,19 @@
 
   body {
     font-family: "Plus Jakarta Sans", sans-serif;
-    @apply bg-gray-50 text-slate-900 transition-colors duration-200;
+    background:
+      radial-gradient(circle at top right, var(--ambient-mid), transparent 28rem),
+      radial-gradient(circle at top left, var(--ambient-top), transparent 24rem),
+      linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+    @apply text-slate-900 transition-colors duration-200;
   }
 
   .dark body {
-    @apply bg-slate-950 text-slate-100;
+    background:
+      radial-gradient(circle at top right, rgba(34, 211, 238, 0.1), transparent 26rem),
+      radial-gradient(circle at top left, rgba(99, 102, 241, 0.12), transparent 28rem),
+      linear-gradient(180deg, #020617 0%, #0f172a 100%);
+    @apply text-slate-100;
   }
 
   .dark .bg-white {
@@ -58,6 +74,10 @@
     @apply border-slate-700;
   }
 
+  ::selection {
+    @apply bg-cyan-200 text-slate-950;
+  }
+
   .dark input,
   .dark select,
   .dark textarea {
@@ -73,6 +93,75 @@
 @layer utilities {
   .font-display {
     font-family: "Sora", sans-serif;
+  }
+
+  .page-ambient {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .page-ambient::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 100% 0%, var(--ambient-mid), transparent 24rem),
+      radial-gradient(circle at 0% 10%, var(--ambient-top), transparent 24rem),
+      radial-gradient(circle at 50% 100%, var(--ambient-low), transparent 30rem);
+  }
+
+  .premium-card {
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid var(--surface-border);
+    box-shadow: var(--surface-shadow);
+    backdrop-filter: blur(16px);
+  }
+
+  .dark .premium-card {
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(148, 163, 184, 0.14);
+    box-shadow: 0 20px 60px rgba(2, 6, 23, 0.32);
+  }
+
+  .premium-card-hover {
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .premium-card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+    border-color: rgba(99, 102, 241, 0.24);
+  }
+
+  .dark .premium-card-hover:hover {
+    box-shadow: 0 26px 70px rgba(2, 6, 23, 0.36);
+    border-color: rgba(34, 211, 238, 0.2);
+  }
+
+  .section-kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500;
+  }
+
+  .admin-shell {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(circle at top right, rgba(34, 211, 238, 0.12), transparent 24rem),
+      radial-gradient(circle at top left, rgba(20, 184, 166, 0.08), transparent 22rem),
+      linear-gradient(180deg, #eef4f8 0%, #f6f9fc 100%);
+  }
+
+  .admin-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    background:
+      radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.08), transparent 24rem),
+      radial-gradient(circle at 80% 20%, rgba(15, 23, 42, 0.08), transparent 26rem);
   }
 }
 

@@ -241,13 +241,13 @@ export default function AdminOverview() {
           label="Total Customers"
           value={niceNumber(data.totalCustomers)}
           hint="Registered customers"
-          accent="bg-amber-400/40"
+          accent="bg-sky-400/40"
         />
         <StatCard
           label="Pending Orders"
           value={niceNumber(data.statusCounts?.pending || 0)}
           hint="Requires fulfillment action"
-          accent="bg-orange-400/40"
+          accent="bg-teal-400/40"
         />
       </div>
 

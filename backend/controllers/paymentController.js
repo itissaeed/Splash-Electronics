@@ -3,9 +3,13 @@ const { URL } = require("url");
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
 const ReturnRefund = require("../models/ReturnRefund");
-const { createOrderFromCartForUser } = require("../services/orderService");
+const {
+  createOrderFromCartForUser,
+  applyCouponUsageIfNeeded,
+} = require("../services/orderService");
 const { validateShippingPayload } = require("../utils/shippingValidation");
 const { releaseExpiredReservations } = require("../services/stockReservationService");
+const { getVisitorKey } = require("../utils/visitorKey");
 
 const postForm = (urlString, payload) =>
   new Promise((resolve, reject) => {
@@ -95,6 +99,7 @@ exports.initSslCommerz = async (req, res) => {
       paymentProvider: "sslcommerz",
       couponCode,
       deliveryOption: validation.deliveryOption,
+      visitorKey: getVisitorKey(req),
       session,
     });
 
@@ -189,6 +194,7 @@ exports.sslCommerzIpn = async (req, res) => {
         order.payment.transactionId = validationResp?.tran_id || valId;
         order.payment.paidAt = new Date();
         await order.save();
+        await applyCouponUsageIfNeeded({ order });
 
         const existing = await ReturnRefund.findOne({
           order: order._id,
@@ -222,6 +228,7 @@ exports.sslCommerzIpn = async (req, res) => {
         order.payment.transactionId = validationResp?.tran_id || valId;
         order.payment.paidAt = new Date();
         await order.save();
+        await applyCouponUsageIfNeeded({ order });
       }
       return res.status(200).send("OK");
     }

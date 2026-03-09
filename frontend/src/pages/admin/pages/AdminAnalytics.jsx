@@ -7,6 +7,7 @@ const tokenHeader = () => ({
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 const niceNumber = (n) => Number(n || 0).toLocaleString("en-BD");
+const percent = (n) => `${Number(n || 0).toFixed(1)}%`;
 
 const PALETTE = [
   "#0ea5e9",
@@ -167,7 +168,7 @@ function DonutChart({ title, rows, valueKey = "orders", moneyMode = false }) {
   );
 }
 
-function RankedBars({ title, rows, valueKey, subtitleKey, formatValue }) {
+function RankedBars({ title, rows, valueKey, subtitleKey, subtitleLabel, formatValue }) {
   const max = Math.max(...rows.map((r) => Number(r[valueKey] || 0)), 1);
   return (
     <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
@@ -193,7 +194,7 @@ function RankedBars({ title, rows, valueKey, subtitleKey, formatValue }) {
                 </div>
                 {subtitleKey && (
                   <p className="mt-1 text-[11px] text-slate-500">
-                    {subtitleKey}: {niceNumber(row[subtitleKey])}
+                    {subtitleLabel || subtitleKey}: {niceNumber(row[subtitleKey])}
                   </p>
                 )}
               </div>
@@ -213,6 +214,8 @@ export default function AdminAnalytics() {
   const [byDivision, setByDivision] = useState([]);
   const [byDivisionProductOrders, setByDivisionProductOrders] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
+  const [mostViewedProducts, setMostViewedProducts] = useState([]);
+  const [peakOrderHours, setPeakOrderHours] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
@@ -245,6 +248,8 @@ export default function AdminAnalytics() {
       setByDivision(data.byDivision || []);
       setByDivisionProductOrders(data.byDivisionProductOrders || []);
       setTopProducts(data.topProducts || []);
+      setMostViewedProducts(data.mostViewedProducts || []);
+      setPeakOrderHours(data.peakOrderHours || []);
       setPaymentMethods(data.paymentMethods || []);
     } catch (e) {
       console.error(e);
@@ -283,6 +288,26 @@ export default function AdminAnalytics() {
         qty: Number(p.qty || 0),
       })),
     [topProducts]
+  );
+
+  const viewedProductRows = useMemo(
+    () =>
+      mostViewedProducts.slice(0, 7).map((p) => ({
+        _id: p.name || "Unknown product",
+        name: p.name || "Unknown product",
+        views: Number(p.views || 0),
+        uniqueViewers: Number(p.uniqueViewers || 0),
+      })),
+    [mostViewedProducts]
+  );
+
+  const peakHourRows = useMemo(
+    () =>
+      peakOrderHours.slice(0, 6).map((row) => ({
+        _id: `${String(row._id).padStart(2, "0")}:00`,
+        orders: Number(row.orders || 0),
+      })),
+    [peakOrderHours]
   );
 
   return (
@@ -355,13 +380,41 @@ export default function AdminAnalytics() {
           label="Avg Order Value"
           value={money(overview?.averageOrderValue ?? 0)}
           hint="Revenue per order"
-          accent="bg-amber-400/40"
+          accent="bg-sky-400/40"
         />
         <StatCard
           label="Unique Customers"
           value={niceNumber(overview?.uniqueCustomers ?? 0)}
           hint="Purchasing customers only"
-          accent="bg-sky-400/40"
+          accent="bg-teal-400/40"
+        />
+        <StatCard
+          label="Unique Viewers"
+          value={niceNumber(overview?.uniqueViewers ?? 0)}
+          hint="Tracked visitors in selected range"
+          accent="bg-violet-400/40"
+        />
+        <StatCard
+          label="Conversion Rate"
+          value={percent(overview?.conversionRate ?? 0)}
+          hint={`${niceNumber(overview?.orderingVisitors ?? 0)} visitors placed orders`}
+          accent="bg-amber-400/40"
+        />
+        <StatCard
+          label="Abandoned Carts"
+          value={niceNumber(overview?.abandonedCarts ?? 0)}
+          hint={`${niceNumber(overview?.abandonedItems ?? 0)} items left inactive for 24h+`}
+          accent="bg-rose-400/40"
+        />
+        <StatCard
+          label="Peak Order Time"
+          value={overview?.peakOrderTime?.label || "N/A"}
+          hint={
+            overview?.peakOrderTime
+              ? `${niceNumber(overview.peakOrderTime.orders)} orders in busiest hour`
+              : "No order activity in this range"
+          }
+          accent="bg-indigo-400/40"
         />
       </div>
 
@@ -391,11 +444,28 @@ export default function AdminAnalytics() {
           rows={topProductsRows}
           valueKey="revenue"
           subtitleKey="qty"
+          subtitleLabel="qty"
           formatValue={money}
+        />
+        <RankedBars
+          title="Most Viewed Products"
+          rows={viewedProductRows}
+          valueKey="views"
+          subtitleKey="uniqueViewers"
+          subtitleLabel="unique viewers"
+          formatValue={niceNumber}
         />
       </div>
 
-      <DonutChart title="Revenue Share by Payment Method" rows={paymentMethods} valueKey="revenue" moneyMode />
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <DonutChart title="Revenue Share by Payment Method" rows={paymentMethods} valueKey="revenue" moneyMode />
+        <RankedBars
+          title="Peak Order Hours"
+          rows={peakHourRows}
+          valueKey="orders"
+          formatValue={niceNumber}
+        />
+      </div>
     </div>
   );
 }

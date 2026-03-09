@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 
 const couponSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true, uppercase: true, trim: true },
-  type: { type: String, enum: ["PERCENT", "FIXED"], required: true },
+  type: { type: String, enum: ["PERCENT", "FIXED", "FLAT"], required: true },
   value: { type: Number, required: true }, // 10% or 200 tk
   minCartTotal: { type: Number, default: 0 },
   maxDiscount: { type: Number }, // for percent coupons

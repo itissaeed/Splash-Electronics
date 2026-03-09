@@ -79,11 +79,11 @@ export default function AdminLayout() {
   }, [user]);
 
   const linkClass = (isActive) =>
-    `flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition
+    `flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition
      ${
        isActive
-         ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200"
-         : "text-gray-700 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800"
+         ? "bg-[rgba(255,255,255,0.96)] text-slate-950 shadow-[0_12px_30px_rgba(8,15,30,0.18)] ring-1 ring-white/60"
+         : "text-slate-200/88 hover:bg-white/10 hover:text-white"
      }`;
 
   useEffect(() => {
@@ -146,16 +146,16 @@ export default function AdminLayout() {
   }, [location.pathname]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
+    <div className="admin-shell min-h-screen">
       <div className="flex">
         {/* Sidebar */}
         <aside
-          className={`sticky top-0 h-screen border-r bg-white dark:bg-slate-900 dark:border-slate-800 transition-all
+          className={`sticky top-0 h-screen border-r border-white/10 bg-gradient-to-b from-[#08111f] via-[#0c1d33] to-[#102a43] text-white transition-all
           ${collapsed ? "w-20" : "w-64"}`}
         >
-          <div className="flex items-center justify-between p-4 border-b dark:border-slate-800">
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
             <div
-              className={`font-extrabold text-gray-900 dark:text-slate-100 ${
+              className={`font-extrabold tracking-tight text-white ${
                 collapsed ? "text-xs" : "text-lg"
               }`}
             >
@@ -163,15 +163,28 @@ export default function AdminLayout() {
             </div>
 
             <button
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800"
+              className="p-2 rounded-xl hover:bg-white/10"
               onClick={() => setCollapsed((s) => !s)}
               aria-label="Toggle sidebar"
             >
-              <Menu size={18} className="text-gray-700 dark:text-slate-200" />
+              <Menu size={18} className="text-slate-100" />
             </button>
           </div>
 
-          <nav className="p-2 space-y-1">
+          <div className="px-4 pt-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
+                Control Room
+              </p>
+              {!collapsed && (
+                <p className="mt-2 text-sm text-slate-300">
+                  Premium operations for inventory, orders, and revenue.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <nav className="p-3 space-y-1.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -191,13 +204,13 @@ export default function AdminLayout() {
         {/* Main content */}
         <div className="flex-1 min-w-0">
           {/* Top bar */}
-          <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/90 backdrop-blur border-b dark:border-slate-800">
+          <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/72 backdrop-blur-xl">
             <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
               <div className="flex flex-col">
-                <span className="text-sm font-semibold text-gray-500 dark:text-slate-300">
+                <span className="section-kicker">
                   Admin Dashboard
                 </span>
-                <span className="text-xs text-gray-400 dark:text-slate-500">
+                <span className="text-xs text-slate-500">
                   {location.pathname.replace("/admin", "") || "/overview"}
                 </span>
               </div>
@@ -206,7 +219,7 @@ export default function AdminLayout() {
                 {/* Search (just visual for now) */}
                 <input
                   placeholder="Search in admin…"
-                  className="hidden md:block w-64 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                  className="hidden md:block w-64 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-400"
                 />
 
                 {/* Order notifications */}
@@ -214,10 +227,10 @@ export default function AdminLayout() {
                   <button
                     type="button"
                     onClick={() => setNotifOpen((o) => !o)}
-                    className="relative h-10 w-10 rounded-full border bg-white hover:bg-gray-50 dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 flex items-center justify-center"
+                    className="relative h-10 w-10 rounded-full border border-slate-200 bg-white/90 hover:bg-white flex items-center justify-center"
                     aria-label="Order notifications"
                   >
-                    <Bell size={18} className="text-gray-700 dark:text-slate-200" />
+                    <Bell size={18} className="text-slate-700" />
                     {notificationCount > 0 && (
                       <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-600 text-white text-[11px] leading-[18px] text-center px-1 font-bold">
                         {notificationCount > 99 ? "99+" : notificationCount}
@@ -226,23 +239,23 @@ export default function AdminLayout() {
                   </button>
 
                   {notifOpen && (
-                    <div className="absolute right-0 mt-2 w-80 rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-700 shadow-lg text-sm z-40 overflow-hidden">
-                      <div className="px-3 py-2 border-b dark:border-slate-700 flex items-center justify-between">
-                        <div className="font-semibold text-gray-900 dark:text-slate-100">
+                    <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white/95 shadow-xl text-sm z-40 overflow-hidden backdrop-blur">
+                      <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
+                        <div className="font-semibold text-slate-900">
                           New Orders
                         </div>
                         <div className="flex items-center gap-3">
                           <button
                             type="button"
                             onClick={markAllNotificationsRead}
-                            className="text-xs font-semibold text-gray-600 hover:text-gray-800 dark:text-slate-400 dark:hover:text-slate-200"
+                            className="text-xs font-semibold text-slate-600 hover:text-slate-900"
                           >
                             Mark all read
                           </button>
                           <button
                             type="button"
                             onClick={openOrdersFromNotif}
-                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-300 dark:hover:text-indigo-200"
+                            className="text-xs font-semibold text-cyan-700 hover:text-cyan-900"
                           >
                             Open Orders
                           </button>
@@ -250,7 +263,7 @@ export default function AdminLayout() {
                       </div>
 
                       {newOrders.length === 0 ? (
-                        <div className="px-3 py-4 text-gray-500 dark:text-slate-400 text-xs">
+                        <div className="px-3 py-4 text-slate-500 text-xs">
                           No new orders since last check.
                         </div>
                       ) : (
@@ -260,15 +273,15 @@ export default function AdminLayout() {
                               key={o._id}
                               type="button"
                               onClick={openOrdersFromNotif}
-                              className="w-full text-left px-3 py-3 border-b dark:border-slate-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-slate-800"
+                              className="w-full text-left px-3 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
                             >
-                              <div className="font-semibold text-gray-900 dark:text-slate-100">
+                              <div className="font-semibold text-slate-900">
                                 {o.orderNo}
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                              <div className="text-xs text-slate-500 mt-1">
                                 {new Date(o.createdAt).toLocaleString()}
                               </div>
-                              <div className="text-xs text-gray-700 dark:text-slate-300 mt-1">
+                              <div className="text-xs text-slate-700 mt-1">
                                 {o.shippingAddress?.division || "-"},{" "}
                                 {o.shippingAddress?.district || "-"} - ৳
                                 {Number(
@@ -288,21 +301,21 @@ export default function AdminLayout() {
                   <button
                     type="button"
                     onClick={() => setUserMenuOpen((o) => !o)}
-                    className="flex items-center gap-2 rounded-full px-1 py-1 hover:bg-gray-100 dark:hover:bg-slate-800"
+                    className="flex items-center gap-2 rounded-full px-1 py-1 hover:bg-slate-100"
                   >
-                    <div className="h-9 w-9 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-cyan-500 to-slate-900 flex items-center justify-center text-xs font-bold text-white shadow-lg">
                       {initials}
                     </div>
                   </button>
 
                   {userMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-52 rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-700 shadow-lg text-sm z-40">
-                      <div className="px-3 py-2 border-b dark:border-slate-700">
-                        <div className="font-semibold text-gray-900 dark:text-slate-100">
+                    <div className="absolute right-0 mt-2 w-52 rounded-2xl border border-slate-200 bg-white/95 shadow-lg text-sm z-40 backdrop-blur">
+                      <div className="px-3 py-2 border-b border-slate-200">
+                        <div className="font-semibold text-slate-900">
                           {user?.name || "Admin"}
                         </div>
                         {user?.email && (
-                          <div className="text-[11px] text-gray-500 dark:text-slate-400 break-all">
+                          <div className="text-[11px] text-slate-500 break-all">
                             {user.email}
                           </div>
                         )}
@@ -314,7 +327,7 @@ export default function AdminLayout() {
                           setUserMenuOpen(false);
                           navigate("/admin/profile");
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200"
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700"
                       >
                         <User size={16} />
                         <span>Profile</span>
@@ -326,7 +339,7 @@ export default function AdminLayout() {
                           setUserMenuOpen(false);
                           navigate("/");
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-800 text-gray-700 dark:text-slate-200"
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-slate-700"
                       >
                         <Home size={16} />
                         <span>Back to store</span>
