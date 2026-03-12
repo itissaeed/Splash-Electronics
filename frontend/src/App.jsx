@@ -10,6 +10,7 @@ import ResetPassword from "./pages/auth/ResetPassword";
 import ProductList from "./pages/ProductList";
 import ProductDetails from "./pages/ProductDetails";
 import SmartAdvisor from "./pages/SmartAdvisor";
+import Compare from "./pages/Compare";
 import Profile from "./pages/Profile";
 import AdminLayout from "./pages/admin/pages/AdminLayout";
 
@@ -20,6 +21,7 @@ import { ThemeProvider } from "./pages/context/ThemeContext";
 import AdminRoute from "./pages/admin/AdminRoutes";
 import ProtectedRoute from "./pages/ProtectedRoute";
 import ThemeToggle from "./ThemeToggle";
+import CompareBar from "./components/CompareBar";
 
 import Cart from "./pages/cart/Cart";
 import Checkout from "./pages/cart/Checkout";
@@ -40,6 +42,7 @@ function App() {
           <Route path="/products" element={<ProductList />} />
           <Route path="/product/:slug" element={<ProductDetails />} />
           <Route path="/advisor" element={<SmartAdvisor />} />
+          <Route path="/compare" element={<Compare />} />
 
           {/* Auth */}
           <Route path="/login" element={<Login />} />
@@ -78,6 +81,7 @@ function App() {
           </Routes>
         </UserProvider>
         <ThemeToggle />
+        <CompareBar />
       </div>
     </ThemeProvider>
   );

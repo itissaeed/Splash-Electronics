@@ -14,6 +14,12 @@ import {
 } from "react-icons/fa";
 import api from "../utils/api";
 import { UserContext } from "./context/UserContext";
+import useCompareItems from "../utils/useCompare";
+import {
+  COMPARE_LIMIT,
+  getCompareKey,
+  toggleCompareItem,
+} from "../utils/compare";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -47,6 +53,12 @@ export default function Home() {
   const [categories, setCategories] = useState([]);
   const [search, setSearch] = useState("");
   const accountMenuRef = useRef(null);
+  const compareItems = useCompareItems();
+
+  const compareKeys = useMemo(
+    () => new Set(compareItems.map((item) => getCompareKey(item))),
+    [compareItems]
+  );
 
   // NEW: public settings from admin panel
   const [settings, setSettings] = useState(null);
@@ -513,34 +525,56 @@ export default function Home() {
                   const price = p?.basePrice ?? p?.variants?.[0]?.price ?? p?.price ?? 0;
                   const productKey = p?.slug || p?._id;
                   const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
+                  const compareKey = getCompareKey(p);
+                  const isCompared = compareKeys.has(compareKey);
+                  const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
 
                   return (
-                    <Link
-                      key={productKey}
-                      to={url}
-                      className="premium-card premium-card-hover group rounded-2xl p-4"
-                    >
-                      <div className="relative overflow-hidden rounded-xl bg-gray-50">
-                        <img
-                          src={img}
-                          alt={p.name}
-                          className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                          loading="lazy"
-                          onError={(e) => (e.currentTarget.src = fallbackImg)}
-                        />
-                        <span className="absolute left-3 top-3 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow">
-                          Featured
-                        </span>
-                      </div>
-
-                      <div className="mt-3">
-                        <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
-                        <div className="mt-2 flex items-center justify-between">
-                          <p className="text-indigo-600 font-extrabold">{money(price)}</p>
-                          <span className="text-xs text-gray-500 group-hover:text-gray-700">View →</span>
+                    <div key={productKey} className="relative">
+                      <Link
+                        to={url}
+                        className="premium-card premium-card-hover group block rounded-2xl p-4"
+                      >
+                        <div className="relative overflow-hidden rounded-xl bg-gray-50">
+                          <img
+                            src={img}
+                            alt={p.name}
+                            className="h-44 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                            loading="lazy"
+                            onError={(e) => (e.currentTarget.src = fallbackImg)}
+                          />
+                          <span className="absolute left-3 top-3 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow">
+                            Featured
+                          </span>
                         </div>
-                      </div>
-                    </Link>
+
+                        <div className="mt-3">
+                          <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
+                          <div className="mt-2 flex items-center justify-between">
+                            <p className="text-indigo-600 font-extrabold">{money(price)}</p>
+                            <span className="text-xs text-gray-500 group-hover:text-gray-700">View →</span>
+                          </div>
+                        </div>
+                      </Link>
+
+                        <button
+                          type="button"
+                          disabled={compareFull}
+                          onClick={() => {
+                            const res = toggleCompareItem(p);
+                            if (!res.ok && res.reason === "limit") {
+                              alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                            }
+                          }}
+                        className={`absolute right-5 top-5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ring-1 ${
+                          isCompared
+                            ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
+                            : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
+                        } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
+                        >
+                          {isCompared ? "Compared" : "Compare"}
+                        </button>
+                    </div>
                   );
                 })
               )}
