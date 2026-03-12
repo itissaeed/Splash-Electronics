@@ -25,6 +25,18 @@ const uploadFromBuffer = (buffer) =>
     streamifier.createReadStream(buffer).pipe(stream);
   });
 
+// helper: keep basePrice consistent with variant pricing
+const computeBasePrice = (basePrice, variants = []) => {
+  const prices = (Array.isArray(variants) ? variants : [])
+    .map((v) => Number(v?.price))
+    .filter((v) => Number.isFinite(v) && v >= 0);
+
+  if (prices.length) return Math.min(...prices);
+
+  const n = Number(basePrice);
+  return Number.isFinite(n) ? n : 0;
+};
+
 // helper: validate unique SKU in variants (within this product)
 const assertUniqueSkus = (variants = []) => {
   const seen = new Set();
@@ -237,7 +249,8 @@ exports.createProduct = async (req, res) => {
     if (exists) return res.status(409).json({ message: "Product slug already exists" });
 
     // ✅ SKU uniqueness inside this product
-    if (Array.isArray(variants)) assertUniqueSkus(variants);
+    const normalizedVariants = Array.isArray(variants) ? variants : [];
+    if (normalizedVariants.length) assertUniqueSkus(normalizedVariants);
 
     const product = await Product.create({
       name: String(name).trim(),
@@ -245,13 +258,13 @@ exports.createProduct = async (req, res) => {
       brand,
       category,
       description,
-      basePrice: toNum(basePrice, 0),
+      basePrice: computeBasePrice(basePrice, normalizedVariants),
       highlights: Array.isArray(highlights) ? highlights : [],
       specs: specs || {},
       warrantyMonths: toNum(warrantyMonths, 0),
       tags: Array.isArray(tags) ? tags : [],
       isFeatured: !!isFeatured,
-      variants: Array.isArray(variants) ? variants : [],
+      variants: normalizedVariants,
       rating: 0,
       numReviews: 0,
       isActive: true,
@@ -280,7 +293,6 @@ exports.updateProduct = async (req, res) => {
     if (up.category !== undefined) product.category = up.category;
     if (up.description !== undefined) product.description = up.description;
 
-    if (up.basePrice !== undefined) product.basePrice = toNum(up.basePrice, product.basePrice);
     if (up.highlights !== undefined)
       product.highlights = Array.isArray(up.highlights) ? up.highlights : product.highlights;
     if (up.specs !== undefined) product.specs = up.specs || product.specs;
@@ -299,6 +311,12 @@ exports.updateProduct = async (req, res) => {
 
       product.variants = nextVariants;
     }
+
+    // keep basePrice aligned with variants when present
+    product.basePrice = computeBasePrice(
+      up.basePrice !== undefined ? up.basePrice : product.basePrice,
+      product.variants
+    );
 
     const updated = await product.save();
     res.json(updated);

@@ -4,6 +4,8 @@ import api from "../../utils/api";
 import { buildTrackingUrl } from "../../utils/shipmentTracking";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
+const fallbackImg =
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
 const tokenHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 const REFUND_TIME_OPTIONS = [
   { value: "WITHIN_24_HOURS", label: "Within 24 hours" },
@@ -394,7 +396,7 @@ export default function OrderDetails() {
                 return (
                   <article key={it._id} className="p-5 flex gap-4">
                     <img
-                      src={it?.imageSnapshot || "https://via.placeholder.com/96"}
+                      src={it?.imageSnapshot || fallbackImg}
                       alt={it?.nameSnapshot || "Order item"}
                       className="h-24 w-24 rounded-2xl border object-cover"
                     />

@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import api from "../../utils/api";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
+const fallbackImg =
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
 const tokenHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
@@ -190,7 +192,7 @@ export default function Cart() {
                     : null;
 
                   const image =
-                    it?.imageSnapshot || variant?.images?.[0]?.url || "https://via.placeholder.com/96";
+                    it?.imageSnapshot || variant?.images?.[0]?.url || fallbackImg;
                   const name = it?.nameSnapshot || it?.product?.name || "Product";
                   const sku = it?.skuSnapshot || variant?.sku || "-";
                   const lineTotal = Number(it.priceAtAdd || 0) * Number(it.qty || 0);
