@@ -687,6 +687,45 @@ export default function AdminProducts() {
     return DEFAULT_VARIANT_ATTRIBUTE_KEYS;
   }, [selectedCategory]);
 
+  const mergeAttrsFromSpecs = (attrs, specs) => {
+    const specEntries = Object.entries(specs || {});
+    if (!specEntries.length) return { attrs, changed: false };
+
+    const nextAttrs = { ...(attrs || {}) };
+    let changed = false;
+
+    for (const [rawKey, rawValue] of specEntries) {
+      const key = toAttributeKey(rawKey);
+      if (!key) continue;
+      if (variantAttributeKeys.length && !variantAttributeKeys.includes(key)) continue;
+      const existing = String(nextAttrs[key] || "").trim();
+      if (existing) continue;
+      const value = String(rawValue || "").trim();
+      if (!value) continue;
+      nextAttrs[key] = value;
+      changed = true;
+    }
+
+    return { attrs: nextAttrs, changed };
+  };
+
+  const applySpecsToDefaultVariant = (rawSpecsText) => {
+    const specs = parseSpecsText(rawSpecsText);
+    if (!Object.keys(specs).length) return;
+
+    setVariants((prev) => {
+      const idx = prev.findIndex((v) => v.isDefault);
+      if (idx < 0) return prev;
+
+      const current = prev[idx];
+      const merged = mergeAttrsFromSpecs(current.attributes, specs);
+      if (!merged.changed) return prev;
+      const next = [...prev];
+      next[idx] = { ...current, attributes: merged.attrs };
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (!variantAttributeKeys.length) return;
     setVariants((prev) => {
@@ -707,6 +746,11 @@ export default function AdminProducts() {
       return changed ? next : prev;
     });
   }, [variantAttributeKeys]);
+
+  useEffect(() => {
+    applySpecsToDefaultVariant(formData.specsText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.specsText, variantAttributeKeys]);
 
   const filteredProducts = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -793,8 +837,19 @@ export default function AdminProducts() {
     );
   };
 
+  const copyFromDefaultVariant = (variant) => ({
+    ...emptyVariant(false),
+    price: variant?.price ?? "",
+    countInStock: variant?.countInStock ?? "",
+    attributes: { ...(variant?.attributes || {}) },
+  });
+
   const addVariant = () => {
-    setVariants((prev) => [...prev, emptyVariant(false)]);
+    setVariants((prev) => {
+      const defaultVariant = prev.find((v) => v.isDefault) || prev[0];
+      const next = defaultVariant ? copyFromDefaultVariant(defaultVariant) : emptyVariant(false);
+      return [...prev, next];
+    });
   };
 
   // ✅ fixed: remove variant + reindex variantFiles
@@ -820,7 +875,18 @@ export default function AdminProducts() {
 
   // ✅ enforce single default instantly
   const setDefaultVariant = (idx) => {
-    setVariants((prev) => prev.map((v, i) => ({ ...v, isDefault: i === idx })));
+    const specs = parseSpecsText(formData.specsText);
+    setVariants((prev) =>
+      prev.map((v, i) => {
+        if (i !== idx) return { ...v, isDefault: false };
+        const merged = mergeAttrsFromSpecs(v.attributes, specs);
+        return {
+          ...v,
+          isDefault: true,
+          attributes: merged.changed ? merged.attrs : v.attributes,
+        };
+      })
+    );
   };
 
   // ✅ upload helper (single upload endpoint, loops files)
@@ -1552,6 +1618,9 @@ export default function AdminProducts() {
                     onChange={handleChange}
                     className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                   />
+                  <div className="mt-1 text-[11px] text-gray-500">
+                    Auto-set from the lowest variant price when variants are provided.
+                  </div>
                 </div>
 
                 <div>

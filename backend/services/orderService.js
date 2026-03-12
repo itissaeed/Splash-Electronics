@@ -17,6 +17,16 @@ const toNum = (v, def) => {
   return Number.isFinite(n) ? n : def;
 };
 
+const DEFAULT_IMAGE_URL =
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
+
+const getVariantImage = (variant) => {
+  const first = Array.isArray(variant?.images) ? variant.images[0] : null;
+  if (!first) return DEFAULT_IMAGE_URL;
+  const url = typeof first === "string" ? first : first.url || "";
+  return url || DEFAULT_IMAGE_URL;
+};
+
 const normalizeCouponType = (value) => {
   const type = String(value || "").toUpperCase().trim();
   return type === "FLAT" ? "FIXED" : type;
@@ -286,7 +296,7 @@ const createOrderFromCartForUser = async ({
       variantId: variant._id,
       nameSnapshot: product.name,
       skuSnapshot: variant.sku,
-      imageSnapshot: variant.images?.[0]?.url || product.images?.[0]?.url || "",
+      imageSnapshot: getVariantImage(variant),
       qty: ci.qty,
       price: unitPrice,
     });

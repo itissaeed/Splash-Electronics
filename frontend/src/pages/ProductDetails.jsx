@@ -382,6 +382,15 @@ export default function ProductDetails() {
 
   const variants = useMemo(() => product?.variants || [], [product]);
 
+  const defaultVariant = useMemo(() => {
+    if (!variants.length) return null;
+    return (
+      variants.find((v) => v?.isDefault) ||
+      variants.find((v) => (v?.countInStock ?? 0) > 0) ||
+      variants[0]
+    );
+  }, [variants]);
+
   const selectedVariant = useMemo(() => {
     if (!variants.length) return null;
     return (
@@ -400,6 +409,21 @@ export default function ProductDetails() {
     return Array.from(keys);
   }, [variants]);
 
+  const selectedAttributeMap = useMemo(
+    () => toAttributeMap(selectedVariant?.attributes),
+    [selectedVariant]
+  );
+
+  const filteredSpecs = useMemo(() => {
+    const specsRaw = product?.specs;
+    if (!specsRaw || typeof specsRaw !== "object") return [];
+    const entries = specsRaw instanceof Map ? Array.from(specsRaw.entries()) : Object.entries(specsRaw);
+    return entries.filter(([k, v]) => {
+      if (!k || String(v || "").trim() === "") return false;
+      return selectedAttributeMap?.[k] === undefined;
+    });
+  }, [product?.specs, selectedAttributeMap]);
+
   const variantOptionsByKey = useMemo(() => {
     const map = {};
     for (const key of variantAttributeKeys) {
@@ -416,10 +440,13 @@ export default function ProductDetails() {
 
   // ✅ Always build gallery from selected variant images
   const gallery = useMemo(() => {
-    const vImgs =
-      selectedVariant?.images?.map((i) => i?.url).filter(Boolean) || [];
-    return vImgs.length ? vImgs : [fallbackImg];
-  }, [selectedVariant]);
+    const vImgs = selectedVariant?.images?.map((i) => i?.url).filter(Boolean) || [];
+    if (vImgs.length) return vImgs;
+    const dImgs = defaultVariant?.images?.map((i) => i?.url).filter(Boolean) || [];
+    if (dImgs.length) return dImgs;
+    const pImgs = product?.images?.map((i) => i?.url).filter(Boolean) || [];
+    return pImgs.length ? pImgs : [fallbackImg];
+  }, [selectedVariant, defaultVariant, product]);
 
   // ✅ Keep activeImg in sync with current gallery
   useEffect(() => {
@@ -496,8 +523,12 @@ export default function ProductDetails() {
   const onSelectVariant = (v) => {
     setSelectedVariantId(v._id);
 
-    // ✅ set active image to first variant image (or fallback)
-    const first = v?.images?.map((i) => i?.url).filter(Boolean)?.[0] || fallbackImg;
+    // ✅ set active image to first variant image, else default variant image, else fallback
+    const first =
+      v?.images?.map((i) => i?.url).filter(Boolean)?.[0] ||
+      defaultVariant?.images?.map((i) => i?.url).filter(Boolean)?.[0] ||
+      product?.images?.map((i) => i?.url).filter(Boolean)?.[0] ||
+      fallbackImg;
     setActiveImg(first);
 
     // ✅ (optional) reset quantity when variant changes
@@ -726,23 +757,21 @@ export default function ProductDetails() {
                 </div>
               )}
 
-              {product.specs &&
-                typeof product.specs === "object" &&
-                Object.keys(product.specs).length > 0 && (
-                  <div className="premium-card rounded-3xl p-6">
-                    <h2 className="text-lg font-extrabold text-gray-900">Specifications</h2>
-                    <div className="mt-4 grid sm:grid-cols-2 gap-3">
-                      {Object.entries(product.specs).map(([k, v]) => (
-                        <div key={k} className="rounded-2xl border bg-gray-50 p-4">
-                          <p className="text-xs text-gray-500 font-semibold">{prettyAttrKey(k)}</p>
-                          <p className="mt-1 text-sm text-gray-900 font-extrabold">
-                            {String(v)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
+              {filteredSpecs.length > 0 && (
+                <div className="premium-card rounded-3xl p-6">
+                  <h2 className="text-lg font-extrabold text-gray-900">Specifications</h2>
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    {filteredSpecs.map(([k, v]) => (
+                      <div key={k} className="rounded-2xl border bg-gray-50 p-4">
+                        <p className="text-xs text-gray-500 font-semibold">{prettyAttrKey(k)}</p>
+                        <p className="mt-1 text-sm text-gray-900 font-extrabold">
+                          {String(v)}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -793,25 +822,11 @@ export default function ProductDetails() {
                   </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-2 gap-2">
-                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
-                    <p className="text-[11px] text-gray-500 font-semibold">Brand</p>
-                    <p className="text-sm text-gray-900 font-extrabold">{brandName || "N/A"}</p>
-                  </div>
-                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
-                    <p className="text-[11px] text-gray-500 font-semibold">Category</p>
-                    <p className="text-sm text-gray-900 font-extrabold">{catName || "N/A"}</p>
-                  </div>
-                  <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
-                    <p className="text-[11px] text-gray-500 font-semibold">Warranty</p>
-                    <p className="text-sm text-gray-900 font-extrabold">
-                      {product?.warrantyMonths ? `${product.warrantyMonths} months` : "Standard"}
-                    </p>
-                  </div>
+                <div className="mt-6 grid grid-cols-1 gap-2">
                   <div className="rounded-2xl border bg-gray-50 p-3 dark:bg-slate-950">
                     <p className="text-[11px] text-gray-500 font-semibold">SKU</p>
                     <p className="text-sm text-gray-900 font-extrabold">
-                      {selectedVariant?.sku || "Auto"}
+                      {selectedVariant?.sku || "N/A"}
                     </p>
                   </div>
                 </div>
@@ -1157,10 +1172,7 @@ function RelatedProducts({ categoryId, currentSlug }) {
       <h2 className="text-lg font-extrabold text-gray-900 mb-4">Related Products</h2>
       <div className="grid grid-cols-2 gap-3">
         {items.map((p) => {
-          const img =
-            p?.variants?.[0]?.images?.[0]?.url ||
-            p?.images?.[0]?.url ||
-            fallbackImg;
+          const img = p?.variants?.[0]?.images?.[0]?.url || fallbackImg;
           const price = p?.basePrice ?? p?.variants?.[0]?.price ?? 0;
 
           return (

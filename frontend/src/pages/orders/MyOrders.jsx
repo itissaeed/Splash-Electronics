@@ -5,6 +5,8 @@ import { buildTrackingUrl } from "../../utils/shipmentTracking";
 
 const tokenHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
+const fallbackImg =
+  "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -250,7 +252,7 @@ export default function MyOrders() {
           ) : (
             <div className="space-y-4">
               {filteredOrders.map((o) => {
-                const firstImg = o?.items?.[0]?.imageSnapshot || "https://via.placeholder.com/96";
+                const firstImg = o?.items?.[0]?.imageSnapshot || fallbackImg;
                 const itemCount =
                   o?.items?.reduce((sum, it) => sum + Number(it?.qty || 0), 0) || 0;
                 const trackingUrl =
