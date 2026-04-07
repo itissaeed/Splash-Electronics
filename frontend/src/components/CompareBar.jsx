@@ -1,4 +1,4 @@
-﻿import React, { useMemo } from "react";
+import React, { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import useCompareItems from "../utils/useCompare";
 import { clearCompareItems, removeCompareItem, COMPARE_LIMIT } from "../utils/compare";
