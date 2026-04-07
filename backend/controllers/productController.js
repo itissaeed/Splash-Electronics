@@ -1,5 +1,5 @@
 // controllers/productController.js
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const ProductView = require("../models/ProductView");
 const Category = require("../models/Category");
 const Brand = require("../models/Brand");

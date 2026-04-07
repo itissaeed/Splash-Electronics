@@ -3,6 +3,12 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import api from "../utils/api";
 import Breadcrumb from "../BreadCrumb";
 import { FaSearch } from "react-icons/fa";
+import useCompareItems from "../utils/useCompare";
+import {
+  COMPARE_LIMIT,
+  getCompareKey,
+  toggleCompareItem,
+} from "../utils/compare";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -41,6 +47,12 @@ export default function ProductListPage() {
 
   const [searchTerm, setSearchTerm] = useState(keywordParam);
   const [loading, setLoading] = useState(true);
+  const compareItems = useCompareItems();
+
+  const compareKeys = useMemo(
+    () => new Set(compareItems.map((item) => getCompareKey(item))),
+    [compareItems]
+  );
 
   // Keep internal page in sync with URL changes
   useEffect(() => setPage(pageParam), [pageParam]);
@@ -274,43 +286,65 @@ export default function ProductListPage() {
 
               // ✅ slug first, fallback to id
               const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
+              const compareKey = getCompareKey(p);
+              const isCompared = compareKeys.has(compareKey);
+              const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
 
               return (
-                <Link
-                  key={p.slug || p._id}
-                  to={url}
-                  className="premium-card premium-card-hover group rounded-[1.6rem] p-4"
-                >
-                  <div className="relative overflow-hidden rounded-[1.2rem] bg-gray-50">
-                    <img
-                      src={img}
-                      alt={p.name}
-                      className="h-48 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-                      loading="lazy"
-                      onError={(e) => (e.currentTarget.src = fallbackImg)}
-                    />
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
-                        {p?.brand?.name || "Tech"}
-                      </span>
-                    </div>
-                    <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
-                    <div className="mt-2 flex items-center justify-between">
-                      <p className="text-indigo-600 font-extrabold">{money(price)}</p>
-                      <span className="text-xs text-gray-500 group-hover:text-gray-700">
-                        View →
-                      </span>
+                <div key={p.slug || p._id} className="relative">
+                  <Link
+                    to={url}
+                    className="premium-card premium-card-hover group block rounded-[1.6rem] p-4"
+                  >
+                    <div className="relative overflow-hidden rounded-[1.2rem] bg-gray-50">
+                      <img
+                        src={img}
+                        alt={p.name}
+                        className="h-48 w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                        loading="lazy"
+                        onError={(e) => (e.currentTarget.src = fallbackImg)}
+                      />
                     </div>
 
-                    {/* Optional hints */}
-                    <p className="mt-2 text-xs text-gray-500">
-                      Premium picks, curated for everyday browsing.
-                    </p>
-                  </div>
-                </Link>
+                    <div className="mt-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="rounded-full bg-gradient-to-r from-amber-100 via-amber-50 to-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900 ring-1 ring-amber-200/80">
+                          {p?.brand?.name || "Tech"}
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-indigo-600 font-extrabold">{money(price)}</p>
+                        <span className="text-xs text-gray-500 group-hover:text-gray-700">
+                          View →
+                        </span>
+                      </div>
+
+                      {/* Optional hints */}
+                      <p className="mt-2 text-xs text-gray-500">
+                        Premium picks, curated for everyday browsing.
+                      </p>
+                    </div>
+                  </Link>
+
+                  <button
+                    type="button"
+                    disabled={compareFull}
+                    onClick={() => {
+                      const res = toggleCompareItem(p);
+                      if (!res.ok && res.reason === "limit") {
+                        alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                      }
+                    }}
+                    className={`absolute right-5 top-5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ring-1 ${
+                      isCompared
+                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
+                        : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
+                    } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
+                  >
+                    {isCompared ? "Compared" : "Compare"}
+                  </button>
+                </div>
               );
             })}
           </div>

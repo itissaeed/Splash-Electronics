@@ -1,5 +1,5 @@
 // controllers/inventoryController.js
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const InventoryLedger = require("../models/InventoryLedger");
 
 const toNum = (v, def) => {

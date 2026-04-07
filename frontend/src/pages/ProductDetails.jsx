@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../utils/api";
+import useCompareItems from "../utils/useCompare";
+import {
+  COMPARE_LIMIT,
+  getCompareKey,
+  toggleCompareItem,
+} from "../utils/compare";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -348,6 +354,12 @@ export default function ProductDetails() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [reviewSuccess, setReviewSuccess] = useState("");
+  const compareItems = useCompareItems();
+
+  const compareKeys = useMemo(
+    () => new Set(compareItems.map((item) => getCompareKey(item))),
+    [compareItems]
+  );
 
   useEffect(() => {
     (async () => {
@@ -472,6 +484,9 @@ export default function ProductDetails() {
   const brandName = product?.brand?.name || "";
   const catName = product?.category?.name || "";
   const catSlug = product?.category?.slug || "";
+  const compareKey = getCompareKey(product);
+  const isCompared = compareKeys.has(compareKey);
+  const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
 
   const rating = Number(product?.rating || 0);
   const reviews = Number(product?.numReviews || 0);
@@ -957,6 +972,23 @@ export default function ProductDetails() {
                     Back
                   </Link>
                 </div>
+                <button
+                  type="button"
+                  disabled={compareFull}
+                  onClick={() => {
+                    const res = toggleCompareItem(product);
+                    if (!res.ok && res.reason === "limit") {
+                      alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                    }
+                  }}
+                  className={`mt-3 w-full rounded-2xl border px-5 py-3 text-center text-sm font-extrabold transition ${
+                    isCompared
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                      : "bg-white text-gray-900 hover:bg-gray-50"
+                  } ${compareFull ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  {isCompared ? "Remove from Compare" : "Add to Compare"}
+                </button>
 
                 <p className="mt-4 text-xs text-gray-500">
                   Secure checkout, fast shipping, and easy return support.
