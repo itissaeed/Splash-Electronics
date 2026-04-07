@@ -1,5 +1,8 @@
 import axios from "axios";
 
+const apiBaseUrl =
+  process.env.REACT_APP_API_URL?.trim() || "http://localhost:5000/api";
+
 const getVisitorId = () => {
   const key = "visitorId";
   const existing = localStorage.getItem(key);
@@ -15,7 +18,7 @@ const getVisitorId = () => {
 };
 
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: apiBaseUrl,
 });
 
 api.interceptors.request.use((config) => {

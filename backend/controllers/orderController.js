@@ -1,7 +1,7 @@
 // controllers/orderController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const Cart = require("../models/Cart");
 const InventoryLedger = require("../models/InventoryLedger");
 const ReturnRefund = require("../models/ReturnRefund");
