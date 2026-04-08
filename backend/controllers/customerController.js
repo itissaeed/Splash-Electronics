@@ -1,5 +1,5 @@
 // controllers/adminCustomerController.js
-const User = require("../models/userModel");
+const User = require("../models/UserModel");
 
 const toNum = (v, def) => {
   const n = Number(v);
