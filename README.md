@@ -26,10 +26,6 @@ It features **multiple payment gateways**, **AI-based product recommendations**,
 
 ---
 
-## 🧠 AI Recommendation Engine
-- Uses **collaborative filtering** and **content-based filtering** to recommend products.
-- Built with TensorFlow.js / Scikit-learn (can be configured on backend).
-- Learns from user interactions, search history, and product views.
 
 ---
 
