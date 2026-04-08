@@ -125,7 +125,9 @@ if (process.env.VERCEL !== '1') {
 process.on('unhandledRejection', (err) => {
   console.error('UNHANDLED REJECTION! 💥 Shutting down...');
   console.error(err);
-  process.exit(1);
+  if (process.env.VERCEL !== '1') {
+    process.exit(1);
+  }
 });
 
 module.exports = appReady;
