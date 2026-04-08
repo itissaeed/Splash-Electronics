@@ -1,5 +1,5 @@
 const Order = require("../models/Order");
-const User = require("../models/userModel");
+const User = require("../models/UserModel");
 
 exports.getAdminOverview = async (req, res) => {
   try {

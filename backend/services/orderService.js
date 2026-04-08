@@ -2,7 +2,7 @@ const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const Product = require("../models/product");
 const Coupon = require("../models/Coupon");
-const User = require("../models/userModel");
+const User = require("../models/UserModel");
 const Settings = require("../models/Settings");
 const generateOrderNo = require("../utils/orderNo");
 const {
