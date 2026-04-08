@@ -7,6 +7,10 @@ const connectDB = async () => {
     return cachedConnection;
   }
 
+  if (!process.env.MONGO_URI) {
+    throw new Error('MONGO_URI is not configured');
+  }
+
   try {
     cachedConnection = await mongoose.connect(process.env.MONGO_URI);
     console.log(`\nMongoDB Connected: ${cachedConnection.connection.host}`);
