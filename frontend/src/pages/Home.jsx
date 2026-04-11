@@ -30,6 +30,8 @@ const money = (n) => {
   return `৳${num.toLocaleString("en-BD")}`;
 };
 
+const getOriginalPrice = (product) => Number(product?.originalPrice || 0);
+
 const CategorySkeleton = () => (
   <div className="rounded-2xl border bg-white p-4 shadow-sm animate-pulse">
     <div className="h-1 w-12 rounded-full bg-gray-200 mb-3" />
@@ -523,6 +525,9 @@ export default function Home() {
                     fallbackImg;
 
                   const price = p?.basePrice ?? p?.variants?.[0]?.price ?? p?.price ?? 0;
+                  const originalPrice = getOriginalPrice(p);
+                  const hasDiscount = originalPrice > price;
+                  const saveAmount = hasDiscount ? originalPrice - price : 0;
                   const productKey = p?.slug || p?._id;
                   const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
                   const compareKey = getCompareKey(p);
@@ -543,15 +548,34 @@ export default function Home() {
                             loading="lazy"
                             onError={(e) => (e.currentTarget.src = fallbackImg)}
                           />
-                          <span className="absolute left-3 top-3 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow">
-                            Featured
-                          </span>
+                          <div className="absolute left-3 top-3 flex max-w-[75%] flex-col gap-1">
+                            <span className="rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow">
+                              Featured
+                            </span>
+                            {hasDiscount ? (
+                              <span className="rounded-full bg-purple-700 px-3 py-1 text-xs font-bold text-white shadow">
+                                Save: {money(saveAmount)}
+                              </span>
+                            ) : null}
+                            {p?.promoLabel ? (
+                              <span className="rounded-full bg-fuchsia-700 px-3 py-1 text-xs font-bold text-white shadow">
+                                {p.promoLabel}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
 
                         <div className="mt-3">
                           <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
-                          <div className="mt-2 flex items-center justify-between">
-                            <p className="text-indigo-600 font-extrabold">{money(price)}</p>
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-indigo-600 font-extrabold">{money(price)}</p>
+                              {hasDiscount ? (
+                                <span className="text-sm font-semibold text-gray-400 line-through">
+                                  {money(originalPrice)}
+                                </span>
+                              ) : null}
+                            </div>
                             <span className="text-xs text-gray-500 group-hover:text-gray-700">View →</span>
                           </div>
                         </div>

@@ -1,161 +1,34 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { useTheme } from "./pages/context/ThemeContext";
-
-const STORAGE_KEY = "splash_theme_toggle_pos";
-const DEFAULT_MARGIN = 20;
-const MIN_MARGIN = 8;
 
 export default function ThemeToggle() {
   const { isDark, toggleTheme } = useTheme();
-  const buttonRef = useRef(null);
-  const draggingRef = useRef(false);
-  const movedRef = useRef(false);
-  const pointerIdRef = useRef(null);
-  const startRef = useRef({ x: 0, y: 0, left: 0, top: 0 });
-
-  const [position, setPosition] = useState({ left: null, top: null });
-  const [isDragging, setIsDragging] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (typeof parsed?.left === "number" && typeof parsed?.top === "number") {
-          setPosition(parsed);
-          return;
-        }
-      } catch {
-        // ignore bad data
-      }
-    }
-
-    const setDefaultPosition = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      const width = rect?.width ?? 180;
-      const height = rect?.height ?? 56;
-      const left = Math.max(
-        MIN_MARGIN,
-        window.innerWidth - width - DEFAULT_MARGIN
-      );
-      const top = Math.max(
-        MIN_MARGIN,
-        window.innerHeight - height - DEFAULT_MARGIN
-      );
-      setPosition({ left, top });
-    };
-
-    setDefaultPosition();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (position.left === null || position.top === null) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
-  }, [position]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const handleResize = () => {
-      const rect = buttonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setPosition((prev) => {
-        if (prev.left === null || prev.top === null) return prev;
-        const maxLeft = Math.max(MIN_MARGIN, window.innerWidth - rect.width - MIN_MARGIN);
-        const maxTop = Math.max(MIN_MARGIN, window.innerHeight - rect.height - MIN_MARGIN);
-        return {
-          left: Math.min(Math.max(MIN_MARGIN, prev.left), maxLeft),
-          top: Math.min(Math.max(MIN_MARGIN, prev.top), maxTop),
-        };
-      });
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  const handlePointerDown = (event) => {
-    if (position.left === null || position.top === null) return;
-    const target = event.currentTarget;
-    pointerIdRef.current = event.pointerId;
-    target.setPointerCapture(event.pointerId);
-    draggingRef.current = true;
-    setIsDragging(true);
-    movedRef.current = false;
-    startRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      left: position.left,
-      top: position.top,
-    };
-  };
-
-  const handlePointerMove = (event) => {
-    if (!draggingRef.current) return;
-    if (pointerIdRef.current !== event.pointerId) return;
-
-    const dx = event.clientX - startRef.current.x;
-    const dy = event.clientY - startRef.current.y;
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) movedRef.current = true;
-
-    const rect = buttonRef.current?.getBoundingClientRect();
-    const width = rect?.width ?? 0;
-    const height = rect?.height ?? 0;
-    const maxLeft = Math.max(MIN_MARGIN, window.innerWidth - width - MIN_MARGIN);
-    const maxTop = Math.max(MIN_MARGIN, window.innerHeight - height - MIN_MARGIN);
-
-    setPosition({
-      left: Math.min(Math.max(MIN_MARGIN, startRef.current.left + dx), maxLeft),
-      top: Math.min(Math.max(MIN_MARGIN, startRef.current.top + dy), maxTop),
-    });
-  };
-
-  const handlePointerUp = (event) => {
-    if (!draggingRef.current) return;
-    if (pointerIdRef.current !== event.pointerId) return;
-    draggingRef.current = false;
-    setIsDragging(false);
-    pointerIdRef.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
-  };
-
-  const handleClick = () => {
-    if (movedRef.current) {
-      movedRef.current = false;
-      return;
-    }
-    toggleTheme();
-  };
 
   return (
     <button
       type="button"
-      ref={buttonRef}
-      onClick={handleClick}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onClick={toggleTheme}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="fixed z-[100] premium-card premium-card-hover inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-100"
+      className="fixed right-3 top-1/2 z-[100] flex h-[72px] w-[72px] -translate-y-1/2 flex-col items-center justify-center rounded-full text-[11px] font-bold uppercase tracking-[0.12em] text-white shadow-[0_18px_36px_rgba(249,115,22,0.32)] transition duration-200 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-orange-200 dark:focus:ring-orange-400/40 sm:right-5 sm:h-[86px] sm:w-[86px]"
       style={{
-        left: position.left ?? undefined,
-        top: position.top ?? undefined,
-        touchAction: "none",
-        cursor: isDragging ? "grabbing" : "grab",
+        background: isDark
+          ? "linear-gradient(180deg, #fb923c 0%, #ea580c 100%)"
+          : "linear-gradient(180deg, #f97316 0%, #ef4444 100%)",
       }}
     >
-      <span
-        className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-          isDark ? "bg-cyan-100 text-cyan-700" : "bg-slate-900 text-white"
-        }`}
-      >
-        {isDark ? "L" : "D"}
+      <span className="mb-1 flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9">
+        {isDark ? (
+          <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current" aria-hidden="true">
+            <path d="M12 17.75a.75.75 0 0 1-.75-.75V15a.75.75 0 0 1 1.5 0v2a.75.75 0 0 1-.75.75Zm0-8.75a.75.75 0 0 1-.75-.75v-2a.75.75 0 0 1 1.5 0v2A.75.75 0 0 1 12 9Zm5 3.75a.75.75 0 0 1 0-1.5h2a.75.75 0 0 1 0 1.5h-2Zm-12 0a.75.75 0 0 1 0-1.5h2a.75.75 0 0 1 0 1.5H5Zm9.03 4.28a.75.75 0 0 1 .53-1.28.75.75 0 0 1 .53.22l1.42 1.41a.75.75 0 1 1-1.06 1.06l-1.42-1.41Zm-8.48-8.49a.75.75 0 0 1 0-1.06.75.75 0 0 1 1.06 0l1.42 1.41a.75.75 0 0 1-1.06 1.06L5.55 8.54Zm9.54 1.42a.75.75 0 0 1-1.06-1.06l1.42-1.42a.75.75 0 1 1 1.06 1.06l-1.42 1.42Zm-8.48 8.49-1.42 1.41a.75.75 0 1 1-1.06-1.06l1.42-1.41a.75.75 0 1 1 1.06 1.06ZM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current" aria-hidden="true">
+            <path d="M21 12.8A8.99 8.99 0 0 1 11.2 3a.75.75 0 0 0-.81-.97A9 9 0 1 0 21.97 13.6a.75.75 0 0 0-.97-.8Z" />
+          </svg>
+        )}
       </span>
-      {isDark ? "Light Mode" : "Dark Mode"}
+      <span className="leading-none">{isDark ? "Light" : "Dark"}</span>
     </button>
   );
 }

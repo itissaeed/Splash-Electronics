@@ -2,6 +2,7 @@ const https = require("https");
 const { URL } = require("url");
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
+const Cart = require("../models/Cart");
 const ReturnRefund = require("../models/ReturnRefund");
 const {
   createOrderFromCartForUser,
@@ -48,6 +49,21 @@ const postForm = (urlString, payload) =>
   });
 
 const getEnv = (key, fallback) => process.env[key] || fallback;
+const isSslCommerzDebugEnabled = () => String(process.env.SSLCOMMERZ_DEBUG || "").toLowerCase() === "true";
+
+const getSslCommerzErrorMessage = (resp) => {
+  if (!resp) return "No response from SSLCOMMERZ";
+
+  return (
+    resp.failedreason ||
+    resp.failed_reason ||
+    resp.message ||
+    resp.status_message ||
+    resp.status ||
+    (typeof resp.raw === "string" && resp.raw.trim()) ||
+    "SSLCOMMERZ did not return a gateway URL"
+  );
+};
 
 const getGatewayConfig = () => {
   const backendUrl = getEnv("BACKEND_URL", "http://localhost:5000");
@@ -101,6 +117,7 @@ exports.initSslCommerz = async (req, res) => {
       deliveryOption: validation.deliveryOption,
       visitorKey: getVisitorKey(req),
       session,
+      clearCart: false,
     });
 
     await session.commitTransaction();
@@ -128,6 +145,13 @@ exports.initSslCommerz = async (req, res) => {
       cus_country: "Bangladesh",
       cus_phone: validation.shippingAddress.phone || req.user.number || "N/A",
       shipping_method: "Courier",
+      ship_name: validation.shippingAddress.recipientName || req.user.name || "Customer",
+      ship_add1: validation.shippingAddress.addressLine1 || "N/A",
+      ship_add2: validation.shippingAddress.addressLine2 || "",
+      ship_city: validation.shippingAddress.district || "",
+      ship_state: validation.shippingAddress.division || "",
+      ship_postcode: validation.shippingAddress.postalCode || "1000",
+      ship_country: "Bangladesh",
       num_of_item: createdOrder.items?.length || 1,
       product_name: "Splash Electronics Order",
       product_category: "Electronics",
@@ -136,11 +160,30 @@ exports.initSslCommerz = async (req, res) => {
       value_b: String(req.user._id),
     };
 
+    if (isSslCommerzDebugEnabled()) {
+      console.error("SSLCOMMERZ init payload:", {
+        ...payload,
+        store_passwd: cfg.storePass ? "***masked***" : "",
+      });
+    }
+
     const initResp = await postForm(cfg.initUrl, payload);
     const gatewayUrl = initResp?.GatewayPageURL || initResp?.gateway_url;
 
     if (!gatewayUrl) {
-      return res.status(502).json({ message: "Failed to init SSLCOMMERZ session", detail: initResp });
+      const gatewayError = getSslCommerzErrorMessage(initResp);
+      if (isSslCommerzDebugEnabled()) {
+        console.error("SSLCOMMERZ init failed:", {
+          orderNo,
+          amount,
+          response: initResp,
+        });
+      }
+      return res.status(502).json({
+        message: "Failed to init SSLCOMMERZ session",
+        detail: gatewayError,
+        raw: initResp,
+      });
     }
 
     return res.json({ gatewayUrl, orderNo });
@@ -194,6 +237,7 @@ exports.sslCommerzIpn = async (req, res) => {
         order.payment.transactionId = validationResp?.tran_id || valId;
         order.payment.paidAt = new Date();
         await order.save();
+        await Cart.updateOne({ user: order.user }, { $set: { items: [] } });
         await applyCouponUsageIfNeeded({ order });
 
         const existing = await ReturnRefund.findOne({
@@ -228,6 +272,7 @@ exports.sslCommerzIpn = async (req, res) => {
         order.payment.transactionId = validationResp?.tran_id || valId;
         order.payment.paidAt = new Date();
         await order.save();
+        await Cart.updateOne({ user: order.user }, { $set: { items: [] } });
         await applyCouponUsageIfNeeded({ order });
       }
       return res.status(200).send("OK");

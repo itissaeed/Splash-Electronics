@@ -229,6 +229,8 @@ exports.createProduct = async (req, res) => {
       category,
       description,
       basePrice,
+      originalPrice,
+      promoLabel,
       highlights,
       specs,
       warrantyMonths,
@@ -259,6 +261,8 @@ exports.createProduct = async (req, res) => {
       category,
       description,
       basePrice: computeBasePrice(basePrice, normalizedVariants),
+      originalPrice: toNum(originalPrice, 0),
+      promoLabel: String(promoLabel || "").trim(),
       highlights: Array.isArray(highlights) ? highlights : [],
       specs: specs || {},
       warrantyMonths: toNum(warrantyMonths, 0),
@@ -292,6 +296,10 @@ exports.updateProduct = async (req, res) => {
     if (up.brand !== undefined) product.brand = up.brand;
     if (up.category !== undefined) product.category = up.category;
     if (up.description !== undefined) product.description = up.description;
+    if (up.originalPrice !== undefined)
+      product.originalPrice = toNum(up.originalPrice, product.originalPrice);
+    if (up.promoLabel !== undefined)
+      product.promoLabel = String(up.promoLabel || "").trim();
 
     if (up.highlights !== undefined)
       product.highlights = Array.isArray(up.highlights) ? up.highlights : product.highlights;
