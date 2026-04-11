@@ -243,6 +243,7 @@ const createOrderFromCartForUser = async ({
   deliveryOption,
   visitorKey,
   session,
+  clearCart = true,
 }) => {
   const user = await User.findById(userId).session(session);
   if (!user) {
@@ -438,9 +439,10 @@ const createOrderFromCartForUser = async ({
 
   await user.save({ session });
 
-  // Clear cart
-  cart.items = [];
-  await cart.save({ session });
+  if (clearCart) {
+    cart.items = [];
+    await cart.save({ session });
+  }
 
   return createdOrder;
 };

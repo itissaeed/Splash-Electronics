@@ -36,9 +36,14 @@ const allowedOrigins = (
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const sslCommerzOrigins = [
+  'https://sandbox.sslcommerz.com',
+  'https://securepay.sslcommerz.com',
+];
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(origin) || sslCommerzOrigins.includes(origin)) {
       return callback(null, true);
     }
 

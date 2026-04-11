@@ -38,6 +38,8 @@ const productSchema = new mongoose.Schema({
   specs: { type: Map, of: String }, // flexible: { chipset: "A17", screen: "6.7" }
 
   basePrice: { type: Number, required: true, default: 0 }, // for listing; variants override
+  originalPrice: { type: Number, default: 0 },
+  promoLabel: { type: String, trim: true, default: "" },
   variants: [variantSchema],
 
   warrantyMonths: { type: Number, default: 0 },

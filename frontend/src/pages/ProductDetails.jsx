@@ -475,6 +475,10 @@ export default function ProductDetails() {
     return selectedVariant?.price ?? product?.basePrice ?? 0;
   }, [selectedVariant, product]);
 
+  const originalPrice = useMemo(() => Number(product?.originalPrice || 0), [product]);
+  const hasDiscount = originalPrice > price;
+  const saveAmount = hasDiscount ? originalPrice - price : 0;
+
   const stock = useMemo(() => {
     const s = selectedVariant?.countInStock;
     if (typeof s === "number") return s;
@@ -799,6 +803,8 @@ export default function ProductDetails() {
                   {brandName ? chip(`Brand: ${brandName}`) : null}
                   {product?.warrantyMonths ? chip(`Warranty: ${product.warrantyMonths} mo`) : null}
                   {catName ? chip(catName) : null}
+                  {hasDiscount ? chip(`Save ${money(saveAmount)}`) : null}
+                  {product?.promoLabel ? chip(product.promoLabel) : null}
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
@@ -820,7 +826,14 @@ export default function ProductDetails() {
                 <div className="mt-5 flex items-end justify-between">
                   <div>
                     <p className="text-sm text-gray-500 font-semibold">Price</p>
-                    <p className="text-3xl font-extrabold text-slate-900 dark:text-amber-200">{money(price)}</p>
+                    <div className="flex items-end gap-3">
+                      <p className="text-3xl font-extrabold text-slate-900 dark:text-amber-200">{money(price)}</p>
+                      {hasDiscount ? (
+                        <span className="pb-1 text-base font-semibold text-slate-400 line-through">
+                          {money(originalPrice)}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="text-right">

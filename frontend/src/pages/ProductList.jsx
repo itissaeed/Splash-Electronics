@@ -19,6 +19,8 @@ const money = (n) => {
   return `৳${num.toLocaleString("en-BD")}`;
 };
 
+const getOriginalPrice = (product) => Number(product?.originalPrice || 0);
+
 const ProductSkeleton = () => (
   <div className="rounded-2xl border bg-white p-4 shadow-sm animate-pulse">
     <div className="h-44 rounded-xl bg-gray-200" />
@@ -283,6 +285,9 @@ export default function ProductListPage() {
                 fallbackImg;
 
               const price = p?.basePrice ?? p?.variants?.[0]?.price ?? p?.price ?? 0;
+              const originalPrice = getOriginalPrice(p);
+              const hasDiscount = originalPrice > price;
+              const saveAmount = hasDiscount ? originalPrice - price : 0;
 
               // ✅ slug first, fallback to id
               const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
@@ -304,6 +309,18 @@ export default function ProductListPage() {
                         loading="lazy"
                         onError={(e) => (e.currentTarget.src = fallbackImg)}
                       />
+                      <div className="absolute left-3 top-3 flex max-w-[75%] flex-col gap-1">
+                        {hasDiscount ? (
+                          <span className="rounded-full bg-purple-700 px-3 py-1 text-xs font-bold text-white shadow">
+                            Save: {money(saveAmount)}
+                          </span>
+                        ) : null}
+                        {p?.promoLabel ? (
+                          <span className="rounded-full bg-fuchsia-700 px-3 py-1 text-xs font-bold text-white shadow">
+                            {p.promoLabel}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
 
                     <div className="mt-3">
@@ -313,8 +330,15 @@ export default function ProductListPage() {
                         </span>
                       </div>
                       <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="text-indigo-600 font-extrabold">{money(price)}</p>
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="flex items-baseline gap-2">
+                          <p className="text-indigo-600 font-extrabold">{money(price)}</p>
+                          {hasDiscount ? (
+                            <span className="text-sm font-semibold text-gray-400 line-through">
+                              {money(originalPrice)}
+                            </span>
+                          ) : null}
+                        </div>
                         <span className="text-xs text-gray-500 group-hover:text-gray-700">
                           View →
                         </span>
