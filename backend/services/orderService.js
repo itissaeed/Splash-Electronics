@@ -271,8 +271,12 @@ const createOrderFromCartForUser = async ({
   const reservedMap = await getReservedQtyMap({ pairs: requestedPairs, now: new Date() });
 
   for (const ci of cart.items) {
-    const product = await Product.findById(ci.product).session(session);
-    if (!product) throw new Error("Product not found during checkout");
+    const product = await Product.findOne({
+      _id: ci.product,
+      isActive: true,
+      isDeleted: { $ne: true },
+    }).session(session);
+    if (!product) throw new Error("Product is no longer available during checkout");
 
     const variant = product.variants.id(ci.variantId);
     if (!variant) throw new Error("Variant not found during checkout");

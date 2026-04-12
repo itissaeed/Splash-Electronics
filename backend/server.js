@@ -41,9 +41,15 @@ const sslCommerzOrigins = [
   'https://securepay.sslcommerz.com',
 ];
 
+const isAllowedNullOrigin = (origin) => !origin || origin === 'null';
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || sslCommerzOrigins.includes(origin)) {
+    if (
+      isAllowedNullOrigin(origin) ||
+      allowedOrigins.includes(origin) ||
+      sslCommerzOrigins.includes(origin)
+    ) {
       return callback(null, true);
     }
 

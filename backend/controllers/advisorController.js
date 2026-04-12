@@ -768,7 +768,7 @@ exports.getAdvisorMetadata = async (req, res) => {
     const categoryRaw = req.query.category;
     const category = await resolveCategory(categoryRaw);
 
-    const filter = { isActive: true };
+    const filter = { isActive: true, isDeleted: { $ne: true } };
     if (category) filter.category = category._id;
 
     const products = await Product.find(filter)
@@ -833,7 +833,7 @@ exports.getAdvisorRecommendations = async (req, res) => {
     const usageMetadata = buildUsageMetadata(category);
     const categoryFamily = usageMetadata.family;
 
-    const filter = { isActive: true };
+    const filter = { isActive: true, isDeleted: { $ne: true } };
     if (category) filter.category = category._id;
     if (brand) filter.brand = brand._id;
 

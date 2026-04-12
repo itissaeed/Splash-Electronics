@@ -53,6 +53,8 @@ const productSchema = new mongoose.Schema({
 
   isFeatured: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date, default: null },
 
   // SEO
   metaTitle: String,
@@ -60,6 +62,6 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 productSchema.index({ name: "text", description: "text", tags: "text" });
-productSchema.index({ category: 1, brand: 1, isFeatured: 1, isActive: 1 });
+productSchema.index({ category: 1, brand: 1, isFeatured: 1, isActive: 1, isDeleted: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

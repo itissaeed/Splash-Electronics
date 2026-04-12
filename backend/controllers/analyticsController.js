@@ -3,6 +3,11 @@ const Order = require("../models/Order");
 const Product = require("../models/product");
 const ProductView = require("../models/ProductView");
 const Cart = require("../models/Cart");
+const {
+  REVENUE_RECOGNIZED_STATUSES,
+  buildRevenueMatch,
+  buildRevenueExpr,
+} = require("../utils/revenueRecognition");
 
 const parseDate = (str, fallback) => {
   if (!str) return fallback;
@@ -19,7 +24,6 @@ const toNum = (v, def) => {
 // GET /api/admin/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
 exports.adminAnalyticsOverview = async (req, res) => {
   try {
-    const revenueStatuses = ["confirmed", "processing", "shipped", "delivered"];
     const now = new Date();
 
     // default: last 30 days
@@ -68,13 +72,13 @@ exports.adminAnalyticsOverview = async (req, res) => {
                   customersSet: { $addToSet: "$user" },
                   revenueOrderCount: {
                     $sum: {
-                      $cond: [{ $in: ["$status", revenueStatuses] }, 1, 0],
+                      $cond: [buildRevenueExpr(), 1, 0],
                     },
                   },
                   totalRevenue: {
                     $sum: {
                       $cond: [
-                        { $in: ["$status", revenueStatuses] },
+                        buildRevenueExpr(),
                         "$pricing.grandTotal",
                         0,
                       ],
@@ -108,7 +112,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
                   revenue: {
                     $sum: {
                       $cond: [
-                        { $in: ["$status", revenueStatuses] },
+                        buildRevenueExpr(),
                         "$pricing.grandTotal",
                         0,
                       ],
@@ -119,7 +123,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
               { $sort: { _id: 1 } },
             ],
             byDivision: [
-              { $match: { status: { $in: revenueStatuses } } },
+              { $match: buildRevenueMatch() },
               {
                 $addFields: {
                   divisionName: {
@@ -148,9 +152,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
             byDivisionProductOrders: [
               {
                 $match: {
-                  status: {
-                    $in: ["pending", "confirmed", "processing", "shipped", "delivered"],
-                  },
+                  status: { $in: ["pending", ...REVENUE_RECOGNIZED_STATUSES] },
                 },
               },
               {
@@ -180,7 +182,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
               { $sort: { qty: -1 } },
             ],
             topProducts: [
-              { $match: { status: { $in: revenueStatuses } } },
+              { $match: buildRevenueMatch() },
               { $unwind: "$items" },
               {
                 $group: {
@@ -195,7 +197,7 @@ exports.adminAnalyticsOverview = async (req, res) => {
               { $limit: 10 },
             ],
             paymentMethods: [
-              { $match: { status: { $in: revenueStatuses } } },
+              { $match: buildRevenueMatch() },
               {
                 $group: {
                   _id: "$payment.method",
@@ -369,7 +371,6 @@ exports.adminAnalyticsOverview = async (req, res) => {
 // GET /api/admin/analytics/forecasting?daysBack=90&horizonDays=30&top=30
 exports.adminDemandForecast = async (req, res) => {
   try {
-    const revenueStatuses = ["confirmed", "processing", "shipped", "delivered"];
     const now = new Date();
 
     const daysBack = Math.max(7, toNum(req.query.daysBack, 90)); // min 7 days
@@ -380,7 +381,7 @@ exports.adminDemandForecast = async (req, res) => {
 
     const matchStage = {
       createdAt: { $gte: from, $lte: now },
-      status: { $in: revenueStatuses },
+      ...buildRevenueMatch(),
     };
 
     // Aggregate per product from order items

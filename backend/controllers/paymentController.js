@@ -85,6 +85,145 @@ const getGatewayConfig = () => {
   };
 };
 
+const getRequestValue = (req, key) => req.body?.[key] || req.query?.[key];
+
+const normalizeBaseUrl = (url) => String(url || "").replace(/\/+$/, "");
+
+const isSandboxGateway = (cfg) =>
+  String(cfg?.initUrl || "").toLowerCase().includes("sandbox.sslcommerz.com");
+
+const validateSslPayment = async (cfg, valId) => {
+  if (!valId) return null;
+
+  return postForm(cfg.validationUrl, {
+    val_id: valId,
+    store_id: cfg.storeId,
+    store_passwd: cfg.storePass,
+    format: "json",
+  });
+};
+
+const isValidatedPayment = (validationResp) =>
+  validationResp?.status === "VALID" || validationResp?.status === "VALIDATED";
+
+const ensureLatePaymentRefundRequest = async (order) => {
+  const existing = await ReturnRefund.findOne({
+    order: order._id,
+    status: { $in: ["requested", "approved", "picked", "received"] },
+  });
+
+  if (existing) return;
+
+  const items = (order.items || []).map((it) => ({
+    product: it.product,
+    variantId: it.variantId,
+    qty: it.qty,
+    reason: "late_payment_after_reservation_expiry",
+  }));
+
+  await ReturnRefund.create({
+    order: order._id,
+    user: order.user,
+    items,
+    status: "requested",
+    customerRefundPreference: {
+      reason: "Payment succeeded after reservation expiry cancellation",
+      refundTimeOption: "WITHIN_7_DAYS",
+    },
+    notes: `Auto-created from late successful payment callback for ${order.orderNo}`,
+  });
+};
+
+const markOrderPaidFromSslCommerz = async (order, transactionId) => {
+  order.payment = order.payment || {};
+  order.payment.status = "paid";
+  order.payment.provider = "sslcommerz";
+  order.payment.transactionId = transactionId || order.payment.transactionId;
+  order.payment.paidAt = order.payment.paidAt || new Date();
+  await order.save();
+  await Cart.updateOne({ user: order.user }, { $set: { items: [] } });
+  await applyCouponUsageIfNeeded({ order });
+};
+
+const markOrderFailedFromSslCommerz = async (order, transactionId, statusHint) => {
+  if (String(order.payment?.status || "").toLowerCase() === "paid") {
+    return;
+  }
+
+  order.payment = order.payment || {};
+  order.payment.status = "failed";
+  order.payment.provider = "sslcommerz";
+  order.payment.transactionId = transactionId || order.payment.transactionId;
+  order.status = "cancelled";
+  order.inventory = order.inventory || {};
+  order.inventory.reservationActive = false;
+  order.inventory.reservationReleasedAt = new Date();
+  order.inventory.reservationReleaseReason =
+    statusHint === "cancelled" ? "PAYMENT_CANCELLED" : "PAYMENT_FAILED";
+  await order.save();
+};
+
+const syncSslCommerzOrder = async ({ req, statusHint }) => {
+  const cfg = getGatewayConfig();
+  const tranId = getRequestValue(req, "tran_id") || getRequestValue(req, "value_a");
+  const valId = getRequestValue(req, "val_id");
+  const status = String(getRequestValue(req, "status") || statusHint || "").toUpperCase();
+
+  if (!tranId) {
+    return { orderNo: "unknown", redirectStatus: statusHint || "pending" };
+  }
+
+  const order = await Order.findOne({ orderNo: tranId });
+  if (!order) {
+    return { orderNo: tranId, redirectStatus: "not-found" };
+  }
+
+  let validationResp = null;
+  if (valId && cfg.storeId && cfg.storePass) {
+    validationResp = await validateSslPayment(cfg, valId);
+  }
+
+  const transactionId =
+    validationResp?.tran_id || valId || getRequestValue(req, "bank_tran_id") || tranId;
+
+  if (isValidatedPayment(validationResp)) {
+    if (String(order.status || "").toLowerCase() === "cancelled") {
+      await markOrderPaidFromSslCommerz(order, transactionId);
+      await ensureLatePaymentRefundRequest(order);
+      return { orderNo: tranId, redirectStatus: "paid" };
+    }
+
+    if (String(order.payment?.status || "").toLowerCase() !== "paid") {
+      await markOrderPaidFromSslCommerz(order, transactionId);
+    }
+    return { orderNo: tranId, redirectStatus: "paid" };
+  }
+
+  const isSandboxSuccessFallback =
+    isSandboxGateway(cfg) &&
+    ["VALID", "VALIDATED", "SUCCESS"].includes(status || "") &&
+    String(order.payment?.status || "").toLowerCase() !== "paid";
+
+  if (isSandboxSuccessFallback || statusHint === "success") {
+    await markOrderPaidFromSslCommerz(order, transactionId);
+    return { orderNo: tranId, redirectStatus: "paid" };
+  }
+
+  if (["FAILED", "CANCELLED"].includes(status) || statusHint === "failed" || statusHint === "cancelled") {
+    const nextStatus = status === "CANCELLED" || statusHint === "cancelled" ? "cancelled" : "failed";
+    await markOrderFailedFromSslCommerz(order, transactionId, nextStatus);
+    return { orderNo: tranId, redirectStatus: nextStatus };
+  }
+
+  return {
+    orderNo: tranId,
+    redirectStatus:
+      String(order.payment?.status || "").toLowerCase() === "paid"
+        ? "paid"
+        : statusHint || "pending",
+  };
+};
+
 // POST /api/payments/sslcommerz/init
 // body: { shippingAddress, couponCode? }
 exports.initSslCommerz = async (req, res) => {
@@ -119,8 +258,6 @@ exports.initSslCommerz = async (req, res) => {
       session,
       clearCart: false,
     });
-
-    await session.commitTransaction();
 
     const orderNo = createdOrder.orderNo;
     const amount = createdOrder.pricing?.grandTotal || 0;
@@ -172,6 +309,7 @@ exports.initSslCommerz = async (req, res) => {
 
     if (!gatewayUrl) {
       const gatewayError = getSslCommerzErrorMessage(initResp);
+      await session.abortTransaction();
       if (isSslCommerzDebugEnabled()) {
         console.error("SSLCOMMERZ init failed:", {
           orderNo,
@@ -186,6 +324,7 @@ exports.initSslCommerz = async (req, res) => {
       });
     }
 
+    await session.commitTransaction();
     return res.json({ gatewayUrl, orderNo });
   } catch (e) {
     console.error("initSslCommerz:", e);
@@ -204,92 +343,10 @@ exports.initSslCommerz = async (req, res) => {
 // POST /api/payments/sslcommerz/ipn
 exports.sslCommerzIpn = async (req, res) => {
   try {
-    const cfg = getGatewayConfig();
-    const tranId = req.body?.tran_id || req.query?.tran_id;
-    const valId = req.body?.val_id || req.query?.val_id;
-    const status = req.body?.status || req.query?.status;
-
-    if (!tranId || !valId) {
-      return res.status(400).send("Missing tran_id or val_id");
-    }
-
-    const validationQuery = {
-      val_id: valId,
-      store_id: cfg.storeId,
-      store_passwd: cfg.storePass,
-      format: "json",
-    };
-
-    const validationResp = await postForm(cfg.validationUrl, validationQuery);
-    const isValid =
-      validationResp?.status === "VALID" ||
-      validationResp?.status === "VALIDATED";
-
-    const order = await Order.findOne({ orderNo: tranId });
-    if (!order) {
+    const result = await syncSslCommerzOrder({ req, statusHint: "pending" });
+    if (result.redirectStatus === "not-found") {
       return res.status(404).send("Order not found");
     }
-
-    if (isValid) {
-      if (String(order.status || "").toLowerCase() === "cancelled") {
-        order.payment.status = "paid";
-        order.payment.provider = "sslcommerz";
-        order.payment.transactionId = validationResp?.tran_id || valId;
-        order.payment.paidAt = new Date();
-        await order.save();
-        await Cart.updateOne({ user: order.user }, { $set: { items: [] } });
-        await applyCouponUsageIfNeeded({ order });
-
-        const existing = await ReturnRefund.findOne({
-          order: order._id,
-          status: { $in: ["requested", "approved", "picked", "received"] },
-        });
-        if (!existing) {
-          const items = (order.items || []).map((it) => ({
-            product: it.product,
-            variantId: it.variantId,
-            qty: it.qty,
-            reason: "late_payment_after_reservation_expiry",
-          }));
-          await ReturnRefund.create({
-            order: order._id,
-            user: order.user,
-            items,
-            status: "requested",
-            customerRefundPreference: {
-              reason: "Payment succeeded after reservation expiry cancellation",
-              refundTimeOption: "WITHIN_7_DAYS",
-            },
-            notes: `Auto-created from late successful payment callback for ${order.orderNo}`,
-          });
-        }
-        return res.status(200).send("OK");
-      }
-
-      if (order.payment?.status !== "paid") {
-        order.payment.status = "paid";
-        order.payment.provider = "sslcommerz";
-        order.payment.transactionId = validationResp?.tran_id || valId;
-        order.payment.paidAt = new Date();
-        await order.save();
-        await Cart.updateOne({ user: order.user }, { $set: { items: [] } });
-        await applyCouponUsageIfNeeded({ order });
-      }
-      return res.status(200).send("OK");
-    }
-
-    if (status === "FAILED" || status === "CANCELLED") {
-      order.payment.status = "failed";
-      order.payment.provider = "sslcommerz";
-      order.payment.transactionId = validationResp?.tran_id || valId;
-      order.status = "cancelled";
-      order.inventory = order.inventory || {};
-      order.inventory.reservationActive = false;
-      order.inventory.reservationReleasedAt = new Date();
-      order.inventory.reservationReleaseReason = "PAYMENT_FAILED";
-      await order.save();
-    }
-
     return res.status(200).send("OK");
   } catch (e) {
     console.error("sslCommerzIpn:", e);
@@ -297,19 +354,41 @@ exports.sslCommerzIpn = async (req, res) => {
   }
 };
 
-const redirectWithStatus = (req, res, status) => {
+const redirectWithStatus = async (req, res, statusHint) => {
   const cfg = getGatewayConfig();
-  const tranId = req.body?.tran_id || req.query?.tran_id || req.body?.value_a || req.query?.value_a;
-  const orderNo = tranId || "unknown";
-  const url = `${cfg.frontendUrl}/order-success/${orderNo}?payment=${status}`;
+  const { orderNo, redirectStatus } = await syncSslCommerzOrder({ req, statusHint });
+  const url = `${normalizeBaseUrl(cfg.frontendUrl)}/order-success/${encodeURIComponent(
+    orderNo
+  )}?payment=${encodeURIComponent(redirectStatus)}`;
   return res.redirect(url);
 };
 
 // POST/GET /api/payments/sslcommerz/success
-exports.sslCommerzSuccess = (req, res) => redirectWithStatus(req, res, "success");
+exports.sslCommerzSuccess = async (req, res) => {
+  try {
+    return await redirectWithStatus(req, res, "success");
+  } catch (e) {
+    console.error("sslCommerzSuccess:", e);
+    return res.status(500).send("Payment success redirect failed");
+  }
+};
 
 // POST/GET /api/payments/sslcommerz/fail
-exports.sslCommerzFail = (req, res) => redirectWithStatus(req, res, "failed");
+exports.sslCommerzFail = async (req, res) => {
+  try {
+    return await redirectWithStatus(req, res, "failed");
+  } catch (e) {
+    console.error("sslCommerzFail:", e);
+    return res.status(500).send("Payment fail redirect failed");
+  }
+};
 
 // POST/GET /api/payments/sslcommerz/cancel
-exports.sslCommerzCancel = (req, res) => redirectWithStatus(req, res, "cancelled");
+exports.sslCommerzCancel = async (req, res) => {
+  try {
+    return await redirectWithStatus(req, res, "cancelled");
+  } catch (e) {
+    console.error("sslCommerzCancel:", e);
+    return res.status(500).send("Payment cancel redirect failed");
+  }
+};
