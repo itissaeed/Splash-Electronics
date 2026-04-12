@@ -2,7 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import api from "../utils/api";
 import Breadcrumb from "../BreadCrumb";
-import { FaSearch } from "react-icons/fa";
+import {
+  FaCheck,
+  FaChevronDown,
+  FaSearch,
+  FaSlidersH,
+  FaStar,
+  FaTimes,
+} from "react-icons/fa";
 import useCompareItems from "../utils/useCompare";
 import {
   COMPARE_LIMIT,
@@ -21,12 +28,74 @@ const money = (n) => {
 
 const getOriginalPrice = (product) => Number(product?.originalPrice || 0);
 
+const getProductStock = (product) =>
+  (Array.isArray(product?.variants) ? product.variants : []).reduce(
+    (sum, variant) => sum + Number(variant?.countInStock || 0),
+    0
+  );
+
+const splitCsv = (value) =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const joinCsv = (values = []) => Array.from(new Set(values)).filter(Boolean).join(",");
+
+const RESERVED_PRODUCT_FILTER_KEYS = new Set([
+  "page",
+  "pageNumber",
+  "limit",
+  "keyword",
+  "featured",
+  "sort",
+  "category",
+  "brand",
+  "brands",
+  "minPrice",
+  "maxPrice",
+  "inStock",
+]);
+
 const ProductSkeleton = () => (
   <div className="rounded-2xl border bg-white p-4 shadow-sm animate-pulse">
     <div className="h-44 rounded-xl bg-gray-200" />
     <div className="mt-4 h-4 w-3/4 rounded bg-gray-200" />
     <div className="mt-2 h-4 w-1/2 rounded bg-gray-200" />
     <div className="mt-3 h-3 w-1/3 rounded bg-gray-200" />
+  </div>
+);
+
+const FilterSection = ({
+  title,
+  subtitle,
+  isOpen,
+  onToggle,
+  action,
+  children,
+}) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex items-start justify-between gap-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex flex-1 items-start justify-between gap-3 text-left"
+      >
+        <div>
+          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
+        </div>
+        <span
+          className={`mt-1 rounded-full bg-slate-100 p-2 text-slate-500 transition ${
+            isOpen ? "rotate-180" : ""
+          }`}
+        >
+          <FaChevronDown className="text-xs" />
+        </span>
+      </button>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+    {isOpen ? <div className="mt-4">{children}</div> : null}
   </div>
 );
 
@@ -40,14 +109,36 @@ export default function ProductListPage() {
   const featuredParam = searchParams.get("featured") || ""; // "true"
   const sortParam = searchParams.get("sort") || "latest"; // latest | priceAsc | priceDesc | rating
   const pageParam = Number(searchParams.get("page") || 1);
+  const minPriceParam = searchParams.get("minPrice") || "";
+  const maxPriceParam = searchParams.get("maxPrice") || "";
+  const brandsParam = searchParams.get("brands") || "";
+  const inStockParam = searchParams.get("inStock") || "";
 
   // Local state
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [filterMeta, setFilterMeta] = useState({
+    priceRange: { min: 0, max: 0 },
+    attributeFilters: [],
+    category: null,
+  });
   const [products, setProducts] = useState([]);
   const [pages, setPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [page, setPage] = useState(pageParam);
+  const [openSections, setOpenSections] = useState({
+    categories: true,
+    price: true,
+    availability: true,
+    brands: true,
+    specs: true,
+  });
 
   const [searchTerm, setSearchTerm] = useState(keywordParam);
+  const [draftMinPrice, setDraftMinPrice] = useState(minPriceParam);
+  const [draftMaxPrice, setDraftMaxPrice] = useState(maxPriceParam);
+  const [selectedBrands, setSelectedBrands] = useState(splitCsv(brandsParam));
+  const [inStockOnly, setInStockOnly] = useState(inStockParam === "true");
   const [loading, setLoading] = useState(true);
   const compareItems = useCompareItems();
 
@@ -71,6 +162,39 @@ export default function ProductListPage() {
     })();
   }, []);
 
+  // Keep local filter controls synced with URL
+  useEffect(() => setSearchTerm(keywordParam), [keywordParam]);
+  useEffect(() => {
+    setDraftMinPrice(minPriceParam);
+  }, [minPriceParam]);
+  useEffect(() => {
+    setDraftMaxPrice(maxPriceParam);
+  }, [maxPriceParam]);
+  useEffect(() => setSelectedBrands(splitCsv(brandsParam)), [brandsParam]);
+  useEffect(() => setInStockOnly(inStockParam === "true"), [inStockParam]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const params = categoryParam ? { category: categoryParam } : {};
+        const { data } = await api.get("/products/filters", { params });
+        setFilterMeta({
+          priceRange: {
+            min: Number(data?.priceRange?.min || 0),
+            max: Number(data?.priceRange?.max || 0),
+          },
+          attributeFilters: Array.isArray(data?.attributeFilters) ? data.attributeFilters : [],
+          category: data?.category || null,
+        });
+        if (Array.isArray(data?.brands)) {
+          setBrands(data.brands);
+        }
+      } catch (e) {
+        console.error("Failed to fetch product filters:", e);
+      }
+    })();
+  }, [categoryParam, minPriceParam, maxPriceParam]);
+
   // Fetch products from backend (server-side filtering + pagination)
   useEffect(() => {
     (async () => {
@@ -84,6 +208,14 @@ export default function ProductListPage() {
         if (keywordParam) params.keyword = keywordParam;
         if (categoryParam) params.category = categoryParam; // backend accepts slug or id (you coded it)
         if (featuredParam === "true") params.featured = "true";
+        if (minPriceParam) params.minPrice = minPriceParam;
+        if (maxPriceParam) params.maxPrice = maxPriceParam;
+        if (brandsParam) params.brands = brandsParam;
+        if (inStockParam === "true") params.inStock = "true";
+        Array.from(searchParams.entries()).forEach(([key, value]) => {
+          if (RESERVED_PRODUCT_FILTER_KEYS.has(key)) return;
+          if (String(value || "").trim()) params[key] = value;
+        });
 
         // Map UI sort → backend sort keys
         if (sortParam === "priceAsc") params.sort = "priceAsc";
@@ -96,15 +228,17 @@ export default function ProductListPage() {
         // Your backend returns: { products, page, pages, total }
         setProducts(Array.isArray(data?.products) ? data.products : []);
         setPages(Number(data?.pages || 1));
+        setTotalProducts(Number(data?.total || 0));
       } catch (e) {
         console.error("Failed to fetch products:", e);
         setProducts([]);
         setPages(1);
+        setTotalProducts(0);
       } finally {
         setLoading(false);
       }
     })();
-  }, [page, categoryParam, keywordParam, featuredParam, sortParam]);
+  }, [page, categoryParam, keywordParam, featuredParam, sortParam, minPriceParam, maxPriceParam, brandsParam, inStockParam, searchParams]);
 
   const selectedCategoryName = useMemo(() => {
     if (!categoryParam) return "Products";
@@ -112,8 +246,53 @@ export default function ProductListPage() {
     return found?.name || "Products";
   }, [categories, categoryParam]);
 
-  const goWithParams = (next = {}) => {
+  const categoryFilterTitle = filterMeta?.category?.name || selectedCategoryName;
+  const priceMinBound = Number.isFinite(Number(filterMeta?.priceRange?.min))
+    ? Number(filterMeta.priceRange.min)
+    : 0;
+  const priceMaxBound = Number.isFinite(Number(filterMeta?.priceRange?.max))
+    ? Number(filterMeta.priceRange.max)
+    : 0;
+  const activeDynamicFilters = filterMeta.attributeFilters.filter((item) => {
+    const value = searchParams.get(item.key);
+    return value && value.trim();
+  });
+  const activeFilterCount =
+    Number(Boolean(categoryParam)) +
+    Number(Boolean(keywordParam)) +
+    Number(Boolean(minPriceParam || maxPriceParam)) +
+    Number(Boolean(featuredParam === "true")) +
+    Number(Boolean(inStockParam === "true")) +
+    selectedBrands.length +
+    activeDynamicFilters.length;
+  const quickPriceRanges = useMemo(() => {
+    const safeMin = Math.max(0, Number(priceMinBound) || 0);
+    const safeMax = Math.max(safeMin, Number(priceMaxBound) || 0);
+    if (safeMax <= safeMin) return [];
+
+    const first = Math.round(safeMax * 0.25);
+    const second = Math.round(safeMax * 0.5);
+    const third = Math.round(safeMax * 0.75);
+    return [
+      { label: `Under ${money(first)}`, min: "", max: String(first) },
+      { label: `${money(first)} - ${money(second)}`, min: String(first), max: String(second) },
+      { label: `${money(second)} - ${money(third)}`, min: String(second), max: String(third) },
+      { label: `${money(third)} & Above`, min: String(third), max: "" },
+    ];
+  }, [priceMinBound, priceMaxBound]);
+
+  const toggleSection = (section) => {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const goWithParams = (next = {}, options = {}) => {
     const p = new URLSearchParams(searchParams);
+
+    if (options.clearDynamicFilters) {
+      Array.from(p.keys()).forEach((key) => {
+        if (!RESERVED_PRODUCT_FILTER_KEYS.has(key)) p.delete(key);
+      });
+    }
 
     // apply next
     Object.entries(next).forEach(([k, v]) => {
@@ -132,12 +311,78 @@ export default function ProductListPage() {
     goWithParams({ keyword: searchTerm.trim() || "" });
   };
 
-  const onSelectCategory = (slug) => {
-    goWithParams({ category: slug || "" });
+  const applyPriceFilter = () => {
+    const normalizedMin = String(draftMinPrice || "").trim();
+    const normalizedMax = String(draftMaxPrice || "").trim();
+    const min = normalizedMin === "" ? null : Number(normalizedMin);
+    const max = normalizedMax === "" ? null : Number(normalizedMax);
+
+    if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) {
+      return;
+    }
+
+    if (min !== null && max !== null && min > max) {
+      const swappedMin = String(max);
+      const swappedMax = String(min);
+      setDraftMinPrice(swappedMin);
+      setDraftMaxPrice(swappedMax);
+      goWithParams({
+        minPrice: swappedMin,
+        maxPrice: swappedMax,
+      });
+      return;
+    }
+
+    goWithParams({
+      minPrice: normalizedMin,
+      maxPrice: normalizedMax,
+    });
+  };
+
+  const toggleBrand = (slug) => {
+    const next = selectedBrands.includes(slug)
+      ? selectedBrands.filter((value) => value !== slug)
+      : [...selectedBrands, slug];
+    setSelectedBrands(next);
+    goWithParams({ brands: joinCsv(next) });
+  };
+
+  const toggleInStock = () => {
+    const next = !inStockOnly;
+    setInStockOnly(next);
+    goWithParams({ inStock: next ? "true" : "" });
+  };
+
+	  const clearFilters = () => {
+	    setDraftMinPrice("");
+	    setDraftMaxPrice("");
+	    setSelectedBrands([]);
+    setInStockOnly(false);
+    setSearchTerm("");
+    goWithParams({
+      minPrice: "",
+      maxPrice: "",
+      brands: "",
+      inStock: "",
+      featured: "",
+      category: "",
+      keyword: "",
+      sort: "latest",
+    }, { clearDynamicFilters: true });
   };
 
   const onPageChange = (nextPage) => {
     goWithParams({ page: nextPage });
+  };
+
+  const removeFilterChip = (type, value) => {
+    if (type === "category") return goWithParams({ category: "" });
+    if (type === "keyword") return goWithParams({ keyword: "" });
+    if (type === "price") return goWithParams({ minPrice: "", maxPrice: "" });
+    if (type === "inStock") return goWithParams({ inStock: "" });
+    if (type === "featured") return goWithParams({ featured: "" });
+    if (type === "brand") return toggleBrand(value);
+    if (type === "dynamic") return goWithParams({ [value]: "" });
   };
 
   return (
@@ -203,69 +448,424 @@ export default function ProductListPage() {
         />
       </div>
 
-      {/* Filters Row */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
-        <div className="premium-card rounded-[1.75rem] p-5 sm:p-6 flex flex-col gap-4">
-        {/* Category Pills */}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onSelectCategory("")}
-            className={`px-4 py-2 rounded-full text-sm font-semibold transition ${
-              !categoryParam ? "bg-indigo-600 text-white shadow" : "bg-white border hover:bg-gray-50"
-            }`}
-          >
-            All
-          </button>
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 px-4 sm:px-6 xl:grid-cols-[235px_minmax(0,1fr)] items-start">
+          <aside className="space-y-4 xl:sticky xl:top-6">
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 text-white shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-200/80">Filters</p>
+                  <h2 className="mt-2 flex items-center gap-2 text-lg font-extrabold">
+                    <FaSlidersH className="text-cyan-300" />
+                    Refine results
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Narrow down by department, budget, brand, and key specs.
+                  </p>
+                </div>
+                <div className="rounded-xl bg-white/10 px-3 py-2 text-right">
+                  <div className="text-base font-extrabold">{activeFilterCount}</div>
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Active</div>
+                </div>
+              </div>
+            </div>
 
-          {categories.map((cat) => (
+            <FilterSection
+              title="Department"
+              subtitle="Shop by category like a storefront aisle."
+              isOpen={openSections.categories}
+              onToggle={() => toggleSection("categories")}
+            >
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => goWithParams({ category: "" })}
+                  className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                    !categoryParam
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400"
+                  }`}
+                >
+                  <span className="font-semibold">All Products</span>
+                  {!categoryParam ? <FaCheck className="text-xs" /> : null}
+                </button>
+                {categories.map((category) => {
+                  const active = category.slug === categoryParam;
+                  return (
+                    <button
+                      key={category._id || category.slug}
+                      type="button"
+                      onClick={() => goWithParams({ category: category.slug })}
+                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                        active
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400"
+                      }`}
+                    >
+                      <span className="font-semibold">{category.name}</span>
+                      {active ? <FaCheck className="text-xs" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </FilterSection>
+
+            <FilterSection
+              title="Price"
+              subtitle="Use quick ranges or set your own budget."
+              isOpen={openSections.price}
+              onToggle={() => toggleSection("price")}
+              action={
+	                <button
+	                  type="button"
+	                  onClick={() => {
+	                    setDraftMinPrice("");
+	                    setDraftMaxPrice("");
+	                    goWithParams({ minPrice: "", maxPrice: "" });
+	                  }}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                >
+                  Reset
+                </button>
+              }
+            >
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                {quickPriceRanges.length > 0 ? (
+                  <div className="space-y-2">
+                    {quickPriceRanges.map((range) => {
+                      const active =
+                        String(minPriceParam || "") === String(range.min || "") &&
+                        String(maxPriceParam || "") === String(range.max || "");
+                      return (
+	                        <button
+	                          key={`${range.label}-${range.min}-${range.max}`}
+	                          type="button"
+	                          onClick={() => {
+	                            setDraftMinPrice(String(range.min || ""));
+	                            setDraftMaxPrice(String(range.max || ""));
+	                            goWithParams({
+	                              minPrice: String(range.min || ""),
+	                              maxPrice: String(range.max || ""),
+                            });
+                          }}
+                          className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm font-semibold transition ${
+                            active
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                          }`}
+                        >
+                          <span>{range.label}</span>
+                          {active ? <FaCheck className="text-xs" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Custom range</span>
+                    <span>0 - {money(priceMaxBound)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="min-w-0">
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        Min
+                      </label>
+	                      <input
+	                        value={draftMinPrice}
+	                        onChange={(e) => setDraftMinPrice(e.target.value)}
+	                        onKeyDown={(e) => {
+	                          if (e.key === "Enter") applyPriceFilter();
+	                        }}
+	                        type="text"
+	                        inputMode="numeric"
+	                        placeholder="0"
+	                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-semibold tabular-nums text-slate-900 outline-none focus:ring-2 focus:ring-indigo-400"
+	                      />
+                    </div>
+
+                    <div className="min-w-0">
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        Max
+                      </label>
+	                      <input
+	                        value={draftMaxPrice}
+	                        onChange={(e) => setDraftMaxPrice(e.target.value)}
+	                        onKeyDown={(e) => {
+	                          if (e.key === "Enter") applyPriceFilter();
+	                        }}
+	                        type="text"
+	                        inputMode="numeric"
+	                        placeholder={String(priceMaxBound || 0)}
+	                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-xs font-semibold tabular-nums text-slate-900 outline-none focus:ring-2 focus:ring-indigo-400"
+	                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                  <span>Min: {money(0)}</span>
+                  <span>Max: {money(priceMaxBound)}</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={applyPriceFilter}
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Apply price
+                </button>
+              </div>
+            </FilterSection>
+
+            <FilterSection
+              title="Availability"
+              subtitle="Focus on products you can buy right away."
+              isOpen={openSections.availability}
+              onToggle={() => toggleSection("availability")}
+            >
+              <div className="space-y-3">
+                <label
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${
+                    inStockOnly
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-900"
+                      : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={toggleInStock}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="font-semibold">In stock only</span>
+                </label>
+                <label
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${
+                    featuredParam === "true"
+                      ? "border-amber-500 bg-amber-50 text-amber-900"
+                      : "border-slate-200 bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={featuredParam === "true"}
+                    onChange={() => goWithParams({ featured: featuredParam === "true" ? "" : "true" })}
+                    className="h-4 w-4 rounded border-slate-300 text-amber-500 focus:ring-amber-500"
+                  />
+                  <span className="flex items-center gap-2 font-semibold">
+                    <FaStar className="text-xs" />
+                    Featured deals
+                  </span>
+                </label>
+              </div>
+            </FilterSection>
+
+            {filterMeta.attributeFilters.length > 0 && (
+              <FilterSection
+                title={`${categoryFilterTitle} filters`}
+                subtitle={`${activeDynamicFilters.length} active controls`}
+                isOpen={openSections.specs}
+                onToggle={() => toggleSection("specs")}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams);
+                      filterMeta.attributeFilters.forEach((field) => next.delete(field.key));
+                      next.set("page", "1");
+                      navigate(`/products?${next.toString()}`);
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Clear
+                  </button>
+                }
+              >
+                <div className="space-y-4">
+                  {filterMeta.attributeFilters.map((field) => {
+                    const value = searchParams.get(field.key) || "";
+                    return (
+                      <div key={field.key}>
+                        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                          {field.label}
+                        </label>
+                        <select
+                          value={value}
+                          onChange={(e) => goWithParams({ [field.key]: e.target.value })}
+                          className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                        >
+                          <option value="">{field.placeholder}</option>
+                          {field.options.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </FilterSection>
+            )}
+
             <button
-              key={cat._id}
-              onClick={() => onSelectCategory(cat.slug)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition ${
-                categoryParam === cat.slug
-                  ? "bg-indigo-600 text-white shadow"
-                  : "bg-white border hover:bg-gray-50"
-              }`}
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
-              {cat.name}
+              <FaTimes />
+              Clear all filters
             </button>
-          ))}
-        </div>
+          </aside>
 
-        {/* Sort + Featured */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-          <div className="flex gap-2">
-            <button
-              onClick={() => goWithParams({ featured: featuredParam === "true" ? "" : "true" })}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold border transition ${
-                featuredParam === "true"
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white hover:bg-gray-50"
-              }`}
-            >
-              Featured
-            </button>
-          </div>
+	          <div className="space-y-5">
+		            <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Results</p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Browse like a real storefront with department, deal, budget, and brand filters.
+                  </p>
+                </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600 font-semibold">Sort:</span>
-            <select
-              value={sortParam}
-              onChange={(e) => goWithParams({ sort: e.target.value })}
-              className="rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-            >
-              <option value="latest">Latest</option>
-              <option value="priceAsc">Price: Low → High</option>
-              <option value="priceDesc">Price: High → Low</option>
-              <option value="rating">Top Rated</option>
-            </select>
-          </div>
-        </div>
-        </div>
-      </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                    {loading ? "Loading..." : `${totalProducts || products.length} items`} • Page {page} of {pages}
+                  </div>
+                  <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2">
+                    <span className="text-sm font-semibold text-slate-700">Sort by</span>
+                    <select
+                      value={sortParam}
+                      onChange={(e) => goWithParams({ sort: e.target.value })}
+                      className="rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      <option value="latest">Latest</option>
+                      <option value="priceAsc">Price: Low to High</option>
+                      <option value="priceDesc">Price: High to Low</option>
+                      <option value="rating">Top Rated</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
 
+		              <div className="mt-4 flex flex-wrap gap-2">
+                {categoryParam ? (
+                  <button
+                    type="button"
+                    onClick={() => removeFilterChip("category")}
+                    className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700"
+                  >
+                    Category: {selectedCategoryName}
+                  </button>
+                ) : null}
+                {keywordParam ? (
+                  <button
+                    type="button"
+                    onClick={() => removeFilterChip("keyword")}
+                    className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800"
+                  >
+                    Search: {keywordParam}
+                  </button>
+                ) : null}
+                {minPriceParam || maxPriceParam ? (
+                  <button
+                    type="button"
+                    onClick={() => removeFilterChip("price")}
+                    className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700"
+                  >
+                    Price: {minPriceParam || "0"} - {maxPriceParam || "Any"}
+                  </button>
+                ) : null}
+                {inStockOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => removeFilterChip("inStock")}
+                    className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700"
+                  >
+                    In stock only
+                  </button>
+                ) : null}
+                {featuredParam === "true" ? (
+                  <button
+                    type="button"
+                    onClick={() => removeFilterChip("featured")}
+                    className="rounded-full bg-fuchsia-50 px-3 py-1 text-xs font-semibold text-fuchsia-700"
+                  >
+                    Featured only
+                  </button>
+                ) : null}
+                {selectedBrands.map((slug) => {
+                  const found = brands.find((brand) => brand.slug === slug);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => removeFilterChip("brand", slug)}
+                      key={slug}
+                      className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                    >
+                      Brand: {found?.name || slug}
+                    </button>
+                  );
+                })}
+                {activeDynamicFilters.map((field) => (
+                  <button
+                    key={field.key}
+                    type="button"
+                    onClick={() => removeFilterChip("dynamic", field.key)}
+                    className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700"
+                  >
+                    {field.label}: {searchParams.get(field.key)}
+                  </button>
+                ))}
+		              </div>
+		            </div>
+
+		            {brands.length > 0 ? (
+		              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+		                <div className="flex flex-col items-center gap-2">
+		                  <p className="text-sm font-semibold text-slate-900">
+		                    {categoryParam ? `${selectedCategoryName} brands` : "Shop by brand"}
+		                  </p>
+		                  <p className="text-xs text-slate-500">
+		                    {categoryParam
+		                      ? "All brands for the selected category."
+		                      : "Browse brands across the catalog."}
+		                  </p>
+		                  {selectedBrands.length > 0 ? (
+		                    <button
+		                      type="button"
+		                      onClick={() => goWithParams({ brands: "" })}
+		                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+		                    >
+		                      Clear brand filter
+		                    </button>
+		                  ) : null}
+		                </div>
+		                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+		                  {brands.map((brand) => {
+		                    const active = selectedBrands.includes(brand.slug);
+		                    return (
+		                      <button
+		                        key={`top-brand-${brand._id || brand.slug}`}
+		                        type="button"
+		                        onClick={() => toggleBrand(brand.slug)}
+		                        aria-pressed={active}
+		                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+		                          active
+		                            ? "border-slate-900 bg-slate-900 text-white shadow-sm"
+		                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+		                        }`}
+		                      >
+		                        {brand.name}
+		                      </button>
+		                    );
+		                  })}
+		                </div>
+		              </div>
+		            ) : null}
       {/* Grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 pb-12">
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {Array.from({ length: 12 }).map((_, i) => (
@@ -288,6 +888,8 @@ export default function ProductListPage() {
               const originalPrice = getOriginalPrice(p);
               const hasDiscount = originalPrice > price;
               const saveAmount = hasDiscount ? originalPrice - price : 0;
+              const stockCount = getProductStock(p);
+              const inStock = stockCount > 0;
 
               // ✅ slug first, fallback to id
               const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
@@ -309,7 +911,7 @@ export default function ProductListPage() {
                         loading="lazy"
                         onError={(e) => (e.currentTarget.src = fallbackImg)}
                       />
-                      <div className="absolute left-3 top-3 flex max-w-[75%] flex-col gap-1">
+                      <div className="absolute left-3 top-3 z-10 flex max-w-[58%] flex-col gap-1">
                         {hasDiscount ? (
                           <span className="rounded-full bg-purple-700 px-3 py-1 text-xs font-bold text-white shadow">
                             Save: {money(saveAmount)}
@@ -320,6 +922,13 @@ export default function ProductListPage() {
                             {p.promoLabel}
                           </span>
                         ) : null}
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-bold shadow ${
+                              inStock ? "bg-emerald-600 text-white" : "bg-slate-800 text-white"
+                            }`}
+                          >
+                          {inStock ? `In stock (${stockCount})` : "Out of stock"}
+                        </span>
                       </div>
                     </div>
 
@@ -351,19 +960,19 @@ export default function ProductListPage() {
                     </div>
                   </Link>
 
-                  <button
-                    type="button"
-                    disabled={compareFull}
+	                  <button
+	                    type="button"
+	                    disabled={compareFull}
                     onClick={() => {
                       const res = toggleCompareItem(p);
                       if (!res.ok && res.reason === "limit") {
                         alert(`You can compare up to ${COMPARE_LIMIT} products.`);
                       }
                     }}
-                    className={`absolute right-5 top-5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ring-1 ${
-                      isCompared
-                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
-                        : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
+	                    className={`absolute right-3 top-3 z-20 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ring-1 ${
+	                      isCompared
+	                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
+	                        : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
                     } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
                   >
                     {isCompared ? "Compared" : "Compare"}
@@ -410,7 +1019,9 @@ export default function ProductListPage() {
             </button>
           </div>
         )}
+          </div>
       </div>
     </div>
   );
 }
+

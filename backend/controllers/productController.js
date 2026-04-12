@@ -55,6 +55,110 @@ const assertUniqueSkus = (variants = []) => {
 
 const roundToTenth = (value) => Math.round(value * 10) / 10;
 
+const RESERVED_PRODUCT_FILTER_KEYS = new Set([
+  "pageNumber",
+  "limit",
+  "keyword",
+  "featured",
+  "brand",
+  "brands",
+  "category",
+  "inStock",
+  "minPrice",
+  "maxPrice",
+  "sort",
+]);
+
+const normalizeFilterText = (value) => String(value || "").trim().toLowerCase();
+
+const getMapValue = (mapLike, key) => {
+  if (!mapLike || !key) return "";
+  if (typeof mapLike.get === "function") return String(mapLike.get(key) || "");
+  return String(mapLike[key] || "");
+};
+
+const getProductFieldValues = (product, key) => {
+  const values = [];
+  if (!product || !key) return values;
+
+  const specValue = getMapValue(product.specs, key);
+  if (specValue) values.push(specValue);
+
+  for (const variant of product?.variants || []) {
+    const attrValue = getMapValue(variant?.attributes, key);
+    if (attrValue) values.push(attrValue);
+  }
+
+  return values.map((value) => String(value).trim()).filter(Boolean);
+};
+
+const productMatchesFilter = (product, key, rawValue) => {
+  const expectedValues = String(rawValue || "")
+    .split(",")
+    .map((value) => normalizeFilterText(value))
+    .filter(Boolean);
+  if (!expectedValues.length) return true;
+
+  const actualValues = getProductFieldValues(product, key).map(normalizeFilterText);
+  if (!actualValues.length) return false;
+
+  return expectedValues.some((expected) =>
+    actualValues.some((actual) => actual.includes(expected) || expected.includes(actual))
+  );
+};
+
+const collectDistinctValues = (products, key) => {
+  const values = new Set();
+  for (const product of products) {
+    for (const value of getProductFieldValues(product, key)) {
+      if (value) values.add(value.trim());
+    }
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b));
+};
+
+const getMinProductPrice = (product) => {
+  const variantPrices = (product?.variants || [])
+    .map((variant) => Number(variant?.price))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const basePrice = Number(product?.basePrice || 0);
+  if (!variantPrices.length) return basePrice;
+  return Math.min(basePrice > 0 ? basePrice : Infinity, ...variantPrices);
+};
+
+const getPriceRange = (products) => {
+  const prices = products
+    .map((product) => getMinProductPrice(product))
+    .filter((price) => Number.isFinite(price) && price > 0);
+  if (!prices.length) return { min: 0, max: 0 };
+  return { min: Math.min(...prices), max: Math.max(...prices) };
+};
+
+const formatFilterLabel = (key) =>
+  String(key || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const FILTER_UI_CONFIG = {
+  ram: { label: "RAM", placeholder: "Any RAM" },
+  storage: { label: "Storage", placeholder: "Any Storage" },
+  color: { label: "Color", placeholder: "Any Color" },
+  size: { label: "Size", placeholder: "Any Size" },
+  screen: { label: "Screen", placeholder: "Any Screen" },
+  screen_size: { label: "Screen Size", placeholder: "Any Size" },
+  display: { label: "Display", placeholder: "Any Display" },
+  display_type: { label: "Display Type", placeholder: "Any Type" },
+  processor: { label: "Processor", placeholder: "Any Processor" },
+  chipset: { label: "Chipset", placeholder: "Any Chipset" },
+  battery: { label: "Battery", placeholder: "Any Battery" },
+  battery_life: { label: "Battery Life", placeholder: "Any Battery Life" },
+  refresh_rate: { label: "Refresh Rate", placeholder: "Any Refresh Rate" },
+  camera: { label: "Camera", placeholder: "Any Camera" },
+  connectivity: { label: "Connectivity", placeholder: "Any Connectivity" },
+  material: { label: "Material", placeholder: "Any Material" },
+  weight: { label: "Weight", placeholder: "Any Weight" },
+};
+
 const recordProductView = async ({ product, req }) => {
   const visitorKey = getVisitorKey(req);
   if (!visitorKey || !product?._id) return;
@@ -91,6 +195,12 @@ exports.getProducts = async (req, res) => {
   try {
     const pageSize = toNum(req.query.limit, 10);
     const page = toNum(req.query.pageNumber, 1);
+    const dynamicFilters = Object.fromEntries(
+      Object.entries(req.query).filter(([key, rawValue]) => {
+        if (RESERVED_PRODUCT_FILTER_KEYS.has(key)) return false;
+        return rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== "";
+      })
+    );
 
     const filter = { isActive: true };
 
@@ -105,16 +215,29 @@ exports.getProducts = async (req, res) => {
     }
 
     // brand filter (accept brandId or brandSlug)
-    if (req.query.brand) {
-      const brandVal = String(req.query.brand).trim();
+    const brandValues = [
+      ...new Set(
+        String(req.query.brands || req.query.brand || "")
+          .split(",")
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (brandValues.length) {
+      const brandDocs = await Brand.find({
+        $or: brandValues.flatMap((brandVal) => {
+          const or = [{ slug: brandVal.toLowerCase() }];
+          if (mongoose.Types.ObjectId.isValid(brandVal)) {
+            or.unshift({ _id: brandVal });
+          }
+          return or;
+        }),
+      }).select("_id");
 
-      const or = [{ slug: brandVal }];
-      if (mongoose.Types.ObjectId.isValid(brandVal)) {
-        or.unshift({ _id: brandVal });
+      const brandIds = brandDocs.map((doc) => doc._id);
+      if (brandIds.length) {
+        filter.brand = brandIds.length === 1 ? brandIds[0] : { $in: brandIds };
       }
-
-      const brandDoc = await Brand.findOne({ $or: or }).select("_id");
-      if (brandDoc) filter.brand = brandDoc._id;
     }
 
     // category filter (accept categoryId or categorySlug)
@@ -128,6 +251,15 @@ exports.getProducts = async (req, res) => {
 
       const catDoc = await Category.findOne({ $or: or }).select("_id");
       if (catDoc) filter.category = catDoc._id;
+    }
+
+    // stock filter (any variant in stock)
+    if (req.query.inStock === "true") {
+      filter.variants = {
+        $elemMatch: {
+          countInStock: { $gt: 0 },
+        },
+      };
     }
 
     // price filter (works on basePrice OR variants.price)
@@ -150,12 +282,31 @@ exports.getProducts = async (req, res) => {
     else if (sortBy === "rating") sort.rating = -1;
     else sort.createdAt = -1;
 
-    const count = await Product.countDocuments(filter);
-
-    const products = await Product.find(filter)
+    const baseQuery = Product.find(filter)
       .populate("category", "name slug")
       .populate("brand", "name slug")
-      .sort(sort)
+      .sort(sort);
+
+    if (Object.keys(dynamicFilters).length) {
+      const allProducts = await baseQuery.select(
+        "name slug basePrice variants specs highlights description tags rating isFeatured brand category"
+      );
+      const filteredProducts = allProducts.filter((product) =>
+        Object.entries(dynamicFilters).every(([key, value]) => productMatchesFilter(product, key, value))
+      );
+      const total = filteredProducts.length;
+      const products = filteredProducts.slice(pageSize * (page - 1), pageSize * (page - 1) + pageSize);
+
+      return res.json({
+        products,
+        page,
+        pages: Math.max(1, Math.ceil(total / pageSize)),
+        total,
+      });
+    }
+
+    const count = await Product.countDocuments(filter);
+    const products = await baseQuery
       .limit(pageSize)
       .skip(pageSize * (page - 1));
 
@@ -163,6 +314,59 @@ exports.getProducts = async (req, res) => {
   } catch (error) {
     console.error("getProducts Error:", error);
     res.status(500).json({ message: "Failed to fetch products" });
+  }
+};
+
+exports.getProductFilters = async (req, res) => {
+  try {
+    const categoryRaw = req.query.category;
+    const category = categoryRaw ? await Category.findOne({
+      $or: [
+        { slug: String(categoryRaw).trim().toLowerCase() },
+        ...(mongoose.Types.ObjectId.isValid(String(categoryRaw || "")) ? [{ _id: categoryRaw }] : []),
+      ],
+    }).select("_id name slug attributes") : null;
+
+    const filter = { isActive: true };
+    if (category) filter.category = category._id;
+
+    const products = await Product.find(filter)
+      .select("basePrice variants specs brand category")
+      .populate("brand", "name slug")
+      .lean();
+
+    const priceRange = getPriceRange(products);
+    const categoryAttributes = Array.isArray(category?.attributes) ? category.attributes : [];
+    const attributeFilters = categoryAttributes
+      .filter((attr) => !["brand", "category"].includes(String(attr || "").toLowerCase()))
+      .map((attrKey) => {
+        const options = collectDistinctValues(products, attrKey);
+        const ui = FILTER_UI_CONFIG[attrKey] || {};
+        return {
+          key: attrKey,
+          label: ui.label || formatFilterLabel(attrKey),
+          placeholder: ui.placeholder || `Any ${formatFilterLabel(attrKey)}`,
+          options,
+        };
+      });
+
+    const brands = Array.from(
+      new Map(
+        products
+          .filter((product) => product?.brand?._id)
+          .map((product) => [String(product.brand._id), product.brand])
+      ).values()
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({
+      category: category ? { _id: category._id, name: category.name, slug: category.slug } : null,
+      priceRange,
+      brands,
+      attributeFilters,
+    });
+  } catch (error) {
+    console.error("getProductFilters Error:", error);
+    res.status(500).json({ message: "Failed to fetch product filters" });
   }
 };
 
