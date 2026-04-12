@@ -3,6 +3,7 @@ const ReturnRefund = require("../models/ReturnRefund");
 const Order = require("../models/Order");
 const Product = require("../models/product");
 const InventoryLedger = require("../models/InventoryLedger");
+const { getReservedQtyMap, getAvailableStock } = require("../services/stockReservationService");
 
 // User: POST /api/returns
 // body: { orderNo, items: [{product, variantId, qty, reason}], notes? }
@@ -61,6 +62,14 @@ exports.adminUpdateReturnStatus = async (req, res) => {
       for (const it of rr.items) {
         const product = await Product.findById(it.product);
         const variant = product?.variants?.id(it.variantId);
+        const reservedMap = await getReservedQtyMap({
+          pairs: [{ productId: it.product, variantId: it.variantId }],
+          now: new Date(),
+        });
+        const reservedQty = Number(
+          reservedMap.get(`${String(it.product)}|${String(it.variantId)}`) || 0
+        );
+        const oldOnHand = Number(variant?.countInStock || 0);
         if (variant) {
           variant.countInStock += it.qty;
           await product.save();
@@ -69,10 +78,22 @@ exports.adminUpdateReturnStatus = async (req, res) => {
         await InventoryLedger.create({
           product: it.product,
           variantId: it.variantId,
+          sku: variant?.sku || "",
           type: "IN",
           reason: "RETURN",
           qty: it.qty,
+          deltaQty: Number(it.qty || 0),
+          oldOnHand,
+          newOnHand: oldOnHand + Number(it.qty || 0),
+          oldReserved: reservedQty,
+          newReserved: reservedQty,
+          oldAvailable: getAvailableStock({ physicalStock: oldOnHand, reservedQty }),
+          newAvailable: getAvailableStock({
+            physicalStock: oldOnHand + Number(it.qty || 0),
+            reservedQty,
+          }),
           order: rr.order?._id,
+          actor: req.user?._id,
           note: `Return received (RR ${rr._id})`,
         });
       }

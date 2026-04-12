@@ -16,6 +16,9 @@ const { getVisitorKey } = require("../utils/visitorKey");
 const {
   PREPAID_METHODS,
   releaseExpiredReservations,
+  releaseReservationForOrder,
+  getReservedQtyMap,
+  getAvailableStock,
 } = require("../services/stockReservationService");
 
 const canCancelByCustomer = (status) =>
@@ -31,6 +34,7 @@ const canRequestRefund = (status, paymentStatus) => {
 };
 const REFUND_TIME_OPTIONS = ["WITHIN_24_HOURS", "WITHIN_3_DAYS", "WITHIN_7_DAYS"];
 const REVENUE_RECOGNIZED_STATUSES = ["confirmed", "processing", "shipped", "delivered"];
+const STOCK_DEDUCTION_STATUSES = ["shipped", "delivered"];
 const addDays = (dateLike, days) => {
   const base = new Date(dateLike || new Date());
   if (Number.isNaN(base.getTime())) return new Date();
@@ -59,6 +63,10 @@ const allowedAdminTransitions = {
 
 const deductOrderItems = async (order) => {
   if (order?.inventory?.deducted) return;
+  const reservedMap = await getReservedQtyMap({
+    pairs: (order?.items || []).map((it) => ({ productId: it.product, variantId: it.variantId })),
+    now: new Date(),
+  });
 
   for (const it of order.items) {
     const product = await Product.findById(it.product);
@@ -71,17 +79,31 @@ const deductOrderItems = async (order) => {
       throw err;
     }
 
+    const oldOnHand = Number(variant.countInStock || 0);
+    const oldReserved = Number(
+      reservedMap.get(`${String(it.product)}|${String(it.variantId)}`) || 0
+    );
+    const newOnHand = oldOnHand - Number(it.qty || 0);
+    const newReserved = Math.max(0, oldReserved - Number(it.qty || 0));
     variant.countInStock -= it.qty;
     await product.save();
 
     await InventoryLedger.create({
       product: it.product,
       variantId: it.variantId,
+      sku: it.skuSnapshot || variant.sku || "",
       type: "OUT",
-      reason: "SALE_CONFIRMED",
+      reason: "FULFILLMENT_SHIPPED",
       qty: it.qty,
+      deltaQty: -Number(it.qty || 0),
+      oldOnHand,
+      newOnHand,
+      oldReserved,
+      newReserved,
+      oldAvailable: getAvailableStock({ physicalStock: oldOnHand, reservedQty: oldReserved }),
+      newAvailable: getAvailableStock({ physicalStock: newOnHand, reservedQty: newReserved }),
       order: order._id,
-      note: `Confirmed order ${order.orderNo}`,
+      note: `Fulfillment shipped for order ${order.orderNo}`,
     });
   }
 
@@ -89,10 +111,11 @@ const deductOrderItems = async (order) => {
   order.inventory.deducted = true;
   order.inventory.deductedAt = new Date();
   order.inventory.restoredAt = undefined;
-  order.inventory.reservationActive = false;
-  order.inventory.reservedUntil = undefined;
-  order.inventory.reservationReleasedAt = new Date();
-  order.inventory.reservationReleaseReason = "FULFILLMENT_CONFIRMED";
+  await releaseReservationForOrder({
+    order,
+    releaseReason: "FULFILLMENT_SHIPPED",
+    note: `Reservation consumed by fulfillment for order ${order.orderNo}`,
+  });
 };
 
 const restockOrderItems = async (order) => {
@@ -100,6 +123,7 @@ const restockOrderItems = async (order) => {
     for (const it of order.items) {
       const product = await Product.findById(it.product);
       const variant = product?.variants?.id(it.variantId);
+      const oldOnHand = Number(variant?.countInStock || 0);
       if (variant) {
         variant.countInStock += it.qty;
         await product.save();
@@ -107,9 +131,17 @@ const restockOrderItems = async (order) => {
       await InventoryLedger.create({
         product: it.product,
         variantId: it.variantId,
+        sku: it.skuSnapshot || variant?.sku || "",
         type: "IN",
-        reason: "CANCELLED_ORDER",
+        reason: "CANCELLED_ORDER_RESTOCK",
         qty: it.qty,
+        deltaQty: Number(it.qty || 0),
+        oldOnHand,
+        newOnHand: oldOnHand + Number(it.qty || 0),
+        oldReserved: 0,
+        newReserved: 0,
+        oldAvailable: oldOnHand,
+        newAvailable: oldOnHand + Number(it.qty || 0),
         order: order._id,
         note: `Cancelled order ${order.orderNo}`,
       });
@@ -119,10 +151,13 @@ const restockOrderItems = async (order) => {
   order.inventory = order.inventory || {};
   order.inventory.deducted = false;
   order.inventory.restoredAt = new Date();
-  order.inventory.reservationActive = false;
-  order.inventory.reservedUntil = undefined;
-  order.inventory.reservationReleasedAt = new Date();
-  order.inventory.reservationReleaseReason = "ORDER_CANCELLED";
+  await releaseReservationForOrder({
+    order,
+    releaseReason: "ORDER_CANCELLED",
+    ledgerReason: "ORDER_CANCELLED_RELEASE",
+    note: `Reservation released for cancelled order ${order.orderNo}`,
+    actorId: order?.user,
+  });
 };
 
 const buildReturnItemsFromOrder = (order, reason) =>
@@ -415,7 +450,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       });
     }
 
-    if (REVENUE_RECOGNIZED_STATUSES.includes(nextStatus) && !order?.inventory?.deducted) {
+    if (STOCK_DEDUCTION_STATUSES.includes(nextStatus) && !order?.inventory?.deducted) {
       await deductOrderItems(order);
     }
 

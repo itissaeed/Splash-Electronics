@@ -5,13 +5,13 @@ const crypto = require("crypto");
 const { normalizeBangladeshNumber, VALIDATION_ERROR } = require("../utils/numberNormalizer");
 
 const addressSchema = new mongoose.Schema({
-  label: { type: String, default: "Home" },     // Home/Office
+  label: { type: String, default: "Home" },
   recipientName: { type: String, required: true },
   phone: { type: String, required: true },
-  division: { type: String, required: true },  // Dhaka, Chattogram...
+  division: { type: String, required: true },
   district: { type: String, required: true },
   upazila: { type: String },
-  area: { type: String },                      // locality
+  area: { type: String },
   postalCode: { type: String },
   addressLine1: { type: String, required: true },
   addressLine2: { type: String },
@@ -28,8 +28,8 @@ const userSchema = new mongoose.Schema({
   googleId: { type: String, unique: true, sparse: true },
   avatar: { type: String, trim: true },
   emailVerified: { type: Boolean, default: false },
-  isAdmin: { type: Boolean, default: false }, // keep if you want
-  roles: { type: [String], default: ["customer"] }, // customer/admin/manager/support
+  isAdmin: { type: Boolean, default: false },
+  roles: { type: [String], default: ["customer"] },
 
   addresses: [addressSchema],
 
@@ -60,7 +60,9 @@ userSchema.pre("save", async function (next) {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
 userSchema.methods.matchPassword = async function (enteredPassword) {

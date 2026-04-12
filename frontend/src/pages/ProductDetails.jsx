@@ -18,6 +18,9 @@ const money = (n) => {
   return `৳${num.toLocaleString("en-BD")}`;
 };
 
+const getVariantAvailableStock = (variant) =>
+  Number((variant?.availableStock ?? variant?.countInStock) || 0);
+
 const chip = (text) => (
   <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-xs font-semibold text-gray-700 dark:bg-slate-900 dark:text-slate-300">
     {text}
@@ -374,7 +377,7 @@ export default function ProductDetails() {
 
         const defaultVariant =
           data?.variants?.find((x) => x?.isDefault) ||
-          data?.variants?.find((x) => (x?.countInStock ?? 0) > 0) ||
+          data?.variants?.find((x) => getVariantAvailableStock(x) > 0) ||
           data?.variants?.[0] ||
           null;
 
@@ -402,7 +405,7 @@ export default function ProductDetails() {
     if (!variants.length) return null;
     return (
       variants.find((v) => v?.isDefault) ||
-      variants.find((v) => (v?.countInStock ?? 0) > 0) ||
+      variants.find((v) => getVariantAvailableStock(v) > 0) ||
       variants[0]
     );
   }, [variants]);
@@ -484,9 +487,7 @@ export default function ProductDetails() {
   const saveAmount = hasDiscount ? originalPrice - price : 0;
 
   const stock = useMemo(() => {
-    const s = selectedVariant?.countInStock;
-    if (typeof s === "number") return s;
-    return 0;
+    return getVariantAvailableStock(selectedVariant);
   }, [selectedVariant]);
 
   const brandName = product?.brand?.name || "";
@@ -602,7 +603,7 @@ export default function ProductDetails() {
 
     return (
       matches.find((v) => String(v?._id) === String(selectedVariantId)) ||
-      matches.find((v) => Number(v?.countInStock || 0) > 0) ||
+      matches.find((v) => getVariantAvailableStock(v) > 0) ||
       matches[0]
     );
   };
@@ -918,7 +919,7 @@ export default function ProductDetails() {
                                 ...toAttributeMap(selectedVariant?.attributes),
                                 [key]: value,
                               });
-                              const disabled = !preview || Number(preview?.countInStock || 0) <= 0;
+                              const disabled = !preview || getVariantAvailableStock(preview) <= 0;
                               const active = String(value) === String(selectedValue);
 
                               return (
@@ -951,7 +952,7 @@ export default function ProductDetails() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {variants.map((v) => {
                         const active = String(v._id) === String(selectedVariantId);
-                        const vStock = Number(v?.countInStock || 0);
+                        const vStock = getVariantAvailableStock(v);
                         const disabled = vStock <= 0;
 
                         return (

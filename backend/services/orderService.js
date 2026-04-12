@@ -10,6 +10,7 @@ const {
   getReservedQtyMap,
   getAvailableStock,
   getReservationUntil,
+  createReservationLedgerEntries,
 } = require("./stockReservationService");
 
 const toNum = (v, def) => {
@@ -261,6 +262,7 @@ const createOrderFromCartForUser = async ({
 
   // Build order items + stock validation
   const orderItems = [];
+  const reservationLedgerItems = [];
   let itemsTotal = 0;
   const productIds = [];
   const categoryIds = [];
@@ -304,6 +306,20 @@ const createOrderFromCartForUser = async ({
       imageSnapshot: getVariantImage(variant),
       qty: ci.qty,
       price: unitPrice,
+    });
+
+    reservationLedgerItems.push({
+      product: product._id,
+      variantId: variant._id,
+      sku: variant.sku,
+      qty: Number(ci.qty || 0),
+      deltaQty: -Number(ci.qty || 0),
+      oldOnHand: Number(variant.countInStock || 0),
+      newOnHand: Number(variant.countInStock || 0),
+      oldReserved: reservedQty,
+      newReserved: reservedQty + Number(ci.qty || 0),
+      oldAvailable: availableStock,
+      newAvailable: Math.max(0, availableStock - Number(ci.qty || 0)),
     });
 
     productIds.push(product._id);
@@ -360,6 +376,7 @@ const createOrderFromCartForUser = async ({
     status: "pending",
     inventory: {
       reservationActive: true,
+      reservedAt: new Date(),
       reservedUntil: PREPAID_METHODS.includes(String(paymentMethod || "").toUpperCase())
         ? getReservationUntil()
         : undefined,
@@ -380,6 +397,15 @@ const createOrderFromCartForUser = async ({
   }], { session });
 
   const createdOrder = order[0];
+
+  await createReservationLedgerEntries({
+    order: createdOrder,
+    reason: "ORDER_PLACED_RESERVE",
+    type: "RESERVE",
+    note: `Stock reserved for order ${createdOrder.orderNo}`,
+    session,
+    items: reservationLedgerItems,
+  });
 
   if (!PREPAID_METHODS.includes(String(paymentMethod || "").toUpperCase())) {
     await applyCouponUsageIfNeeded({ order: createdOrder, session });

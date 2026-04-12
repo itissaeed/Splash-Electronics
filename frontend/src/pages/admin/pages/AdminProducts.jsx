@@ -464,6 +464,7 @@ const emptyVariant = (isDefault = false) => ({
   sku: "",
   price: "",
   countInStock: "",
+  lowStockThreshold: 5,
   isDefault,
   attributes: {},
   images: [],
@@ -845,6 +846,7 @@ export default function AdminProducts() {
     ...emptyVariant(false),
     price: variant?.price ?? "",
     countInStock: variant?.countInStock ?? "",
+    lowStockThreshold: variant?.lowStockThreshold ?? 5,
     attributes: { ...(variant?.attributes || {}) },
   });
 
@@ -928,6 +930,7 @@ export default function AdminProducts() {
       sku: x.sku || "",
       price: x.price ?? "",
       countInStock: x.countInStock ?? "",
+      lowStockThreshold: x.lowStockThreshold ?? 5,
       isDefault: !!x.isDefault,
       attributes: { ...(x.attributes || {}) },
       images: Array.isArray(x.images) ? x.images : [],
@@ -1044,6 +1047,7 @@ export default function AdminProducts() {
         sku: String(v.sku || "").trim(),
         price: Number(v.price || 0),
         countInStock: Number(v.countInStock || 0),
+        lowStockThreshold: Math.max(0, Number(v.lowStockThreshold || 5)),
         isDefault: !!v.isDefault,
         attributes: Object.entries(v.attributes || {}).reduce((acc, [rawKey, rawVal]) => {
           const key = toAttributeKey(rawKey);
@@ -1218,7 +1222,11 @@ export default function AdminProducts() {
 
   const priceFromProduct = (p) => p?.basePrice ?? p?.variants?.[0]?.price ?? 0;
   const stockFromProduct = (p) =>
-    p?.variants?.reduce((sum, v) => sum + (v.countInStock || 0), 0) ?? 0;
+    Number(
+      p?.inventorySummary?.available ??
+        p?.variants?.reduce((sum, v) => sum + Number((v.availableStock ?? v.countInStock) || 0), 0) ??
+        0
+    );
   const imageFromProduct = (p) => p?.variants?.[0]?.images?.[0]?.url || fallbackImg;
 
   return (
@@ -1355,7 +1363,7 @@ export default function AdminProducts() {
                 <th className="text-left px-4 py-3 font-semibold">Brand</th>
                 <th className="text-left px-4 py-3 font-semibold">Category</th>
                 <th className="text-left px-4 py-3 font-semibold">Price</th>
-                <th className="text-left px-4 py-3 font-semibold">Stock</th>
+                <th className="text-left px-4 py-3 font-semibold">Available</th>
                 <th className="text-left px-4 py-3 font-semibold">Status</th>
                 <th className="text-right px-4 py-3 font-semibold">Actions</th>
               </tr>
@@ -1407,13 +1415,16 @@ export default function AdminProducts() {
                       </td>
 
                       <td className="px-4 py-3">
-                        <span
-                          className={`font-semibold ${stock <= 5 ? "text-red-600" : "text-gray-900"
-                            }`}
-                        >
-                          {stock}
-                        </span>
-                      </td>
+                          <span
+                            className={`font-semibold ${stock <= 5 ? "text-red-600" : "text-gray-900"
+                              }`}
+                          >
+                            {stock}
+                          </span>
+                          <div className="text-[11px] text-gray-500">
+                            On hand {p?.inventorySummary?.onHand ?? stock} / Reserved {p?.inventorySummary?.reserved ?? 0}
+                          </div>
+                        </td>
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -1792,7 +1803,7 @@ export default function AdminProducts() {
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
                         <div>
                           <label className="text-xs font-semibold text-gray-600">SKU</label>
                           <input
@@ -1823,6 +1834,19 @@ export default function AdminProducts() {
                             value={v.countInStock}
                             onChange={(e) =>
                               handleVariantChange(idx, "countInStock", e.target.value)
+                            }
+                            className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-gray-600">Low-stock threshold</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={v.lowStockThreshold}
+                            onChange={(e) =>
+                              handleVariantChange(idx, "lowStockThreshold", e.target.value)
                             }
                             className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
                           />
