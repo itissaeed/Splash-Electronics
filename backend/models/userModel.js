@@ -21,9 +21,13 @@ const addressSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true },
+  password: { type: String },
 
-  number: { type: String, required: true },
+  number: { type: String },
+  authProvider: { type: String, enum: ["local", "google"], default: "local" },
+  googleId: { type: String, unique: true, sparse: true },
+  avatar: { type: String, trim: true },
+  emailVerified: { type: Boolean, default: false },
   isAdmin: { type: Boolean, default: false }, // keep if you want
   roles: { type: [String], default: ["customer"] }, // customer/admin/manager/support
 
@@ -35,16 +39,24 @@ const userSchema = new mongoose.Schema({
 
   resetPasswordToken: String,
   resetPasswordExpires: Date,
+  signupOtpHash: String,
+  signupOtpExpires: Date,
 }, { timestamps: true });
 
 userSchema.pre("save", async function (next) {
   try {
     if (this.isModified("number")) {
+      if (!this.number) {
+        this.number = undefined;
+      }
+    }
+    if (this.isModified("number") && this.number) {
       const normalized = normalizeBangladeshNumber(this.number);
       if (!normalized) return next(new Error(VALIDATION_ERROR));
       this.number = normalized;
     }
     if (!this.isModified("password")) return next();
+    if (!this.password) return next();
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
@@ -52,16 +64,31 @@ userSchema.pre("save", async function (next) {
 });
 
 userSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password) return false;
   return bcrypt.compare(enteredPassword, this.password);
 };
 
 userSchema.methods.createPasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
   this.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
-  this.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
+  const expiryMinutes = Number(process.env.RESET_PASSWORD_EXPIRES_MINUTES || 30);
+  this.resetPasswordExpires = Date.now() + expiryMinutes * 60 * 1000;
   return resetToken;
 };
 
-userSchema.index({ number: 1 });
+userSchema.methods.createSignupOtp = function () {
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const expiryMinutes = Number(process.env.SIGNUP_OTP_EXPIRES_MINUTES || 15);
+  this.signupOtpHash = crypto.createHash("sha256").update(otp).digest("hex");
+  this.signupOtpExpires = Date.now() + expiryMinutes * 60 * 1000;
+  return otp;
+};
+
+userSchema.methods.clearSignupOtp = function () {
+  this.signupOtpHash = undefined;
+  this.signupOtpExpires = undefined;
+};
+
+userSchema.index({ number: 1 }, { sparse: true });
 
 module.exports = mongoose.model("User", userSchema);
