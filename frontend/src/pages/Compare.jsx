@@ -41,7 +41,7 @@ const getDefaultVariant = (product) => {
   if (!variants.length) return null;
   return (
     variants.find((v) => v?.isDefault) ||
-    variants.find((v) => (v?.countInStock ?? 0) > 0) ||
+    variants.find((v) => Number((v?.availableStock ?? v?.countInStock) || 0) > 0) ||
     variants[0]
   );
 };
@@ -76,7 +76,7 @@ const getImage = (product, fallback) =>
 const getAvailability = (product) => {
   const variants = product?.variants || [];
   if (!variants.length) return "Available";
-  const inStock = variants.some((v) => (v?.countInStock ?? 0) > 0);
+  const inStock = variants.some((v) => Number((v?.availableStock ?? v?.countInStock) || 0) > 0);
   return inStock ? "In stock" : "Out of stock";
 };
 

@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 const { getVisitorKey } = require("../utils/visitorKey");
+const { enrichProductsWithInventory } = require("../services/stockReservationService");
 
 // helper: safe number parsing
 const toNum = (v, def) => {
@@ -269,15 +270,6 @@ exports.getProducts = async (req, res) => {
       if (catDoc) filter.category = catDoc._id;
     }
 
-    // stock filter (any variant in stock)
-    if (req.query.inStock === "true") {
-      filter.variants = {
-        $elemMatch: {
-          countInStock: { $gt: 0 },
-        },
-      };
-    }
-
     // price filter (works on basePrice OR variants.price)
     const minPrice = req.query.minPrice ? toNum(req.query.minPrice, 0) : null;
     const maxPrice = req.query.maxPrice ? toNum(req.query.maxPrice, 0) : null;
@@ -307,9 +299,17 @@ exports.getProducts = async (req, res) => {
       const allProducts = await baseQuery.select(
         "name slug basePrice variants specs highlights description tags rating isFeatured brand category"
       );
-      const filteredProducts = allProducts.filter((product) =>
+      let filteredProducts = allProducts.filter((product) =>
         Object.entries(dynamicFilters).every(([key, value]) => productMatchesFilter(product, key, value))
       );
+      filteredProducts = await enrichProductsWithInventory(filteredProducts);
+
+      if (req.query.inStock === "true") {
+        filteredProducts = filteredProducts.filter(
+          (product) => Number(product?.inventorySummary?.available || 0) > 0
+        );
+      }
+
       const total = filteredProducts.length;
       const products = filteredProducts.slice(pageSize * (page - 1), pageSize * (page - 1) + pageSize);
 
@@ -321,10 +321,23 @@ exports.getProducts = async (req, res) => {
       });
     }
 
+    if (req.query.inStock === "true") {
+      const allProducts = await baseQuery;
+      const annotated = await enrichProductsWithInventory(allProducts);
+      const filtered = annotated.filter((product) => Number(product?.inventorySummary?.available || 0) > 0);
+      const total = filtered.length;
+      const products = filtered.slice(pageSize * (page - 1), pageSize * (page - 1) + pageSize);
+      return res.json({
+        products,
+        page,
+        pages: Math.max(1, Math.ceil(total / pageSize)),
+        total,
+      });
+    }
+
     const count = await Product.countDocuments(filter);
-    const products = await baseQuery
-      .limit(pageSize)
-      .skip(pageSize * (page - 1));
+    const products = await baseQuery.limit(pageSize).skip(pageSize * (page - 1));
+    await enrichProductsWithInventory(products);
 
     res.json({ products, page, pages: Math.ceil(count / pageSize), total: count });
   } catch (error) {
@@ -403,6 +416,7 @@ exports.getProductById = async (req, res) => {
     }
 
     await recordProductView({ product, req });
+    await enrichProductsWithInventory([product]);
     res.json(product);
   } catch (error) {
     console.error("getProductById Error:", error);
@@ -423,6 +437,7 @@ exports.getProductBySlug = async (req, res) => {
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     await recordProductView({ product, req });
+    await enrichProductsWithInventory([product]);
     res.json(product);
   } catch (error) {
     console.error("getProductBySlug Error:", error);
@@ -438,6 +453,7 @@ exports.getAllProductsAdmin = async (req, res) => {
       .populate("brand", "name slug")
       .sort({ createdAt: -1 });
 
+    await enrichProductsWithInventory(products);
     res.json({ products });
   } catch (error) {
     console.error("getAllProductsAdmin Error:", error);
@@ -598,6 +614,7 @@ exports.getFeaturedProducts = async (req, res) => {
       .limit(8)
       .sort({ createdAt: -1 });
 
+    await enrichProductsWithInventory(products);
     res.json(products);
   } catch (error) {
     console.error("getFeaturedProducts Error:", error);

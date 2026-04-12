@@ -66,6 +66,7 @@ const orderSchema = new mongoose.Schema({
     deductedAt: Date,
     restoredAt: Date,
     reservationActive: { type: Boolean, default: false },
+    reservedAt: Date,
     reservedUntil: Date,
     reservationReleasedAt: Date,
     reservationReleaseReason: String,

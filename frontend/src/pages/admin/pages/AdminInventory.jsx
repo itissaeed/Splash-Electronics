@@ -11,12 +11,13 @@ const PIE_COLORS = ["#06b6d4", "#22c55e", "#f59e0b", "#ef4444", "#6366f1"];
 
 function StatCard({ label, value, hint, accent }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-      <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full blur-2xl ${accent}`} />
+    <div className="group relative overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_45px_-28px_rgba(15,23,42,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_55px_-30px_rgba(15,23,42,0.45)]">
+      <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full opacity-80 blur-2xl ${accent}`} />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-slate-900 via-cyan-500 to-emerald-500 opacity-80" />
       <div className="relative">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-        <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">{value}</p>
-        {hint ? <p className="mt-2 text-xs font-medium text-slate-500">{hint}</p> : null}
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500">{label}</p>
+        <p className="mt-3 text-3xl font-black tracking-tight text-slate-950">{value}</p>
+        {hint ? <p className="mt-2 text-xs font-medium leading-5 text-slate-500">{hint}</p> : null}
       </div>
     </div>
   );
@@ -26,8 +27,8 @@ function Donut({ title, rows }) {
   const total = rows.reduce((s, r) => s + Number(r.value || 0), 0);
   if (!rows.length || total <= 0) {
     return (
-      <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-        <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+      <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+        <h3 className="text-sm font-extrabold tracking-tight text-slate-900">{title}</h3>
         <p className="mt-6 text-sm text-slate-500">No data yet.</p>
       </div>
     );
@@ -38,8 +39,8 @@ function Donut({ title, rows }) {
   let offset = 0;
 
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+      <h3 className="text-sm font-extrabold tracking-tight text-slate-900">{title}</h3>
       <div className="mt-3 grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-4 items-center">
         <div className="mx-auto">
           <svg viewBox="0 0 120 120" className="h-36 w-36 -rotate-90">
@@ -70,7 +71,7 @@ function Donut({ title, rows }) {
           {rows.map((row, idx) => {
             const pct = ((Number(row.value || 0) / total) * 100).toFixed(1);
             return (
-              <div key={row.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
+              <div key={row.label} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
                 <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="h-2.5 w-2.5 rounded-full"
@@ -93,8 +94,8 @@ function Donut({ title, rows }) {
 function TrendBars({ title, rows }) {
   const max = Math.max(...rows.map((r) => Number(r.total || 0)), 1);
   return (
-    <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+    <div className="rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+      <h3 className="text-sm font-extrabold tracking-tight text-slate-900">{title}</h3>
       {!rows.length ? (
         <p className="mt-6 text-sm text-slate-500">No movement activity yet.</p>
       ) : (
@@ -109,8 +110,8 @@ function TrendBars({ title, rows }) {
                     {nice(row.total)} total ({nice(row.inQty)} in / {nice(row.outQty)} out)
                   </p>
                 </div>
-                <div className="h-2 rounded-full bg-slate-200">
-                  <div className="h-2 rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500" style={{ width: `${width}%` }} />
+                <div className="h-2.5 rounded-full bg-slate-200">
+                  <div className="h-2.5 rounded-full bg-gradient-to-r from-cyan-500 via-sky-500 to-emerald-500" style={{ width: `${width}%` }} />
                 </div>
               </div>
             );
@@ -129,12 +130,14 @@ export default function AdminInventory() {
   const [threshold, setThreshold] = useState(5);
   const [stockQuery, setStockQuery] = useState("");
   const [stockCategory, setStockCategory] = useState("all");
+  const [movementQuery, setMovementQuery] = useState("");
+  const [movementType, setMovementType] = useState("all");
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
 
   const [selected, setSelected] = useState(null);
   const [delta, setDelta] = useState("");
-  const [reason, setReason] = useState("MANUAL");
+  const [reason, setReason] = useState("MANUAL_ADJUST");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -164,14 +167,14 @@ export default function AdminInventory() {
   }, [threshold]);
 
   const totalLowStockUnits = useMemo(
-    () => lowStock.reduce((sum, v) => sum + Number(v.stock || 0), 0),
+    () => lowStock.reduce((sum, v) => sum + Number(v.available || v.stock || 0), 0),
     [lowStock]
   );
 
   const stockHealthRows = useMemo(() => {
     const totalSkus = Number(metrics?.totalSkus || 0);
     const lowCount = Number(metrics?.lowStockCount || 0);
-    const outCount = lowStock.filter((v) => Number(v.stock || 0) === 0).length;
+    const outCount = lowStock.filter((v) => Number(v.available || v.stock || 0) === 0).length;
     const healthy = Math.max(totalSkus - lowCount, 0);
     const lowButPositive = Math.max(lowCount - outCount, 0);
     return [
@@ -216,7 +219,7 @@ export default function AdminInventory() {
   }, [allStock, stockCategory, stockQuery]);
 
   const movementTypeRows = useMemo(() => {
-    const counts = { IN: 0, OUT: 0, ADJUST: 0 };
+    const counts = { IN: 0, OUT: 0, ADJUST: 0, RESERVE: 0, RELEASE: 0 };
     movements.forEach((m) => {
       const t = String(m.type || "").toUpperCase();
       if (counts[t] !== undefined) counts[t] += Number(m.qty || 0);
@@ -225,6 +228,8 @@ export default function AdminInventory() {
       { label: "Stock In", value: counts.IN },
       { label: "Stock Out", value: counts.OUT },
       { label: "Adjustments", value: counts.ADJUST },
+      { label: "Reserved", value: counts.RESERVE },
+      { label: "Released", value: counts.RELEASE },
     ].filter((x) => x.value > 0);
   }, [movements]);
 
@@ -240,17 +245,68 @@ export default function AdminInventory() {
       const type = String(m.type || "").toUpperCase();
       if (type === "IN") row.inQty += qty;
       else if (type === "OUT") row.outQty += qty;
+      else if (type === "RESERVE") row.outQty += qty;
+      else if (type === "RELEASE") row.inQty += qty;
       else row.adjustQty += qty;
       row.total += qty;
     });
     return [...bucket.values()].sort((a, b) => a.label.localeCompare(b.label)).slice(-7);
   }, [movements]);
 
+  const movementTypes = useMemo(() => {
+    const set = new Set(
+      movements.map((m) => String(m.type || "").toUpperCase()).filter(Boolean)
+    );
+    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [movements]);
+
+  const filteredMovements = useMemo(() => {
+    const q = movementQuery.trim().toLowerCase();
+    return movements.filter((m) => {
+      const type = String(m.type || "").toUpperCase();
+      if (movementType !== "all" && type !== movementType) return false;
+      if (!q) return true;
+      return (
+        String(m.product?.name || "").toLowerCase().includes(q) ||
+        String(m.sku || "").toLowerCase().includes(q) ||
+        String(m.reason || "").toLowerCase().includes(q) ||
+        String(m.note || "").toLowerCase().includes(q) ||
+        String(m.actor?.name || m.actor?.email || "").toLowerCase().includes(q)
+      );
+    });
+  }, [movements, movementQuery, movementType]);
+
   const handleSelectVariant = (entry) => {
     setSelected(entry);
     setDelta("");
-    setReason("MANUAL");
+    setReason("MANUAL_ADJUST");
     setNote("");
+  };
+
+  const applyPreset = (preset) => {
+    if (!selected) {
+      alert("Select a variant first.");
+      return;
+    }
+
+    const label = selected.sku || selected.name;
+    if (preset === "add") {
+      setDelta("10");
+      setReason("PURCHASE");
+      setNote(`Restock for ${label}`);
+    } else if (preset === "remove") {
+      setDelta("-1");
+      setReason("DAMAGE");
+      setNote(`Remove damaged unit from ${label}`);
+    } else if (preset === "correction") {
+      setDelta("");
+      setReason("MANUAL_ADJUST");
+      setNote(`Cycle count correction for ${label}`);
+    } else if (preset === "return") {
+      setDelta("1");
+      setReason("RETURN");
+      setNote(`Return received for ${label}`);
+    }
   };
 
   const handleAdjust = async (e) => {
@@ -290,21 +346,24 @@ export default function AdminInventory() {
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-cyan-100 via-sky-50 to-emerald-100 p-5 sm:p-6">
+      <div className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(6,182,212,0.18),_transparent_32%),linear-gradient(135deg,_#f8fafc_0%,_#ecfeff_45%,_#f0fdf4_100%)] p-5 sm:p-6 shadow-[0_24px_60px_-36px_rgba(15,23,42,0.45)]">
         <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-cyan-300/30 blur-3xl" />
         <div className="pointer-events-none absolute -left-20 bottom-0 h-40 w-40 rounded-full bg-emerald-300/30 blur-3xl" />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Inventory Intelligence</h1>
-            <p className="mt-1 text-sm font-medium text-slate-600">Visual command center for stock health, risk and movement</p>
+            <div className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-500 shadow-sm">
+              Operations
+            </div>
+            <h1 className="mt-3 text-2xl sm:text-3xl font-black tracking-tight text-slate-950">Inventory Intelligence</h1>
+            <p className="mt-1 text-sm font-medium text-slate-600">Operational view of sellable stock, reservations, and stock movements across your catalog.</p>
           </div>
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-300 bg-white/90 px-3 py-2">
-            <span className="text-xs font-semibold text-slate-600">Threshold</span>
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+            <span className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Global Alert</span>
             <input
               type="number"
               value={threshold}
               onChange={(e) => setThreshold(Math.max(0, Number(e.target.value || 0)))}
-              className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
+              className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm font-semibold"
             />
             <button
               onClick={fetchOverview}
@@ -322,10 +381,10 @@ export default function AdminInventory() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard label="Total SKUs" value={nice(metrics?.totalSkus ?? 0)} hint="Active variants tracked" accent="bg-cyan-400/40" />
-        <StatCard label="Units In Stock" value={nice(metrics?.totalUnitsInStock ?? 0)} hint="Across all active products" accent="bg-emerald-400/40" />
-        <StatCard label="Stock Value" value={money(metrics?.totalStockValue ?? 0)} hint="Based on sell prices" accent="bg-sky-400/40" />
+        <StatCard label="Units Available" value={nice(metrics?.totalUnitsAvailable ?? 0)} hint={`${nice(metrics?.totalUnitsReserved ?? 0)} reserved right now`} accent="bg-emerald-400/40" />
+        <StatCard label="On-Hand Value" value={money(metrics?.totalStockValue ?? 0)} hint={`${nice(metrics?.totalUnitsOnHand ?? 0)} physical units in catalog`} accent="bg-sky-400/40" />
         <StatCard
-          label={`Low Stock <= ${threshold}`}
+          label={`Low Available <= ${threshold}`}
           value={`${nice(metrics?.lowStockCount ?? 0)} variants`}
           hint={`${nice(totalLowStockUnits)} units within low-stock group`}
           accent="bg-teal-400/40"
@@ -339,10 +398,15 @@ export default function AdminInventory() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 rounded-3xl border border-white/70 bg-white/90 shadow-sm backdrop-blur overflow-hidden">
-          <div className="px-4 py-3 border-b flex justify-between items-center">
-            <div className="font-extrabold text-slate-900">Low-stock variants</div>
-            <div className="text-xs text-slate-500">Select a row to adjust stock</div>
+        <div className="xl:col-span-2 overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+            <div>
+              <div className="font-extrabold tracking-tight text-slate-900">Low Availability Queue</div>
+              <div className="text-xs text-slate-500">Threshold uses sellable stock after reservations</div>
+            </div>
+            <div className="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">
+              Action Needed
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -351,20 +415,23 @@ export default function AdminInventory() {
                   <th className="text-left px-4 py-3 font-semibold">Product</th>
                   <th className="text-left px-4 py-3 font-semibold">SKU</th>
                   <th className="text-left px-4 py-3 font-semibold">Brand / Category</th>
-                  <th className="text-right px-4 py-3 font-semibold">Stock</th>
+                  <th className="text-right px-4 py-3 font-semibold">Available</th>
+                  <th className="text-right px-4 py-3 font-semibold">Threshold</th>
+                  <th className="text-right px-4 py-3 font-semibold">Reserved</th>
+                  <th className="text-right px-4 py-3 font-semibold">On Hand</th>
                   <th className="text-right px-4 py-3 font-semibold">Price</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-4 py-6 text-slate-500" colSpan={5}>
+                    <td className="px-4 py-6 text-slate-500" colSpan={8}>
                       Loading inventory...
                     </td>
                   </tr>
                 ) : lowStock.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-6 text-slate-500" colSpan={5}>
+                    <td className="px-4 py-6 text-slate-500" colSpan={8}>
                       No variants are at or below threshold.
                     </td>
                   </tr>
@@ -374,7 +441,7 @@ export default function AdminInventory() {
                     return (
                       <tr
                         key={`${v.productId}-${v.variantId}`}
-                        className={`border-t cursor-pointer ${isSelected ? "bg-cyan-50" : "hover:bg-slate-50"}`}
+                        className={`border-t cursor-pointer transition ${isSelected ? "bg-cyan-50/70 ring-1 ring-inset ring-cyan-200" : "hover:bg-slate-50"}`}
                         onClick={() => handleSelectVariant(v)}
                       >
                         <td className="px-4 py-3">
@@ -390,13 +457,16 @@ export default function AdminInventory() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span
-                            className={`inline-flex items-center justify-center rounded-full px-2 py-1 text-xs font-bold ${
-                              Number(v.stock || 0) === 0 ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
+                            className={`inline-flex min-w-[72px] items-center justify-center rounded-full px-2.5 py-1 text-xs font-bold ${
+                              Number(v.available || v.stock || 0) === 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
                             }`}
                           >
-                            {nice(v.stock)}
+                            {nice(v.available || v.stock)}
                           </span>
                         </td>
+                        <td className="px-4 py-3 text-right text-slate-700">{nice(v.threshold)}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{nice(v.reserved)}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{nice(v.onHand)}</td>
                         <td className="px-4 py-3 text-right font-semibold text-slate-900">{money(v.price)}</td>
                       </tr>
                     );
@@ -407,9 +477,14 @@ export default function AdminInventory() {
           </div>
         </div>
 
-        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur h-fit">
-          <div className="font-extrabold text-slate-900 mb-2">Manual Stock Adjustment</div>
-          <p className="text-xs text-slate-500 mb-4">Select a low-stock variant then apply an adjustment.</p>
+        <div className="h-fit rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="font-extrabold tracking-tight text-slate-900">On-Hand Inventory Adjustment</div>
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600">
+              Manual
+            </div>
+          </div>
+          <p className="mb-4 text-xs leading-5 text-slate-500">Change physical stock. Reserved units are protected from being adjusted below active demand.</p>
           {selected ? (
             <form onSubmit={handleAdjust} className="space-y-4">
               <div className="text-sm">
@@ -417,18 +492,50 @@ export default function AdminInventory() {
                 <div className="text-xs text-slate-500 mt-1">
                   SKU: <span className="font-mono font-semibold">{selected.sku || "-"}</span>
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Current stock: <span className="font-bold text-slate-900">{nice(selected.stock)}</span>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Available</div>
+                    <div className="mt-1 text-sm font-extrabold text-slate-900">{nice(selected.available || selected.stock)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Threshold</div>
+                    <div className="mt-1 text-sm font-extrabold text-slate-900">{nice(selected.threshold)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Reserved</div>
+                    <div className="mt-1 text-sm font-extrabold text-slate-900">{nice(selected.reserved)}</div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">On Hand</div>
+                    <div className="mt-1 text-sm font-extrabold text-slate-900">{nice(selected.onHand ?? selected.stock)}</div>
+                  </div>
                 </div>
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">Delta (can be negative)</label>
+                <label className="text-sm font-semibold text-slate-700">Quick Actions</label>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => applyPreset("add")} className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100">
+                    Add Stock
+                  </button>
+                  <button type="button" onClick={() => applyPreset("remove")} className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100">
+                    Remove Stock
+                  </button>
+                  <button type="button" onClick={() => applyPreset("correction")} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
+                    Correction
+                  </button>
+                  <button type="button" onClick={() => applyPreset("return")} className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 transition hover:bg-cyan-100">
+                    Return Received
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-slate-700">On-hand delta (can be negative)</label>
                 <input
                   type="number"
                   value={delta}
                   onChange={(e) => setDelta(e.target.value)}
                   placeholder="e.g. 10 or -2"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
               <div>
@@ -436,9 +543,9 @@ export default function AdminInventory() {
                 <select
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-white"
+                  className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white"
                 >
-                  <option value="MANUAL">MANUAL</option>
+                  <option value="MANUAL_ADJUST">MANUAL_ADJUST</option>
                   <option value="PURCHASE">PURCHASE</option>
                   <option value="DAMAGE">DAMAGE</option>
                   <option value="RETURN">RETURN</option>
@@ -450,14 +557,14 @@ export default function AdminInventory() {
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Internal note"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm min-h-[80px]"
+                  className="mt-1 min-h-[90px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
               <button
                 type="submit"
                 disabled={saving}
                 className={`w-full rounded-xl py-3 text-sm font-semibold text-white ${
-                  saving ? "bg-cyan-300 cursor-not-allowed" : "bg-cyan-600 hover:bg-cyan-500"
+                  saving ? "bg-cyan-300 cursor-not-allowed" : "bg-cyan-700 hover:bg-cyan-600"
                 }`}
               >
                 {saving ? "Saving..." : "Apply Adjustment"}
@@ -470,20 +577,33 @@ export default function AdminInventory() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
+        <div className="xl:col-span-1">
           <TrendBars title="Recent Movement Trend (last active days)" rows={movementTrendRows} />
         </div>
-        <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-          <h3 className="text-sm font-bold text-slate-900">Recent Inventory Movements</h3>
+        <div className="xl:col-span-2 rounded-[28px] border border-slate-200/80 bg-white p-5 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-extrabold tracking-tight text-slate-900">Recent Inventory Movements</h3>
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600">
+              Snapshot
+            </div>
+          </div>
           {!movements.length ? (
             <p className="mt-6 text-sm text-slate-500">No inventory movements recorded yet.</p>
           ) : (
-            <div className="mt-4 max-h-72 overflow-y-auto space-y-2">
+            <div className="mt-4 max-h-72 overflow-y-auto space-y-2 pr-1">
               {movements.slice(0, 10).map((m) => (
-                <div key={m._id} className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
-                  <p className="text-xs font-semibold text-slate-900 line-clamp-1">{m.product?.name || "Unknown product"}</p>
+                <div key={m._id} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                  <p className="text-xs font-semibold text-slate-900 line-clamp-1">
+                    {m.product?.name || "Unknown product"} {m.sku ? `• ${m.sku}` : ""}
+                  </p>
                   <p className="text-[11px] text-slate-600 mt-1">
-                    {new Date(m.createdAt).toLocaleString()} | {m.type} | {m.reason} | Qty {nice(m.qty)}
+                    {new Date(m.createdAt).toLocaleString()} | {m.type} | {m.reason} | Change {nice(m.deltaQty || 0)}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    On hand {nice(m.oldOnHand)} → {nice(m.newOnHand)} | Available {nice(m.oldAvailable)} → {nice(m.newAvailable)}
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {m.actor?.name || m.actor?.email || "System"}{m.note ? ` | ${m.note}` : ""}
                   </p>
                 </div>
               ))}
@@ -492,8 +612,109 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/70 bg-white/90 shadow-sm backdrop-blur overflow-hidden">
-        <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-3">
+      <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+          <div>
+            <h3 className="font-extrabold text-slate-900">Inventory Movement History</h3>
+            <p className="text-xs text-slate-500">
+              Full ledger view with before/after snapshots ({nice(filteredMovements.length)} shown)
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={movementQuery}
+              onChange={(e) => setMovementQuery(e.target.value)}
+              placeholder="Search product / SKU / reason / actor"
+              className="rounded-xl border border-slate-300 px-3 py-2 text-sm w-72"
+            />
+            <select
+              value={movementType}
+              onChange={(e) => setMovementType(e.target.value)}
+              className="rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white"
+            >
+              {movementTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type === "all" ? "All movement types" : type}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-x-auto max-h-[420px]">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 sticky top-0">
+              <tr>
+                <th className="text-left px-4 py-3 font-semibold">Date</th>
+                <th className="text-left px-4 py-3 font-semibold">Product</th>
+                <th className="text-left px-4 py-3 font-semibold">SKU</th>
+                <th className="text-left px-4 py-3 font-semibold">Type / Reason</th>
+                <th className="text-right px-4 py-3 font-semibold">Change</th>
+                <th className="text-left px-4 py-3 font-semibold">On Hand</th>
+                <th className="text-left px-4 py-3 font-semibold">Available</th>
+                <th className="text-left px-4 py-3 font-semibold">Actor</th>
+                <th className="text-left px-4 py-3 font-semibold">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredMovements.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-slate-500" colSpan={9}>
+                    No inventory movements matched your filter.
+                  </td>
+                </tr>
+              ) : (
+                filteredMovements.map((m) => {
+                  const deltaNum = Number(m.deltaQty || 0);
+                  const deltaClass =
+                    deltaNum > 0
+                      ? "text-emerald-700"
+                      : deltaNum < 0
+                      ? "text-rose-700"
+                      : "text-slate-700";
+                  return (
+                    <tr key={m._id} className="border-t transition hover:bg-slate-50/80">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600">
+                        {new Date(m.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-slate-900 line-clamp-1">
+                          {m.product?.name || "Unknown product"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono text-slate-700">
+                        {m.sku || "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-slate-900">{m.type}</div>
+                        <div className="text-xs text-slate-500">{m.reason}</div>
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${deltaClass}`}>
+                        {deltaNum > 0 ? "+" : ""}
+                        {nice(deltaNum)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {nice(m.oldOnHand)} -&gt; {nice(m.newOnHand)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {nice(m.oldAvailable)} -&gt; {nice(m.newAvailable)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {m.actor?.name || m.actor?.email || "System"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600 max-w-[280px]">
+                        <div className="line-clamp-2">{m.note || "-"}</div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_45px_-30px_rgba(15,23,42,0.32)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/80 px-5 py-4">
           <div>
             <div className="font-extrabold text-slate-900">All Stock</div>
             <div className="text-xs text-slate-500">
@@ -527,7 +748,10 @@ export default function AdminInventory() {
                 <th className="text-left px-4 py-3 font-semibold">Product</th>
                 <th className="text-left px-4 py-3 font-semibold">SKU</th>
                 <th className="text-left px-4 py-3 font-semibold">Brand / Category</th>
-                <th className="text-right px-4 py-3 font-semibold">Stock</th>
+                <th className="text-right px-4 py-3 font-semibold">Available</th>
+                <th className="text-right px-4 py-3 font-semibold">Threshold</th>
+                <th className="text-right px-4 py-3 font-semibold">Reserved</th>
+                <th className="text-right px-4 py-3 font-semibold">On Hand</th>
                 <th className="text-right px-4 py-3 font-semibold">Unit Price</th>
                 <th className="text-right px-4 py-3 font-semibold">Stock Value</th>
               </tr>
@@ -535,7 +759,7 @@ export default function AdminInventory() {
             <tbody>
               {filteredAllStock.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-slate-500" colSpan={6}>
+                  <td className="px-4 py-6 text-slate-500" colSpan={9}>
                     No stock rows matched your filter.
                   </td>
                 </tr>
@@ -545,11 +769,11 @@ export default function AdminInventory() {
                     selected &&
                     selected.productId === row.productId &&
                     selected.variantId === row.variantId;
-                  const stockNum = Number(row.stock || 0);
+                  const availableNum = Number(row.available || row.stock || 0);
                   return (
                     <tr
                       key={`${row.productId}-${row.variantId}`}
-                      className={`border-t cursor-pointer ${isSelected ? "bg-cyan-50" : "hover:bg-slate-50"}`}
+                      className={`border-t cursor-pointer transition ${isSelected ? "bg-cyan-50/70 ring-1 ring-inset ring-cyan-200" : "hover:bg-slate-50"}`}
                       onClick={() => handleSelectVariant(row)}
                     >
                       <td className="px-4 py-3">
@@ -561,20 +785,23 @@ export default function AdminInventory() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span
-                          className={`inline-flex items-center justify-center rounded-full px-2 py-1 text-xs font-bold ${
-                            stockNum <= 0
-                              ? "bg-red-50 text-red-700"
-                              : stockNum <= threshold
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-emerald-50 text-emerald-700"
+                            className={`inline-flex min-w-[72px] items-center justify-center rounded-full px-2.5 py-1 text-xs font-bold ${
+                            availableNum <= 0
+                              ? "bg-red-100 text-red-700"
+                              : availableNum <= threshold
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-emerald-100 text-emerald-700"
                           }`}
                         >
-                          {nice(stockNum)}
+                          {nice(availableNum)}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-right text-slate-700">{nice(row.threshold)}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{nice(row.reserved)}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{nice(row.onHand)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">{money(row.price)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                        {money(stockNum * Number(row.price || 0))}
+                        {money(Number(row.onHand || 0) * Number(row.price || 0))}
                       </td>
                     </tr>
                   );

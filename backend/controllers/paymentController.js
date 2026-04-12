@@ -9,7 +9,10 @@ const {
   applyCouponUsageIfNeeded,
 } = require("../services/orderService");
 const { validateShippingPayload } = require("../utils/shippingValidation");
-const { releaseExpiredReservations } = require("../services/stockReservationService");
+const {
+  releaseExpiredReservations,
+  releaseReservationForOrder,
+} = require("../services/stockReservationService");
 const { getVisitorKey } = require("../utils/visitorKey");
 
 const postForm = (urlString, payload) =>
@@ -155,11 +158,13 @@ const markOrderFailedFromSslCommerz = async (order, transactionId, statusHint) =
   order.payment.provider = "sslcommerz";
   order.payment.transactionId = transactionId || order.payment.transactionId;
   order.status = "cancelled";
-  order.inventory = order.inventory || {};
-  order.inventory.reservationActive = false;
-  order.inventory.reservationReleasedAt = new Date();
-  order.inventory.reservationReleaseReason =
-    statusHint === "cancelled" ? "PAYMENT_CANCELLED" : "PAYMENT_FAILED";
+  await releaseReservationForOrder({
+    order,
+    releaseReason: statusHint === "cancelled" ? "PAYMENT_CANCELLED" : "PAYMENT_FAILED",
+    ledgerReason:
+      statusHint === "cancelled" ? "PAYMENT_CANCELLED_RELEASE" : "PAYMENT_FAILED_RELEASE",
+    note: `Reservation released after ${statusHint || "payment failure"} for order ${order.orderNo}`,
+  });
   await order.save();
 };
 

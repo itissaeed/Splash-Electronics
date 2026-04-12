@@ -22,6 +22,7 @@ const variantSchema = new mongoose.Schema({
   attributes: { type: Map, of: String, default: {} },
   price: { type: Number, required: true },
   countInStock: { type: Number, required: true, default: 0 },
+  lowStockThreshold: { type: Number, required: true, default: 5 },
   images: [imageSchema],
   isDefault: { type: Boolean, default: false },
 }, { _id: true });

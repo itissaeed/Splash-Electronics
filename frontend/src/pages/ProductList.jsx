@@ -31,7 +31,7 @@ const getOriginalPrice = (product) => Number(product?.originalPrice || 0);
 
 const getProductStock = (product) =>
   (Array.isArray(product?.variants) ? product.variants : []).reduce(
-    (sum, variant) => sum + Number(variant?.countInStock || 0),
+    (sum, variant) => sum + Number((variant?.availableStock ?? variant?.countInStock) || 0),
     0
   );
 
