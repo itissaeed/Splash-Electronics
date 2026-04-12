@@ -952,7 +952,7 @@ export default function AdminProducts() {
   };
 
   const deleteProduct = async (id) => {
-    if (!window.confirm("Delete this product?")) return;
+    if (!window.confirm("Delete this product from the storefront? It will stay in the database for order history and revenue analytics.")) return;
     try {
       await api.delete(`/products/${id}`);
       await fetchAll();
@@ -1425,6 +1425,12 @@ export default function AdminProducts() {
                           >
                             {p.isActive ? "Active" : "Inactive"}
                           </span>
+
+                          {p.isDeleted && (
+                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-50 text-red-700">
+                              Deleted
+                            </span>
+                          )}
 
                           {p.isFeatured && (
                             <span className="text-xs font-semibold px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">

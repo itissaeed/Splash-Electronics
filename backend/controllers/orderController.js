@@ -220,9 +220,13 @@ exports.validateCoupon = async (req, res) => {
     const categoryIds = [];
 
     for (const item of cart.items) {
-      const product = await Product.findById(item.product).select("category variants name");
+      const product = await Product.findOne({
+        _id: item.product,
+        isActive: true,
+        isDeleted: { $ne: true },
+      }).select("category variants name");
       if (!product) {
-        return res.status(400).json({ message: "A cart item no longer exists" });
+        return res.status(400).json({ message: "A cart item is no longer available" });
       }
 
       const variant = product.variants.id(item.variantId);

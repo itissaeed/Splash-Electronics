@@ -15,6 +15,7 @@ const {
   deleteProductImage,
   getFeaturedProducts,
   createProductReview,
+  getProductReviewEligibility,
   getProductFilters,
 } = require("../controllers/productController");
 
@@ -50,6 +51,7 @@ router.delete("/:id/images", protect, admin, deleteProductImage);
 router.get("/featured", getFeaturedProducts);
 router.get("/filters", getProductFilters);
 router.get("/id/:id", getProductById);
+router.get("/:id/review-eligibility", protect, getProductReviewEligibility);
 router.post("/:id/reviews", protect, createProductReview);
 router.get("/", getProducts);
 router.get("/:slug", getProductBySlug);

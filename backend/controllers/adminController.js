@@ -1,10 +1,10 @@
 const Order = require("../models/Order");
 const User = require("../models/userModel");
+const { buildRevenueMatch } = require("../utils/revenueRecognition");
 
 exports.getAdminOverview = async (req, res) => {
   try {
-    const revenueStatuses = ["confirmed", "processing", "shipped", "delivered"];
-    const revenueMatch = { status: { $in: revenueStatuses } };
+    const revenueMatch = buildRevenueMatch();
 
     // totals
     const totalOrders = await Order.countDocuments();

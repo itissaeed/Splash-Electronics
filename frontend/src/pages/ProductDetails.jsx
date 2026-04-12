@@ -356,6 +356,8 @@ export default function ProductDetails() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState("");
   const [reviewSuccess, setReviewSuccess] = useState("");
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [reviewEligibilityLoading, setReviewEligibilityLoading] = useState(false);
   const compareItems = useCompareItems();
 
   const compareKeys = useMemo(
@@ -498,6 +500,7 @@ export default function ProductDetails() {
   const reviews = Number(product?.numReviews || 0);
   const currentUser = user || null;
   const isAdmin = Boolean(user?.isAdmin);
+  const canReviewProduct = Boolean(currentUser && !isAdmin && reviewEligibility?.canReview);
 
   const sortedReviews = useMemo(() => {
     return [...(product?.reviews || [])].sort(
@@ -535,6 +538,39 @@ export default function ProductDetails() {
     setReviewTitle(existingUserReview.title || "");
     setReviewComment(existingUserReview.comment || "");
   }, [existingUserReview]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!product?._id || !currentUser?._id) {
+      setReviewEligibility(null);
+      setReviewEligibilityLoading(false);
+      return undefined;
+    }
+
+    setReviewEligibilityLoading(true);
+
+    (async () => {
+      try {
+        const { data } = await api.get(`/products/${product._id}/review-eligibility`);
+        if (!cancelled) {
+          setReviewEligibility(data || null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setReviewEligibility(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setReviewEligibilityLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?._id, product?._id]);
 
   const onSelectVariant = (v) => {
     setSelectedVariantId(v._id);
@@ -618,6 +654,14 @@ export default function ProductDetails() {
 
     if (!reviewComment.trim()) {
       setReviewError("Please write a review comment.");
+      return;
+    }
+
+    if (!canReviewProduct) {
+      setReviewError(
+        reviewEligibility?.message ||
+          "Only customers with a delivered order for this product can submit a review."
+      );
       return;
     }
 
@@ -1073,7 +1117,7 @@ export default function ProductDetails() {
                   <p className="mt-1 text-sm text-gray-500">
                     {isAdmin
                       ? "Admins can read customer feedback here, but review submission is reserved for shopper accounts."
-                      : "Share your experience with build quality, performance, and delivery."}
+                      : "Share your experience with build quality, performance, and delivery after your order arrives."}
                   </p>
                 </div>
                 {!currentUser ? (
@@ -1086,6 +1130,15 @@ export default function ProductDetails() {
                 ) : null}
               </div>
 
+              {currentUser && !isAdmin ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                  {reviewEligibilityLoading
+                    ? "Checking whether this purchase is eligible for review..."
+                    : reviewEligibility?.message ||
+                      "Only customers with a delivered order for this product can submit a review."}
+                </div>
+              ) : null}
+
               <form onSubmit={submitReview} className="mt-5 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Your rating</p>
@@ -1093,7 +1146,7 @@ export default function ProductDetails() {
                     <StarRating
                       value={reviewRating}
                       sizeClass="h-7 w-7"
-                      interactive
+                      interactive={canReviewProduct}
                       onChange={setReviewRating}
                     />
                     <span className="text-sm font-semibold text-gray-600">{reviewRating}/5</span>
@@ -1107,7 +1160,7 @@ export default function ProductDetails() {
                     onChange={(e) => setReviewTitle(e.target.value)}
                     maxLength={120}
                     placeholder="Summarize your experience"
-                    disabled={!currentUser || isAdmin || reviewSubmitting}
+                    disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
                     className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
                   />
                 </div>
@@ -1119,7 +1172,7 @@ export default function ProductDetails() {
                     onChange={(e) => setReviewComment(e.target.value)}
                     rows={5}
                     placeholder="How is the product in real use?"
-                    disabled={!currentUser || isAdmin || reviewSubmitting}
+                    disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
                     className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
                   />
                 </div>
@@ -1129,7 +1182,7 @@ export default function ProductDetails() {
 
                 <button
                   type="submit"
-                  disabled={!currentUser || isAdmin || reviewSubmitting}
+                  disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
                   className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
                 >
                   {reviewSubmitting ? "Submitting..." : existingUserReview ? "Update Review" : "Post Review"}

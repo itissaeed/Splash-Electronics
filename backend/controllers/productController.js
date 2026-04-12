@@ -54,6 +54,10 @@ const assertUniqueSkus = (variants = []) => {
 };
 
 const roundToTenth = (value) => Math.round(value * 10) / 10;
+const ACTIVE_STOREFRONT_PRODUCT_FILTER = {
+  isActive: true,
+  isDeleted: { $ne: true },
+};
 
 const RESERVED_PRODUCT_FILTER_KEYS = new Set([
   "pageNumber",
@@ -190,6 +194,18 @@ const updateReviewMetrics = (product) => {
   product.rating = roundToTenth(totalRating / totalReviews);
 };
 
+const hasDeliveredPurchaseForProduct = async ({ productId, userId }) => {
+  if (!productId || !userId) return false;
+
+  const purchaseMatch = await Order.exists({
+    user: userId,
+    status: "delivered",
+    "items.product": productId,
+  });
+
+  return Boolean(purchaseMatch);
+};
+
 // --- Public: GET /api/products (pagination + filters) ---
 exports.getProducts = async (req, res) => {
   try {
@@ -202,7 +218,7 @@ exports.getProducts = async (req, res) => {
       })
     );
 
-    const filter = { isActive: true };
+    const filter = { ...ACTIVE_STOREFRONT_PRODUCT_FILTER };
 
     // text search
     if (req.query.keyword) {
@@ -327,7 +343,7 @@ exports.getProductFilters = async (req, res) => {
       ],
     }).select("_id name slug attributes") : null;
 
-    const filter = { isActive: true };
+    const filter = { ...ACTIVE_STOREFRONT_PRODUCT_FILTER };
     if (category) filter.category = category._id;
 
     const products = await Product.find(filter)
@@ -373,7 +389,10 @@ exports.getProductFilters = async (req, res) => {
 // Optional: GET /api/products/id/:id
 exports.getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true },
+    })
       .populate("category", "name slug parent")
       .populate("brand", "name slug");
 
@@ -394,7 +413,10 @@ exports.getProductById = async (req, res) => {
 // --- Public: GET /api/products/:slug ---
 exports.getProductBySlug = async (req, res) => {
   try {
-    const product = await Product.findOne({ slug: req.params.slug, isActive: true })
+    const product = await Product.findOne({
+      slug: req.params.slug,
+      ...ACTIVE_STOREFRONT_PRODUCT_FILTER,
+    })
       .populate("category", "name slug parent")
       .populate("brand", "name slug");
 
@@ -476,6 +498,8 @@ exports.createProduct = async (req, res) => {
       rating: 0,
       numReviews: 0,
       isActive: true,
+      isDeleted: false,
+      deletedAt: null,
     });
 
     res.status(201).json(product);
@@ -546,8 +570,16 @@ exports.deleteProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    await product.deleteOne();
-    res.json({ message: "Product removed" });
+    if (product.isDeleted) {
+      return res.json({ message: "Product already deleted" });
+    }
+
+    product.isDeleted = true;
+    product.deletedAt = new Date();
+    product.isActive = false;
+    await product.save();
+
+    res.json({ message: "Product deleted from storefront but kept in database" });
   } catch (error) {
     console.error("deleteProduct Error:", error);
     res.status(500).json({ message: "Failed to delete product" });
@@ -557,7 +589,10 @@ exports.deleteProduct = async (req, res) => {
 // --- Public: GET /api/products/featured ---
 exports.getFeaturedProducts = async (req, res) => {
   try {
-    const products = await Product.find({ isFeatured: true, isActive: true })
+    const products = await Product.find({
+      isFeatured: true,
+      ...ACTIVE_STOREFRONT_PRODUCT_FILTER,
+    })
       .populate("category", "name slug")
       .populate("brand", "name slug")
       .limit(8)
@@ -581,7 +616,10 @@ exports.getFeaturedProducts = async (req, res) => {
 // --- Protected: POST /api/products/:id/reviews ---
 exports.createProductReview = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true },
+    });
     if (!product || product.isActive === false) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -598,11 +636,20 @@ exports.createProductReview = async (req, res) => {
       return res.status(400).json({ message: "Comment is required" });
     }
 
-    const verifiedPurchase = await Order.exists({
-      user: req.user._id,
-      status: "delivered",
-      "items.product": product._id,
+    if (req.user?.isAdmin) {
+      return res.status(403).json({ message: "Admins cannot submit product reviews" });
+    }
+
+    const verifiedPurchase = await hasDeliveredPurchaseForProduct({
+      productId: product._id,
+      userId: req.user._id,
     });
+
+    if (!verifiedPurchase) {
+      return res.status(403).json({
+        message: "Only customers with a delivered order for this product can submit a review",
+      });
+    }
 
     const existingReview = product.reviews.find(
       (review) => String(review.user) === String(req.user._id)
@@ -636,6 +683,50 @@ exports.createProductReview = async (req, res) => {
   } catch (error) {
     console.error("createProductReview Error:", error);
     res.status(500).json({ message: "Failed to submit review" });
+  }
+};
+
+exports.getProductReviewEligibility = async (req, res) => {
+  try {
+    const product = await Product.findOne({
+      _id: req.params.id,
+      isDeleted: { $ne: true },
+    }).select("_id isActive reviews.user");
+    if (!product || product.isActive === false) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    if (req.user?.isAdmin) {
+      return res.json({
+        canReview: false,
+        hasPurchased: false,
+        hasExistingReview: false,
+        message: "Admin accounts can read reviews, but only customers can post them.",
+      });
+    }
+
+    const hasPurchased = await hasDeliveredPurchaseForProduct({
+      productId: product._id,
+      userId: req.user._id,
+    });
+
+    const hasExistingReview = product.reviews.some(
+      (review) => String(review.user) === String(req.user._id)
+    );
+
+    return res.json({
+      canReview: hasPurchased,
+      hasPurchased,
+      hasExistingReview,
+      message: hasPurchased
+        ? hasExistingReview
+          ? "You can update your review because this purchase was delivered."
+          : "Your delivered order makes you eligible to review this product."
+        : "Only customers with a delivered order for this product can submit a review.",
+    });
+  } catch (error) {
+    console.error("getProductReviewEligibility Error:", error);
+    res.status(500).json({ message: "Failed to check review eligibility" });
   }
 };
 

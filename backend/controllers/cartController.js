@@ -60,8 +60,12 @@ exports.addToCart = async (req, res) => {
       return res.status(400).json({ message: "productId, variantId, qty are required" });
     }
 
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    const product = await Product.findOne({
+      _id: productId,
+      isActive: true,
+      isDeleted: { $ne: true },
+    });
+    if (!product) return res.status(404).json({ message: "Product not available" });
 
     const variant = product.variants.id(variantId);
     if (!variant) return res.status(404).json({ message: "Variant not found" });
@@ -135,8 +139,12 @@ exports.updateCartItemQty = async (req, res) => {
     const item = cart.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ message: "Cart item not found" });
 
-    const product = await Product.findById(item.product);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    const product = await Product.findOne({
+      _id: item.product,
+      isActive: true,
+      isDeleted: { $ne: true },
+    });
+    if (!product) return res.status(404).json({ message: "Product not available" });
 
     const variant = product.variants.id(item.variantId);
     if (!variant) return res.status(404).json({ message: "Variant not found" });

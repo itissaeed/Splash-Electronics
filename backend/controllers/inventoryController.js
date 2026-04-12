@@ -13,7 +13,7 @@ exports.getInventoryOverview = async (req, res) => {
     const threshold = toNum(req.query.threshold, 5);
 
     // Load all active products with brand + category
-    const products = await Product.find({ isActive: true })
+    const products = await Product.find({ isActive: true, isDeleted: { $ne: true } })
       .populate("brand", "name slug")
       .populate("category", "name slug")
       .lean();
