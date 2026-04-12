@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../utils/api";
 import useCompareItems from "../utils/useCompare";
+import { UserContext } from "./context/UserContext";
 import {
   COMPARE_LIMIT,
   getCompareKey,
@@ -341,6 +342,7 @@ function summarizeReviews(reviews = []) {
 export default function ProductDetails() {
   const { slug } = useParams();
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
 
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -494,13 +496,8 @@ export default function ProductDetails() {
 
   const rating = Number(product?.rating || 0);
   const reviews = Number(product?.numReviews || 0);
-  const currentUser = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem("userInfo") || "null");
-    } catch {
-      return null;
-    }
-  }, []);
+  const currentUser = user || null;
+  const isAdmin = Boolean(user?.isAdmin);
 
   const sortedReviews = useMemo(() => {
     return [...(product?.reviews || [])].sort(
@@ -942,7 +939,8 @@ export default function ProductDetails() {
                 )}
 
                 {/* Quantity */}
-                <div className="mt-6 flex items-center justify-between gap-3">
+                {!isAdmin ? (
+                  <div className="mt-6 flex items-center justify-between gap-3">
                   <p className="text-sm font-extrabold text-gray-900">Quantity</p>
                   <div className="flex items-center rounded-2xl border bg-white overflow-hidden dark:bg-slate-900">
                     <button
@@ -968,16 +966,30 @@ export default function ProductDetails() {
                     </button>
                   </div>
                 </div>
+                ) : (
+                  <div className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-900">
+                    Admin preview mode: purchase actions are hidden for admin accounts.
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    onClick={addToCart}
-                    disabled={variants.length ? outOfStock : false}
-                    className="rounded-2xl bg-slate-900 px-5 py-3 font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
-                  >
-                    Add to Cart
-                  </button>
+                  {isAdmin ? (
+                    <Link
+                      to="/admin/products"
+                      className="rounded-2xl bg-slate-900 px-5 py-3 text-center font-extrabold text-white hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                    >
+                      Manage in Admin
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={addToCart}
+                      disabled={variants.length ? outOfStock : false}
+                      className="rounded-2xl bg-slate-900 px-5 py-3 font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                    >
+                      Add to Cart
+                    </button>
+                  )}
                   <Link
                     to="/products"
                     className="rounded-2xl border bg-white px-5 py-3 text-center font-extrabold hover:bg-gray-50 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
@@ -985,26 +997,30 @@ export default function ProductDetails() {
                     Back
                   </Link>
                 </div>
-                <button
-                  type="button"
-                  disabled={compareFull}
-                  onClick={() => {
-                    const res = toggleCompareItem(product);
-                    if (!res.ok && res.reason === "limit") {
-                      alert(`You can compare up to ${COMPARE_LIMIT} products.`);
-                    }
-                  }}
-                  className={`mt-3 w-full rounded-2xl border px-5 py-3 text-center text-sm font-extrabold transition ${
-                    isCompared
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                      : "bg-white text-gray-900 hover:bg-gray-50"
-                  } ${compareFull ? "opacity-60 cursor-not-allowed" : ""}`}
-                >
-                  {isCompared ? "Remove from Compare" : "Add to Compare"}
-                </button>
+                {!isAdmin ? (
+                  <button
+                    type="button"
+                    disabled={compareFull}
+                    onClick={() => {
+                      const res = toggleCompareItem(product);
+                      if (!res.ok && res.reason === "limit") {
+                        alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                      }
+                    }}
+                    className={`mt-3 w-full rounded-2xl border px-5 py-3 text-center text-sm font-extrabold transition ${
+                      isCompared
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                        : "bg-white text-gray-900 hover:bg-gray-50"
+                    } ${compareFull ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    {isCompared ? "Remove from Compare" : "Add to Compare"}
+                  </button>
+                ) : null}
 
                 <p className="mt-4 text-xs text-gray-500">
-                  Secure checkout, fast shipping, and easy return support.
+                  {isAdmin
+                    ? "Catalog preview for admins. Customer checkout and compare tools are hidden."
+                    : "Secure checkout, fast shipping, and easy return support."}
                 </p>
               </div>
 
@@ -1052,10 +1068,12 @@ export default function ProductDetails() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-extrabold text-gray-900">
-                    {existingUserReview ? "Edit your review" : "Write a review"}
+                    {isAdmin ? "Customer review actions" : existingUserReview ? "Edit your review" : "Write a review"}
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Share your experience with build quality, performance, and delivery.
+                    {isAdmin
+                      ? "Admins can read customer feedback here, but review submission is reserved for shopper accounts."
+                      : "Share your experience with build quality, performance, and delivery."}
                   </p>
                 </div>
                 {!currentUser ? (
@@ -1089,7 +1107,7 @@ export default function ProductDetails() {
                     onChange={(e) => setReviewTitle(e.target.value)}
                     maxLength={120}
                     placeholder="Summarize your experience"
-                    disabled={!currentUser || reviewSubmitting}
+                    disabled={!currentUser || isAdmin || reviewSubmitting}
                     className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
                   />
                 </div>
@@ -1101,7 +1119,7 @@ export default function ProductDetails() {
                     onChange={(e) => setReviewComment(e.target.value)}
                     rows={5}
                     placeholder="How is the product in real use?"
-                    disabled={!currentUser || reviewSubmitting}
+                    disabled={!currentUser || isAdmin || reviewSubmitting}
                     className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
                   />
                 </div>
@@ -1111,7 +1129,7 @@ export default function ProductDetails() {
 
                 <button
                   type="submit"
-                  disabled={!currentUser || reviewSubmitting}
+                  disabled={!currentUser || isAdmin || reviewSubmitting}
                   className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
                 >
                   {reviewSubmitting ? "Submitting..." : existingUserReview ? "Update Review" : "Post Review"}

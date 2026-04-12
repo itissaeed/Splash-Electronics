@@ -129,6 +129,7 @@ export default function Home() {
     if (!user?.name) return "";
     return user.name.split(" ")[0];
   }, [user]);
+  const isAdmin = Boolean(user?.isAdmin);
 
   const goSearch = () => {
     const q = search.trim();
@@ -212,13 +213,15 @@ export default function Home() {
 
           {/* Account (Desktop) */}
           <div className="hidden md:flex items-center gap-3 ml-auto">
-            <Link
-              to={user ? "/cart" : "/login"}
-              className="flex items-center gap-2 rounded-xl px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition"
-            >
-              <FaShoppingCart />
-              <span className="text-sm font-medium">Cart</span>
-            </Link>
+            {!isAdmin ? (
+              <Link
+                to={user ? "/cart" : "/login"}
+                className="flex items-center gap-2 rounded-xl px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 transition"
+              >
+                <FaShoppingCart />
+                <span className="text-sm font-medium">Cart</span>
+              </Link>
+            ) : null}
 
             {user ? (
               <div ref={accountMenuRef} className="relative">
@@ -283,10 +286,10 @@ export default function Home() {
             )}
 
             <Link
-              to="/products"
+              to={isAdmin ? "/admin" : "/products"}
               className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-400 transition"
             >
-              Shop
+              {isAdmin ? "Admin Panel" : "Shop"}
             </Link>
           </div>
 
@@ -347,11 +350,13 @@ export default function Home() {
               Home
             </Link>
             <Link to="/products" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
-              Shop
+              {isAdmin ? "Catalog" : "Shop"}
             </Link>
-            <Link to={user ? "/cart" : "/login"} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
-              Cart
-            </Link>
+            {!isAdmin ? (
+              <Link to={user ? "/cart" : "/login"} onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
+                Cart
+              </Link>
+            ) : null}
 
             <div className="h-px bg-white/10 my-2" />
 
@@ -422,23 +427,34 @@ export default function Home() {
 
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Link
-                    to="/products"
+                    to={isAdmin ? "/admin" : "/products"}
                     className="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-indigo-700 shadow hover:bg-gray-100 transition"
                   >
-                    Shop Now
+                    {isAdmin ? "Open Admin Panel" : "Shop Now"}
                   </Link>
-                  <Link
-                    to="/advisor"
-                    className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-200 transition"
-                  >
-                    Help me choose
-                  </Link>
-                  <Link
-                    to="/products?featured=true"
-                    className="rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/15 transition"
-                  >
-                    View Featured
-                  </Link>
+                  {isAdmin ? (
+                    <Link
+                      to="/products"
+                      className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-200 transition"
+                    >
+                      Preview Catalog
+                    </Link>
+                  ) : (
+                    <>
+                      <Link
+                        to="/advisor"
+                        className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-200 transition"
+                      >
+                        Help me choose
+                      </Link>
+                      <Link
+                        to="/products?featured=true"
+                        className="rounded-xl bg-white/10 px-6 py-3 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/15 transition"
+                      >
+                        View Featured
+                      </Link>
+                    </>
+                  )}
                 </div>
 
                 <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -581,23 +597,25 @@ export default function Home() {
                         </div>
                       </Link>
 
-                        <button
-                          type="button"
-                          disabled={compareFull}
-                          onClick={() => {
-                            const res = toggleCompareItem(p);
-                            if (!res.ok && res.reason === "limit") {
-                              alert(`You can compare up to ${COMPARE_LIMIT} products.`);
-                            }
-                          }}
-                        className={`absolute right-5 top-5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ring-1 ${
-                          isCompared
-                            ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
-                            : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
-                        } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
-                        >
-                          {isCompared ? "Compared" : "Compare"}
-                        </button>
+                        {!isAdmin ? (
+                          <button
+                            type="button"
+                            disabled={compareFull}
+                            onClick={() => {
+                              const res = toggleCompareItem(p);
+                              if (!res.ok && res.reason === "limit") {
+                                alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                              }
+                            }}
+                          className={`absolute right-5 top-5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ring-1 ${
+                            isCompared
+                              ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
+                              : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
+                          } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
+                          >
+                            {isCompared ? "Compared" : "Compare"}
+                          </button>
+                        ) : null}
                     </div>
                   );
                 })

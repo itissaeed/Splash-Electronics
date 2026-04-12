@@ -1,7 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import useCompareItems from "../utils/useCompare";
 import { clearCompareItems, removeCompareItem, COMPARE_LIMIT } from "../utils/compare";
+import { UserContext } from "../pages/context/UserContext";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -9,10 +10,11 @@ const fallbackImg =
 export default function CompareBar() {
   const location = useLocation();
   const items = useCompareItems();
+  const { user } = useContext(UserContext);
 
   const hidden = useMemo(() => {
-    return location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
-  }, [location.pathname]);
+    return user?.isAdmin || location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
+  }, [location.pathname, user?.isAdmin]);
 
   if (hidden || items.length === 0) return null;
 

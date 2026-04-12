@@ -20,6 +20,7 @@ import { UserProvider } from "./pages/context/UserContext";
 import { ThemeProvider } from "./pages/context/ThemeContext";
 import AdminRoute from "./pages/admin/AdminRoutes";
 import ProtectedRoute from "./pages/ProtectedRoute";
+import CustomerRoute from "./pages/CustomerRoute";
 import ThemeToggle from "./ThemeToggle";
 import CompareBar from "./components/CompareBar";
 
@@ -51,11 +52,46 @@ function App() {
           <Route path="/reset-password/:token" element={<ResetPassword />} />
 
           {/* Cart & Orders */}
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/order-success/:orderNo" element={<OrderSuccess />} />
-          <Route path="/orders" element={<MyOrders />} />
-          <Route path="/order/:orderNo" element={<OrderDetails />} />
+          <Route
+            path="/cart"
+            element={
+              <CustomerRoute>
+                <Cart />
+              </CustomerRoute>
+            }
+          />
+          <Route
+            path="/checkout"
+            element={
+              <CustomerRoute>
+                <Checkout />
+              </CustomerRoute>
+            }
+          />
+          <Route
+            path="/order-success/:orderNo"
+            element={
+              <CustomerRoute>
+                <OrderSuccess />
+              </CustomerRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <CustomerRoute>
+                <MyOrders />
+              </CustomerRoute>
+            }
+          />
+          <Route
+            path="/order/:orderNo"
+            element={
+              <CustomerRoute>
+                <OrderDetails />
+              </CustomerRoute>
+            }
+          />
 
 
           {/* User protected (examples) */}
@@ -63,7 +99,9 @@ function App() {
             path="/profile"
             element={
               <ProtectedRoute>
-                <Profile />
+                <CustomerRoute>
+                  <Profile />
+                </CustomerRoute>
               </ProtectedRoute>
             }
           />
@@ -79,9 +117,9 @@ function App() {
           />
 
           </Routes>
+          <CompareBar />
         </UserProvider>
         <ThemeToggle />
-        <CompareBar />
       </div>
     </ThemeProvider>
   );
