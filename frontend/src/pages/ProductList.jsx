@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import api from "../utils/api";
 import Breadcrumb from "../BreadCrumb";
@@ -16,6 +16,7 @@ import {
   getCompareKey,
   toggleCompareItem,
 } from "../utils/compare";
+import { UserContext } from "./context/UserContext";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -102,6 +103,7 @@ const FilterSection = ({
 export default function ProductListPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useContext(UserContext);
 
   // URL params
   const categoryParam = searchParams.get("category") || ""; // slug
@@ -141,6 +143,7 @@ export default function ProductListPage() {
   const [inStockOnly, setInStockOnly] = useState(inStockParam === "true");
   const [loading, setLoading] = useState(true);
   const compareItems = useCompareItems();
+  const isAdmin = Boolean(user?.isAdmin);
 
   const compareKeys = useMemo(
     () => new Set(compareItems.map((item) => getCompareKey(item))),
@@ -898,10 +901,10 @@ export default function ProductListPage() {
               const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
 
               return (
-                <div key={p.slug || p._id} className="relative">
+                <div key={p.slug || p._id} className="relative h-full">
                   <Link
                     to={url}
-                    className="premium-card premium-card-hover group block rounded-[1.6rem] p-4"
+                    className="premium-card premium-card-hover group flex h-full flex-col rounded-[1.6rem] p-4"
                   >
                     <div className="relative overflow-hidden rounded-[1.2rem] bg-gray-50">
                       <img
@@ -932,14 +935,16 @@ export default function ProductListPage() {
                       </div>
                     </div>
 
-                    <div className="mt-3">
+                    <div className="mt-3 flex flex-1 flex-col">
                       <div className="mb-2 flex items-center justify-between">
                         <span className="rounded-full bg-gradient-to-r from-amber-100 via-amber-50 to-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900 ring-1 ring-amber-200/80">
                           {p?.brand?.name || "Tech"}
                         </span>
                       </div>
-                      <h3 className="font-semibold text-gray-900 line-clamp-2">{p.name}</h3>
-                      <div className="mt-2 flex items-center justify-between gap-3">
+                      <h3 className="min-h-[3.5rem] text-[1.05rem] font-semibold leading-7 text-gray-900 line-clamp-2">
+                        {p.name}
+                      </h3>
+                      <div className="mt-auto flex items-center justify-between gap-3 pt-2">
                         <div className="flex items-baseline gap-2">
                           <p className="text-indigo-600 font-extrabold">{money(price)}</p>
                           {hasDiscount ? (
@@ -953,30 +958,28 @@ export default function ProductListPage() {
                         </span>
                       </div>
 
-                      {/* Optional hints */}
-                      <p className="mt-2 text-xs text-gray-500">
-                        Premium picks, curated for everyday browsing.
-                      </p>
                     </div>
                   </Link>
 
-	                  <button
-	                    type="button"
-	                    disabled={compareFull}
-                    onClick={() => {
-                      const res = toggleCompareItem(p);
-                      if (!res.ok && res.reason === "limit") {
-                        alert(`You can compare up to ${COMPARE_LIMIT} products.`);
-                      }
-                    }}
-	                    className={`absolute right-3 top-3 z-20 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ring-1 ${
-	                      isCompared
-	                        ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
-	                        : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
-                    } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
-                  >
-                    {isCompared ? "Compared" : "Compare"}
-                  </button>
+		                  {!isAdmin ? (
+		                    <button
+		                      type="button"
+		                      disabled={compareFull}
+                      onClick={() => {
+                        const res = toggleCompareItem(p);
+                        if (!res.ok && res.reason === "limit") {
+                          alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                        }
+                      }}
+		                      className={`absolute right-3 top-3 z-20 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ring-1 ${
+		                        isCompared
+		                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
+		                          : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
+	                      } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
+	                    >
+	                      {isCompared ? "Compared" : "Compare"}
+	                    </button>
+	                  ) : null}
                 </div>
               );
             })}
