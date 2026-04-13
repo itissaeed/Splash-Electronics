@@ -281,7 +281,7 @@ test("cancelMyOrder releases reserved stock without touching on-hand inventory",
   }
 });
 
-test("adminUpdateOrderStatus deducts on-hand stock when order is shipped", async () => {
+test("adminUpdateOrderStatus deducts on-hand stock when order is shipped from processing", async () => {
   const ledgerRows = [];
   const variant = { _id: "var-1", countInStock: 5 };
   const product = {
@@ -295,7 +295,7 @@ test("adminUpdateOrderStatus deducts on-hand stock when order is shipped", async
   const order = {
     _id: "order-3",
     orderNo: "ORD-SHIP-1",
-    status: "pending",
+    status: "processing",
     user: "user-1",
     items: [{ product: "prod-1", variantId: "var-1", qty: 2, skuSnapshot: "PHONE-BLK-128" }],
     payment: { method: "COD", status: "unpaid" },
@@ -381,6 +381,87 @@ test("adminUpdateOrderStatus deducts on-hand stock when order is shipped", async
     assert.equal(ledgerRows[0].type, "OUT");
     assert.equal(ledgerRows[0].reason, "FULFILLMENT_SHIPPED");
     assert.equal(ledgerRows[0].qty, 2);
+  } finally {
+    restore();
+  }
+});
+
+test("adminUpdateOrderStatus rejects skipping directly from pending to shipped", async () => {
+  const order = {
+    _id: "order-4",
+    orderNo: "ORD-SHIP-2",
+    status: "pending",
+    user: "user-1",
+    items: [],
+    payment: { method: "COD", status: "unpaid" },
+    pricing: { shippingFee: 60, itemsTotal: 2400, discountTotal: 0, grandTotal: 2460 },
+    inventory: { deducted: false, reservationActive: true },
+    shipment: {},
+    async save() {
+      return this;
+    },
+  };
+
+  const { loaded: orderController, restore } = withFreshModule({
+    target: "controllers/orderController.js",
+    mocks: {
+      "models/Order.js": {
+        findOne: async () => order,
+        aggregate: async () => [],
+      },
+      "models/product.js": {
+        findById: async () => null,
+      },
+      "models/Cart.js": {},
+      "models/InventoryLedger.js": {
+        create: async () => null,
+      },
+      "models/ReturnRefund.js": {
+        findOne: async () => null,
+        create: async () => null,
+      },
+      "services/orderService.js": {
+        createOrderFromCartForUser: async () => {
+          throw new Error("not used");
+        },
+        getShippingQuote: async () => ({}),
+        validateCouponForItems: async () => ({}),
+      },
+      "utils/shippingValidation.js": {
+        validateShippingPayload: () => ({ ok: true }),
+      },
+      "services/courier.js": {
+        getCourierProvider: () => ({
+          createShipment: async () => ({
+            courier: "Pathao",
+            trackingId: "TRK-1",
+          }),
+        }),
+      },
+      "utils/visitorKey.js": {
+        getVisitorKey: () => "visitor-1",
+      },
+    },
+  });
+
+  try {
+    const req = {
+      params: { orderNo: "ORD-SHIP-2" },
+      user: { _id: "admin-1", isAdmin: true },
+      body: {
+        status: "shipped",
+        courier: "Pathao",
+        trackingId: "TRK-1",
+      },
+    };
+    const res = createResponse();
+
+    await orderController.adminUpdateOrderStatus(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.match(res.payload.message, /Invalid status transition/i);
+    assert.equal(order.status, "pending");
+    assert.equal(order.inventory.deducted, false);
   } finally {
     restore();
   }

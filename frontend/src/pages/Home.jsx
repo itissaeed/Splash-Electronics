@@ -253,16 +253,6 @@ export default function Home() {
                       </Link>
                     )}
 
-                    {user.isAdmin && (
-                      <Link
-                        to="/admin"
-                        onClick={() => setAccountMenuOpen(false)}
-                        className="block px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50"
-                      >
-                        Admin Panel
-                      </Link>
-                    )}
-
                     <button
                       onClick={() => {
                         setAccountMenuOpen(false);
@@ -375,16 +365,6 @@ export default function Home() {
                   </Link>
                 )}
 
-                {user.isAdmin && (
-                  <Link
-                    to="/admin"
-                    onClick={() => setMenuOpen(false)}
-                    className="rounded-xl px-3 py-2 text-red-300 hover:bg-red-500/10"
-                  >
-                    Admin Panel
-                  </Link>
-                )}
-
                 <button
                   onClick={() => {
                     logout();
@@ -426,12 +406,6 @@ export default function Home() {
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <Link
-                    to={isAdmin ? "/admin" : "/products"}
-                    className="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-indigo-700 shadow hover:bg-gray-100 transition"
-                  >
-                    {isAdmin ? "Open Admin Panel" : "Shop Now"}
-                  </Link>
                   {isAdmin ? (
                     <Link
                       to="/products"
@@ -441,6 +415,12 @@ export default function Home() {
                     </Link>
                   ) : (
                     <>
+                      <Link
+                        to="/products"
+                        className="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-indigo-700 shadow hover:bg-gray-100 transition"
+                      >
+                        Shop Now
+                      </Link>
                       <Link
                         to="/advisor"
                         className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-semibold text-slate-900 shadow hover:bg-cyan-200 transition"

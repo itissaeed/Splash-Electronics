@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../../utils/api";
 import {
+  ArrowLeft,
   Plus,
   Pencil,
   Trash2,
@@ -15,6 +17,7 @@ import {
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
+const PRODUCT_CREATE_DRAFT_KEY = "admin_product_create_draft_v1";
 
 const moneyBDT = (n) => {
   const num = Number(n);
@@ -470,6 +473,27 @@ const emptyVariant = (isDefault = false) => ({
   images: [],
 });
 
+const createEmptyFormData = () => ({
+  name: "",
+  slug: "",
+  brand: "",
+  category: "",
+  description: "",
+  highlightsText: "",
+  specsText: "",
+  basePrice: "",
+  originalPrice: "",
+  promoLabel: "",
+  warrantyMonths: "",
+  isFeatured: false,
+  isActive: true,
+});
+
+const createEmptyProductSnapshot = () => ({
+  formData: createEmptyFormData(),
+  variants: [emptyVariant(true)],
+});
+
 function Modal({ open, title, subtitle, children, onClose }) {
   if (!open) return null;
   return (
@@ -500,6 +524,13 @@ function Modal({ open, title, subtitle, children, onClose }) {
 }
 
 export default function AdminProducts() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { productId } = useParams();
+  const isCreatePage = location.pathname === "/admin/products/new";
+  const isEditPage = Boolean(productId);
+  const isEditorPage = isCreatePage || isEditPage;
+
   // data
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -507,9 +538,11 @@ export default function AdminProducts() {
   const [loading, setLoading] = useState(true);
 
   // UI state
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingCategoryTemplate, setSavingCategoryTemplate] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const formSnapshotRef = useRef("");
+  const hasHydratedEditorRef = useRef(false);
 
   // filters
   const [q, setQ] = useState("");
@@ -530,21 +563,7 @@ export default function AdminProducts() {
   const [createAttributes, setCreateAttributes] = useState("");
 
   // form
-  const [formData, setFormData] = useState({
-    name: "",
-    slug: "",
-    brand: "",
-    category: "",
-    description: "",
-    highlightsText: "",
-    specsText: "",
-    basePrice: "",
-    originalPrice: "",
-    promoLabel: "",
-    warrantyMonths: "",
-    isFeatured: false,
-    isActive: true,
-  });
+  const [formData, setFormData] = useState(createEmptyFormData);
 
   // variants
   const [variants, setVariants] = useState([emptyVariant(true)]);
@@ -556,35 +575,34 @@ export default function AdminProducts() {
     setVariantFiles((prev) => ({ ...prev, [idx]: files }));
   };
 
-  const resetForm = () => {
-    setEditingId(null);
-    setFormData({
-      name: "",
-      slug: "",
-      brand: "",
-      category: "",
-      description: "",
-      highlightsText: "",
-      specsText: "",
-      basePrice: "",
-      originalPrice: "",
-      promoLabel: "",
-      warrantyMonths: "",
-      isFeatured: false,
-      isActive: true,
-    });
-    setVariants([emptyVariant(true)]);
+  const applySnapshotToForm = ({ formData: nextFormData, variants: nextVariants }) => {
+    setFormData({ ...createEmptyFormData(), ...(nextFormData || {}) });
+    setVariants(Array.isArray(nextVariants) && nextVariants.length ? nextVariants : [emptyVariant(true)]);
     setVariantFiles({});
   };
 
-  const closeDrawer = () => {
-    setDrawerOpen(false);
+  const markCurrentStateAsClean = (snapshotOverride) => {
+    const snapshot =
+      snapshotOverride ||
+      JSON.stringify({
+        formData,
+        variants,
+      });
+    formSnapshotRef.current = snapshot;
+    setIsDirty(false);
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    applySnapshotToForm(createEmptyProductSnapshot());
+    markCurrentStateAsClean(JSON.stringify(createEmptyProductSnapshot()));
     setSaving(false);
   };
 
   const openCreate = () => {
     resetForm();
-    setDrawerOpen(true);
+    hasHydratedEditorRef.current = false;
+    navigate("/admin/products/new");
   };
 
   const fetchAll = async () => {
@@ -617,6 +635,117 @@ export default function AdminProducts() {
   useEffect(() => {
     fetchAll();
   }, []);
+
+  const buildSnapshotFromProduct = (product) => {
+    const nextFormData = {
+      name: product?.name || "",
+      slug: product?.slug || "",
+      brand: product?.brand?._id || product?.brand || "",
+      category: product?.category?._id || product?.category || "",
+      description: product?.description || "",
+      highlightsText: highlightsArrayToText(product?.highlights),
+      specsText: specsObjectToText(product?.specs),
+      basePrice: product?.basePrice ?? "",
+      originalPrice: product?.originalPrice ?? "",
+      promoLabel: product?.promoLabel ?? "",
+      warrantyMonths: product?.warrantyMonths ?? "",
+      isFeatured: !!product?.isFeatured,
+      isActive: product?.isActive !== false,
+    };
+
+    const mappedVariants = (product?.variants || []).map((variant) => ({
+      _id: variant._id,
+      sku: variant.sku || "",
+      price: variant.price ?? "",
+      countInStock: variant.countInStock ?? "",
+      lowStockThreshold: variant.lowStockThreshold ?? 5,
+      isDefault: !!variant.isDefault,
+      attributes: { ...(variant.attributes || {}) },
+      images: Array.isArray(variant.images) ? variant.images : [],
+    }));
+
+    if (mappedVariants.length) {
+      const defaults = mappedVariants.filter((variant) => variant.isDefault).length;
+      if (defaults === 0) mappedVariants[0].isDefault = true;
+      if (defaults > 1) {
+        let first = true;
+        for (const variant of mappedVariants) {
+          if (variant.isDefault && first) first = false;
+          else if (variant.isDefault && !first) variant.isDefault = false;
+        }
+      }
+    }
+
+    return {
+      formData: nextFormData,
+      variants: mappedVariants.length ? mappedVariants : [emptyVariant(true)],
+    };
+  };
+
+  useEffect(() => {
+    if (!isEditorPage) {
+      hasHydratedEditorRef.current = false;
+      setIsDirty(false);
+      return;
+    }
+
+    if (isCreatePage) {
+      if (hasHydratedEditorRef.current) return;
+      const savedDraft = localStorage.getItem(PRODUCT_CREATE_DRAFT_KEY);
+      if (savedDraft) {
+        try {
+          const parsedDraft = JSON.parse(savedDraft);
+          applySnapshotToForm(parsedDraft);
+          markCurrentStateAsClean(JSON.stringify(parsedDraft));
+        } catch (error) {
+          console.error("Failed to restore product draft", error);
+          resetForm();
+          localStorage.removeItem(PRODUCT_CREATE_DRAFT_KEY);
+        }
+      } else {
+        const emptySnapshot = createEmptyProductSnapshot();
+        applySnapshotToForm(emptySnapshot);
+        markCurrentStateAsClean(JSON.stringify(emptySnapshot));
+      }
+      hasHydratedEditorRef.current = true;
+      return;
+    }
+
+    if (isEditPage && productId && products.length > 0) {
+      const product = products.find((item) => String(item._id) === String(productId));
+      if (!product) return;
+      const snapshot = buildSnapshotFromProduct(product);
+      setEditingId(product._id);
+      applySnapshotToForm(snapshot);
+      markCurrentStateAsClean(JSON.stringify(snapshot));
+      hasHydratedEditorRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditorPage, isCreatePage, isEditPage, productId, products]);
+
+  useEffect(() => {
+    const nextSnapshot = JSON.stringify({ formData, variants });
+    setIsDirty(isEditorPage && hasHydratedEditorRef.current && nextSnapshot !== formSnapshotRef.current);
+  }, [formData, variants, isEditorPage]);
+
+  useEffect(() => {
+    if (!isCreatePage || !hasHydratedEditorRef.current) return;
+    const snapshot = JSON.stringify({ formData, variants });
+    localStorage.setItem(PRODUCT_CREATE_DRAFT_KEY, snapshot);
+  }, [formData, variants, isCreatePage]);
+
+  useEffect(() => {
+    if (!isEditorPage) return undefined;
+
+    const handleBeforeUnload = (event) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty, isEditorPage]);
 
   // auto slug while creating product
   useEffect(() => {
@@ -908,50 +1037,23 @@ export default function AdminProducts() {
   };
 
   const openEdit = (p) => {
-    setEditingId(p._id);
-    setFormData({
-      name: p.name || "",
-      slug: p.slug || "",
-      brand: p.brand?._id || p.brand || "",
-      category: p.category?._id || p.category || "",
-      description: p.description || "",
-      highlightsText: highlightsArrayToText(p.highlights),
-      specsText: specsObjectToText(p.specs),
-      basePrice: p.basePrice ?? "",
-      originalPrice: p.originalPrice ?? "",
-      promoLabel: p.promoLabel ?? "",
-      warrantyMonths: p.warrantyMonths ?? "",
-      isFeatured: !!p.isFeatured,
-      isActive: p.isActive !== false,
-    });
+    hasHydratedEditorRef.current = false;
+    navigate(`/admin/products/${p._id}/edit`);
+  };
 
-    const mapped = (p.variants || []).map((x) => ({
-      _id: x._id,
-      sku: x.sku || "",
-      price: x.price ?? "",
-      countInStock: x.countInStock ?? "",
-      lowStockThreshold: x.lowStockThreshold ?? 5,
-      isDefault: !!x.isDefault,
-      attributes: { ...(x.attributes || {}) },
-      images: Array.isArray(x.images) ? x.images : [],
-    }));
-
-    // ✅ ensure there is exactly 1 default (server data might be messy)
-    if (mapped.length) {
-      const defaults = mapped.filter((x) => x.isDefault).length;
-      if (defaults === 0) mapped[0].isDefault = true;
-      if (defaults > 1) {
-        let first = true;
-        for (const v of mapped) {
-          if (v.isDefault && first) first = false;
-          else if (v.isDefault && !first) v.isDefault = false;
-        }
-      }
+  const leaveEditor = ({ discardDraft = false } = {}) => {
+    if (isDirty) {
+      const ok = window.confirm("You have unsaved product changes. Leave this page?");
+      if (!ok) return;
     }
 
-    setVariants(mapped.length ? mapped : variants);
-    setVariantFiles({});
-    setDrawerOpen(true);
+    if (discardDraft && !editingId) {
+      localStorage.removeItem(PRODUCT_CREATE_DRAFT_KEY);
+    }
+
+    hasHydratedEditorRef.current = false;
+    resetForm();
+    navigate("/admin/products");
   };
 
   const deleteProduct = async (id) => {
@@ -1138,8 +1240,11 @@ export default function AdminProducts() {
 
 
       await fetchAll();
-      closeDrawer();
+      if (!editingId) {
+        localStorage.removeItem(PRODUCT_CREATE_DRAFT_KEY);
+      }
       resetForm();
+      navigate("/admin/products");
     } catch (e) {
       console.error(e);
       alert(e?.response?.data?.message || "Failed to save product.");
@@ -1231,60 +1336,62 @@ export default function AdminProducts() {
 
   return (
     <div className="space-y-6">
-      {/* Header row */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Products</h1>
-          <p className="text-sm text-gray-500">
-            Manage products, variants, images, featured & active status.
-          </p>
-        </div>
+      {!isEditorPage ? (
+        <>
+          {/* Header row */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-extrabold text-gray-900">Products</h1>
+              <p className="text-sm text-gray-500">
+                Manage products, variants, images, featured & active status.
+              </p>
+            </div>
 
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500"
-        >
-          <Plus size={18} /> Add Product
-        </button>
-      </div>
-
-      {/* Helpful warning if missing base data */}
-      {(brands.length === 0 || categories.length === 0) && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm">
-          <div className="font-extrabold text-amber-900">Setup required</div>
-          <div className="text-amber-800 mt-1">
-            You must create at least <span className="font-semibold">1 Brand</span> and{" "}
-            <span className="font-semibold">1 Category</span> before adding products.
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500"
+            >
+              <Plus size={18} /> Add Product
+            </button>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {brands.length === 0 && (
-              <button
-                onClick={() => {
-                  openCreate();
-                  openQuickAdd("brand");
-                }}
-                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3 py-2 text-xs font-semibold hover:bg-amber-500"
-              >
-                <Tag size={14} /> Create Brand
-              </button>
-            )}
-            {categories.length === 0 && (
-              <button
-                onClick={() => {
-                  openCreate();
-                  openQuickAdd("category");
-                }}
-                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3 py-2 text-xs font-semibold hover:bg-amber-500"
-              >
-                <Shapes size={14} /> Create Category
-              </button>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Filters */}
-      <div className="premium-card rounded-2xl p-4">
+          {/* Helpful warning if missing base data */}
+          {(brands.length === 0 || categories.length === 0) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm">
+              <div className="font-extrabold text-amber-900">Setup required</div>
+              <div className="text-amber-800 mt-1">
+                You must create at least <span className="font-semibold">1 Brand</span> and{" "}
+                <span className="font-semibold">1 Category</span> before adding products.
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {brands.length === 0 && (
+                  <button
+                    onClick={() => {
+                      openCreate();
+                      openQuickAdd("brand");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3 py-2 text-xs font-semibold hover:bg-amber-500"
+                  >
+                    <Tag size={14} /> Create Brand
+                  </button>
+                )}
+                {categories.length === 0 && (
+                  <button
+                    onClick={() => {
+                      openCreate();
+                      openQuickAdd("category");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-amber-600 text-white px-3 py-2 text-xs font-semibold hover:bg-amber-500"
+                  >
+                    <Shapes size={14} /> Create Category
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Filters */}
+          <div className="premium-card rounded-2xl p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
           <div className="md:col-span-2 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -1344,10 +1451,10 @@ export default function AdminProducts() {
             </label>
           </div>
         </div>
-      </div>
+          </div>
 
-      {/* Table */}
-      <div className="premium-card rounded-2xl overflow-hidden">
+          {/* Table */}
+          <div className="premium-card rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div className="text-sm text-gray-600">
             Showing <span className="font-semibold">{filteredProducts.length}</span> of{" "}
@@ -1477,52 +1584,64 @@ export default function AdminProducts() {
             </tbody>
           </table>
         </div>
-      </div>
+          </div>
+        </>
+      ) : (
+        <div className="mx-auto w-full max-w-6xl space-y-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <button
+                type="button"
+                onClick={() => leaveEditor()}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900"
+              >
+                <ArrowLeft size={16} />
+                Back to Products
+              </button>
+              <h1 className="mt-3 text-2xl font-extrabold text-gray-900">
+                {editingId ? "Edit Product" : "Add Product"}
+              </h1>
+              <p className="text-sm text-gray-500">
+                Manage base info, variants, images, featured state, and inventory in one full-page editor.
+              </p>
+            </div>
 
-      {/* Drawer */}
-      <div className={`fixed inset-0 z-50 ${drawerOpen ? "" : "pointer-events-none"}`}>
-        <div
-          className={`absolute inset-0 bg-black/40 transition-opacity ${drawerOpen ? "opacity-100" : "opacity-0"
-            }`}
-          onClick={() => {
-            if (!saving) {
-              closeDrawer();
-              resetForm();
-            }
-          }}
-        />
+            <div className="rounded-2xl border bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
+              {isDirty
+                ? "Unsaved changes are being protected."
+                : editingId
+                ? "Editing existing product"
+                : "Draft saved. It won't appear in the store until you save."}
+            </div>
+          </div>
 
-        <div
-          className={`absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl transition-transform duration-300
-            ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}
-        >
-          <div className="h-full flex flex-col">
-            <div className="p-5 border-b flex items-start justify-between gap-3">
+          <div className="premium-card overflow-hidden rounded-[1.75rem]">
+            <div className="border-b p-5 flex items-start justify-between gap-3">
               <div>
                 <div className="text-lg font-extrabold text-gray-900">
                   {editingId ? "Edit Product" : "Add Product"}
                 </div>
-                <div className="text-sm text-gray-500">Manage base info, variants & images.</div>
+                <div className="text-sm text-gray-500">
+                  {editingId
+                    ? "Changes here update the live product record."
+                    : "New products stay in your local draft until you save them."}
+                </div>
               </div>
 
               <button
-                onClick={() => {
-                  if (!saving) {
-                    closeDrawer();
-                    resetForm();
-                  }
-                }}
+                type="button"
+                onClick={() => leaveEditor()}
                 className="p-2 rounded-xl hover:bg-gray-100"
-                aria-label="Close"
+                aria-label="Back to products"
               >
-                <X size={18} />
+                <ArrowLeft size={18} />
               </button>
             </div>
 
             <form
               onSubmit={saveProduct}
               onKeyDown={handleFormKeyboardNav}
-              className="flex-1 overflow-y-auto p-5 space-y-6"
+              className="p-5 space-y-6"
             >
               {/* toggles */}
               <div className="flex flex-wrap gap-4">
@@ -1947,14 +2066,14 @@ export default function AdminProducts() {
                   type="button"
                   onClick={() => {
                     if (!saving) {
-                      closeDrawer();
-                      resetForm();
+                      if (editingId) leaveEditor();
+                      else leaveEditor({ discardDraft: true });
                     }
                   }}
                   className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-gray-50"
                   disabled={saving}
                 >
-                  Cancel
+                  {editingId ? "Cancel" : "Discard Draft"}
                 </button>
 
                 <button
@@ -1969,7 +2088,7 @@ export default function AdminProducts() {
             </form>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Quick Add Modal */}
       <Modal
