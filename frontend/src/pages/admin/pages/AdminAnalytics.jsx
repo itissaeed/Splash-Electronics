@@ -26,6 +26,20 @@ const formatLocalDate = (d) => {
   return `${year}-${month}-${day}`;
 };
 
+const getOrderTotal = (order) => {
+  const itemsTotal = Number(order?.pricing?.itemsTotal || 0);
+  const shippingFee = Number(order?.pricing?.shippingFee || 0);
+  const legacyCourier = Number(order?.shipment?.courierCharge || 0);
+  const effectiveShipping = shippingFee > 0 ? shippingFee : legacyCourier;
+  const discountTotal = Number(order?.pricing?.discountTotal || 0);
+  return itemsTotal + effectiveShipping - discountTotal;
+};
+
+const toCsvCell = (value) => {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
 function StatCard({ label, value, hint, accent }) {
   return (
     <div className="relative overflow-hidden rounded-3xl border border-white/60 bg-white/90 p-5 shadow-sm backdrop-blur">
@@ -94,12 +108,12 @@ function RevenueLineChart({ points }) {
   );
 }
 
-function DonutChart({ title, rows, valueKey = "orders", moneyMode = false }) {
+function DonutChart({ title, rows, valueKey = "orders", moneyMode = false, onRowClick }) {
   const total = rows.reduce((sum, row) => sum + Number(row[valueKey] || 0), 0);
 
   if (!rows.length || total <= 0) {
     return (
-      <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
+      <div id="sales-report-section" className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
         <h3 className="text-sm font-bold text-slate-900">{title}</h3>
         <p className="mt-6 text-sm text-slate-500">No data for this range.</p>
       </div>
@@ -148,9 +162,13 @@ function DonutChart({ title, rows, valueKey = "orders", moneyMode = false }) {
             const pct = ((value / total) * 100).toFixed(1);
             const color = PALETTE[idx % PALETTE.length];
             return (
-              <div
+              <button
+                type="button"
                 key={`${row._id || "unknown"}-legend-${idx}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2"
+                onClick={() => onRowClick?.(row)}
+                className={`flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-left ${
+                  onRowClick ? "hover:border-cyan-300 hover:bg-cyan-50/70" : ""
+                }`}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
@@ -159,7 +177,7 @@ function DonutChart({ title, rows, valueKey = "orders", moneyMode = false }) {
                 <p className="text-xs font-semibold text-slate-900 whitespace-nowrap">
                   {moneyMode ? money(value) : niceNumber(value)} ({pct}%)
                 </p>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -219,6 +237,22 @@ export default function AdminAnalytics() {
   const [paymentMethods, setPaymentMethods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
+  const [reportStatus, setReportStatus] = useState("all");
+  const [reportPaymentMethod, setReportPaymentMethod] = useState("all");
+  const [reportKeyword, setReportKeyword] = useState("");
+  const [reportPage, setReportPage] = useState(1);
+  const [reportPages, setReportPages] = useState(1);
+  const [reportTotal, setReportTotal] = useState(0);
+  const [reportRows, setReportRows] = useState([]);
+  const [reportSummary, setReportSummary] = useState({
+    totalRevenue: 0,
+    averageOrderValue: 0,
+    paidOrders: 0,
+    paidRevenue: 0,
+    statusCounts: {},
+  });
+  const [reportLoading, setReportLoading] = useState(true);
+  const [reportExporting, setReportExporting] = useState(false);
 
   useEffect(() => {
     const now = new Date();
@@ -253,9 +287,48 @@ export default function AdminAnalytics() {
       setPaymentMethods(data.paymentMethods || []);
     } catch (e) {
       console.error(e);
-      setErrMsg(e?.response?.data?.message || "Failed to load analytics overview.");
+      setErrMsg(e?.response?.data?.message || "Failed to load sales overview.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSalesReport = async (opts = {}) => {
+    try {
+      setReportLoading(true);
+      const params = {
+        page: opts.page ?? reportPage,
+        limit: 12,
+        from: opts.from ?? from,
+        to: opts.to ?? to,
+      };
+      if ((opts.status ?? reportStatus) !== "all") params.status = opts.status ?? reportStatus;
+      if ((opts.paymentMethod ?? reportPaymentMethod) !== "all") {
+        params.paymentMethod = opts.paymentMethod ?? reportPaymentMethod;
+      }
+      if (String(opts.keyword ?? reportKeyword).trim()) {
+        params.keyword = String(opts.keyword ?? reportKeyword).trim();
+      }
+
+      const { data } = await api.get("/admin/orders", {
+        headers: tokenHeader(),
+        params,
+      });
+
+      setReportRows(data.orders || []);
+      setReportTotal(Number(data.total || 0));
+      setReportPages(Number(data.pages || 1));
+      setReportSummary({
+        totalRevenue: Number(data.summary?.totalRevenue || 0),
+        averageOrderValue: Number(data.summary?.averageOrderValue || 0),
+        paidOrders: Number(data.summary?.paidOrders || 0),
+        paidRevenue: Number(data.summary?.paidRevenue || 0),
+        statusCounts: data.summary?.statusCounts || {},
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReportLoading(false);
     }
   };
 
@@ -264,9 +337,18 @@ export default function AdminAnalytics() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to]);
 
+  useEffect(() => {
+    if (from && to) {
+      fetchSalesReport({ from, to, page: reportPage });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, to, reportPage, reportStatus, reportPaymentMethod, reportKeyword]);
+
   const handleRangeSubmit = (e) => {
     e.preventDefault();
     fetchAnalytics({ from, to });
+    fetchSalesReport({ from, to, page: 1 });
+    setReportPage(1);
   };
 
   const dailyChartPoints = useMemo(
@@ -310,6 +392,98 @@ export default function AdminAnalytics() {
     [peakOrderHours]
   );
 
+  const openSalesReport = (extra = {}) => {
+    if (Object.keys(extra).length === 0 || Object.prototype.hasOwnProperty.call(extra, "status")) {
+      setReportStatus(extra.status || "all");
+    }
+    if (Object.keys(extra).length === 0 || Object.prototype.hasOwnProperty.call(extra, "paymentMethod")) {
+      setReportPaymentMethod(extra.paymentMethod || "all");
+    }
+    if (Object.keys(extra).length === 0 || Object.prototype.hasOwnProperty.call(extra, "keyword")) {
+      setReportKeyword(extra.keyword || "");
+    }
+    setReportPage(1);
+    document.getElementById("sales-report-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const exportSalesReport = async () => {
+    try {
+      setReportExporting(true);
+      let page = 1;
+      let pages = 1;
+      const allRows = [];
+
+      do {
+        const params = {
+          page,
+          limit: 500,
+          from,
+          to,
+        };
+        if (reportStatus !== "all") params.status = reportStatus;
+        if (reportPaymentMethod !== "all") params.paymentMethod = reportPaymentMethod;
+        if (reportKeyword.trim()) params.keyword = reportKeyword.trim();
+
+        const { data } = await api.get("/admin/orders", {
+          headers: tokenHeader(),
+          params,
+        });
+
+        allRows.push(...(data.orders || []));
+        pages = Number(data.pages || 1);
+        page += 1;
+      } while (page <= pages);
+
+      const csvRows = [
+        [
+          "Order No",
+          "Created At",
+          "Customer",
+          "Email",
+          "Phone",
+          "Division",
+          "District",
+          "Payment Method",
+          "Payment Status",
+          "Order Status",
+          "Grand Total",
+        ],
+        ...allRows.map((order) => [
+          order.orderNo,
+          new Date(order.createdAt).toISOString(),
+          order.user?.name || "Guest",
+          order.user?.email || "",
+          order.shippingAddress?.phone || "",
+          order.shippingAddress?.division || "",
+          order.shippingAddress?.district || "",
+          order.payment?.method || "",
+          order.payment?.status || "",
+          order.status || "",
+          getOrderTotal(order),
+        ]),
+      ];
+
+      const csv = csvRows.map((row) => row.map(toCsvCell).join(",")).join("\r\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sales-report-${from || "all"}-${to || "latest"}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to export sales report.");
+    } finally {
+      setReportExporting(false);
+    }
+  };
+
+  const reportCancelled = Number(reportSummary.statusCounts?.cancelled || 0);
+  const reportDelivered = Number(reportSummary.statusCounts?.delivered || 0);
+
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-sky-100 via-cyan-50 to-emerald-100 p-5 sm:p-6">
@@ -319,14 +493,14 @@ export default function AdminAnalytics() {
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
-              Performance Command Center
+              Sales Analytics
             </h1>
             <p className="mt-1 text-sm font-medium text-slate-600">
-              Premium visual analytics for revenue, order flow and customer behavior
+              Revenue, conversion, product demand, and payment performance across the selected period
             </p>
           </div>
 
-          <form onSubmit={handleRangeSubmit} className="flex flex-wrap items-end gap-2">
+	          <form onSubmit={handleRangeSubmit} className="flex flex-wrap items-end gap-2">
             <label className="text-xs font-semibold text-slate-600">
               From
               <input
@@ -347,15 +521,22 @@ export default function AdminAnalytics() {
                 required
               />
             </label>
-            <button
-              type="submit"
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
-            >
-              Refresh
-            </button>
-          </form>
-        </div>
-      </div>
+	            <button
+	              type="submit"
+	              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800"
+	            >
+	              Refresh
+	            </button>
+	            <button
+	              type="button"
+	              onClick={() => openSalesReport()}
+	              className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 hover:bg-slate-50"
+	            >
+	                Jump to report
+	            </button>
+	          </form>
+	        </div>
+	      </div>
 
       {errMsg && (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -419,22 +600,36 @@ export default function AdminAnalytics() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-bold text-slate-900">Daily Revenue Trend</h3>
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
-              {loading ? "Loading..." : `${daily.length} day points`}
-            </span>
-          </div>
+	        <div className="xl:col-span-2 rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
+	          <div className="mb-4 flex items-center justify-between gap-3">
+	            <h3 className="text-sm font-bold text-slate-900">Daily Revenue Trend</h3>
+	            <div className="flex items-center gap-2">
+	              <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
+	                {loading ? "Loading..." : `${daily.length} day points`}
+	              </span>
+	              <button
+	                type="button"
+		                onClick={() => openSalesReport()}
+	                className="rounded-full border border-slate-300 px-3 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+	              >
+		                Report table
+	              </button>
+	            </div>
+	          </div>
           {loading ? (
-            <div className="px-2 py-12 text-sm text-slate-500">Loading analytics...</div>
+            <div className="px-2 py-12 text-sm text-slate-500">Loading sales data...</div>
           ) : (
             <RevenueLineChart points={dailyChartPoints} />
           )}
         </div>
 
-        <DonutChart title="Orders by Payment Method" rows={paymentMethods} valueKey="orders" />
-      </div>
+	        <DonutChart
+	          title="Orders by Payment Method"
+	          rows={paymentMethods}
+	          valueKey="orders"
+	          onRowClick={(row) => openSalesReport({ paymentMethod: row._id })}
+	        />
+	      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <DonutChart title="Revenue by Division" rows={byDivision} valueKey="revenue" moneyMode />
@@ -458,13 +653,185 @@ export default function AdminAnalytics() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <DonutChart title="Revenue Share by Payment Method" rows={paymentMethods} valueKey="revenue" moneyMode />
-        <RankedBars
-          title="Peak Order Hours"
-          rows={peakHourRows}
-          valueKey="orders"
-          formatValue={niceNumber}
-        />
+	        <DonutChart
+	          title="Revenue Share by Payment Method"
+	          rows={paymentMethods}
+	          valueKey="revenue"
+	          moneyMode
+	          onRowClick={(row) => openSalesReport({ paymentMethod: row._id })}
+	        />
+	        <RankedBars
+	          title="Peak Order Hours"
+	          rows={peakHourRows}
+	          valueKey="orders"
+	          formatValue={niceNumber}
+	        />
+	      </div>
+
+      <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-black text-slate-900">Sales Report</h3>
+            <p className="text-sm text-slate-500">
+              Read-only sales history for reporting, reconciliation, and export
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={exportSalesReport}
+            disabled={reportExporting || reportLoading}
+            className={`rounded-xl px-4 py-2 text-sm font-bold text-white ${
+              reportExporting || reportLoading ? "bg-emerald-300" : "bg-emerald-600 hover:bg-emerald-500"
+            }`}
+          >
+            {reportExporting ? "Exporting CSV..." : "Export Report CSV"}
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Report Revenue" value={money(reportSummary.totalRevenue)} hint="Current report filters" accent="bg-cyan-400/40" />
+          <StatCard label="AOV" value={money(reportSummary.averageOrderValue)} hint="Average order value" accent="bg-sky-400/40" />
+          <StatCard label="Delivered" value={niceNumber(reportDelivered)} hint="Completed sales records" accent="bg-emerald-400/40" />
+          <StatCard label="Cancelled" value={niceNumber(reportCancelled)} hint="Cancelled orders included here" accent="bg-rose-400/40" />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <label className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+            Status
+            <select
+              value={reportStatus}
+              onChange={(e) => {
+                setReportPage(1);
+                setReportStatus(e.target.value);
+              }}
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-900"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="processing">Processing</option>
+              <option value="shipped">Shipped</option>
+              <option value="delivered">Delivered</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="returned">Returned</option>
+            </select>
+          </label>
+
+          <label className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+            Payment
+            <select
+              value={reportPaymentMethod}
+              onChange={(e) => {
+                setReportPage(1);
+                setReportPaymentMethod(e.target.value);
+              }}
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-900"
+            >
+              <option value="all">All Methods</option>
+              <option value="COD">COD</option>
+              <option value="BKASH">bKash</option>
+              <option value="NAGAD">Nagad</option>
+              <option value="CARD">Card</option>
+              <option value="BANK">Bank</option>
+              <option value="SSLCOMMERZ">SSLCommerz</option>
+            </select>
+          </label>
+
+          <label className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500 xl:col-span-3">
+            Search
+            <input
+              value={reportKeyword}
+              onChange={(e) => {
+                setReportPage(1);
+                setReportKeyword(e.target.value);
+              }}
+              placeholder="Order no, phone, district, division"
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm normal-case tracking-normal text-slate-900"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Order</th>
+                <th className="px-4 py-3 text-left font-semibold">Customer</th>
+                <th className="px-4 py-3 text-left font-semibold">Payment</th>
+                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                <th className="px-4 py-3 text-left font-semibold">Region</th>
+                <th className="px-4 py-3 text-left font-semibold">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportLoading ? (
+                <tr>
+                  <td className="px-4 py-6 text-slate-500" colSpan={6}>Loading sales report...</td>
+                </tr>
+              ) : reportRows.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-slate-500" colSpan={6}>No sales found for these filters.</td>
+                </tr>
+              ) : (
+                reportRows.map((order) => (
+                  <tr key={order._id} className="border-t border-slate-100">
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-slate-900">{order.orderNo}</div>
+                      <div className="text-xs text-slate-500">{new Date(order.createdAt).toLocaleString()}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-slate-900">{order.user?.name || "Guest"}</div>
+                      <div className="text-xs text-slate-500">{order.user?.email || ""}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold uppercase text-slate-900">{order.payment?.method || "-"}</div>
+                      <div className="text-xs text-slate-500">{order.payment?.status || "-"}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {order.shippingAddress?.division || "-"}
+                      <div className="text-xs text-slate-500">{order.shippingAddress?.district || ""}</div>
+                    </td>
+                    <td className="px-4 py-3 font-bold text-slate-900">{money(getOrderTotal(order))}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
+          <div>
+            Page <span className="font-bold">{reportPage}</span> of <span className="font-bold">{reportPages}</span>
+            {" "}with <span className="font-bold">{reportTotal}</span> matching sales
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={reportPage <= 1}
+              onClick={() => setReportPage((p) => p - 1)}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                reportPage <= 1 ? "cursor-not-allowed opacity-50" : "hover:bg-slate-50"
+              }`}
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={reportPage >= reportPages}
+              onClick={() => setReportPage((p) => p + 1)}
+              className={`rounded-xl border px-3 py-2 text-xs font-semibold ${
+                reportPage >= reportPages ? "cursor-not-allowed opacity-50" : "hover:bg-slate-50"
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

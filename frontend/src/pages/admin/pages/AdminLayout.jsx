@@ -52,10 +52,9 @@ const navItems = [
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/customers", label: "Customers", icon: Users },
   { to: "/admin/coupons", label: "Coupons", icon: TicketPercent },
-  { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/admin/sales", label: "Sales Analytics", icon: BarChart3 },
   { to: "/admin/forecasting", label: "Forecasting", icon: LineChart },
   { to: "/admin/returns", label: "Returns", icon: RotateCcw },
-  { to: "/admin/profile", label: "Profile", icon: User },
   { to: "/admin/settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -375,7 +374,8 @@ export default function AdminLayout() {
               <Route path="/inventory" element={<AdminInventory />} />
               <Route path="/customers" element={<AdminCustomers />} />
               <Route path="/coupons" element={<AdminCoupons />} />
-              <Route path="/analytics" element={<AdminAnalytics />} />
+              <Route path="/sales" element={<AdminAnalytics />} />
+              <Route path="/analytics" element={<Navigate to="/admin/sales" replace />} />
               <Route path="/forecasting" element={<AdminForecasting />} />
               <Route path="/returns" element={<AdminReturns />} />
               <Route path="/profile" element={<AdminProfile />} />

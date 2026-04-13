@@ -52,13 +52,60 @@ const recomputeGrandTotal = (order) => {
 };
 
 const allowedAdminTransitions = {
-  pending: ["confirmed", "processing", "shipped", "cancelled"],
-  confirmed: ["processing", "shipped", "cancelled"],
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["processing", "cancelled"],
   processing: ["shipped", "cancelled"],
-  shipped: ["delivered", "returned"],
+  shipped: ["delivered"],
   delivered: ["returned"],
   cancelled: [],
   returned: [],
+};
+
+const parseAdminDate = (value, endOfDay = false) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return endOfDay
+    ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 23, 59, 59, 999)
+    : new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
+};
+
+const buildAdminOrderFilter = (query = {}) => {
+  const filter = {};
+  const scope = String(query.scope || "").trim().toLowerCase();
+
+  if (scope === "active") {
+    filter.status = { $in: ["pending", "confirmed", "processing", "shipped"] };
+  }
+
+  if (query.status && query.status !== "all") {
+    filter.status = String(query.status).toLowerCase().trim();
+  }
+
+  const paymentMethod = String(query.paymentMethod || "").trim().toUpperCase();
+  if (paymentMethod && paymentMethod !== "ALL") {
+    filter["payment.method"] = paymentMethod;
+  }
+
+  const from = parseAdminDate(query.from);
+  const to = parseAdminDate(query.to, true);
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) filter.createdAt.$gte = from;
+    if (to) filter.createdAt.$lte = to;
+  }
+
+  const keyword = String(query.keyword || "").trim();
+  if (keyword) {
+    filter.$or = [
+      { orderNo: { $regex: keyword, $options: "i" } },
+      { "shippingAddress.phone": { $regex: keyword, $options: "i" } },
+      { "shippingAddress.district": { $regex: keyword, $options: "i" } },
+      { "shippingAddress.division": { $regex: keyword, $options: "i" } },
+    ];
+  }
+
+  return filter;
 };
 
 const deductOrderItems = async (order) => {
@@ -373,40 +420,66 @@ exports.getOrderByOrderNo = async (req, res) => {
 exports.adminGetOrders = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 20;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 5000);
+    const filter = buildAdminOrderFilter(req.query);
 
-    const filter = {};
+    const [total, orders, summaryAgg, statusCountsAgg] = await Promise.all([
+      Order.countDocuments(filter),
+      Order.find(filter)
+        .sort({ createdAt: -1 })
+        .populate("user", "name email number")
+        .skip(limit * (page - 1))
+        .limit(limit)
+        .lean(),
+      Order.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: null,
+            totalRevenue: { $sum: "$pricing.grandTotal" },
+            averageOrderValue: { $avg: "$pricing.grandTotal" },
+            paidOrders: {
+              $sum: {
+                $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
+              },
+            },
+            paidRevenue: {
+              $sum: {
+                $cond: [{ $eq: ["$payment.status", "paid"] }, "$pricing.grandTotal", 0],
+              },
+            },
+          },
+        },
+      ]),
+      Order.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
 
-    // Status filter
-    if (req.query.status && req.query.status !== "all") {
-      filter.status = req.query.status;
-    }
-
-    // Keyword filter (orderNo / phone / district / division / user email)
-    const keyword = String(req.query.keyword || "").trim();
-    if (keyword) {
-      filter.$or = [
-        { orderNo: { $regex: keyword, $options: "i" } },
-        { "shippingAddress.phone": { $regex: keyword, $options: "i" } },
-        { "shippingAddress.district": { $regex: keyword, $options: "i" } },
-        { "shippingAddress.division": { $regex: keyword, $options: "i" } },
-      ];
-    }
-
-    const total = await Order.countDocuments(filter);
-
-    const orders = await Order.find(filter)
-      .sort({ createdAt: -1 })
-      .populate("user", "name email number")
-      .skip(limit * (page - 1))
-      .limit(limit)
-      .lean();
+    const summaryRow = summaryAgg[0] || {};
+    const statusCounts = statusCountsAgg.reduce((acc, row) => {
+      acc[row._id || "unknown"] = Number(row.count || 0);
+      return acc;
+    }, {});
 
     res.json({
       orders,
       page,
       pages: Math.ceil(total / limit),
       total,
+      summary: {
+        totalRevenue: Number(summaryRow.totalRevenue || 0),
+        averageOrderValue: Number(summaryRow.averageOrderValue || 0),
+        paidOrders: Number(summaryRow.paidOrders || 0),
+        paidRevenue: Number(summaryRow.paidRevenue || 0),
+        statusCounts,
+      },
     });
   } catch (e) {
     console.error("adminGetOrders:", e);
@@ -425,6 +498,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       trackingUrl,
       bookingRef,
       pickupDate,
+      notes,
     } = req.body;
 
     const allowed = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "returned"];
@@ -447,6 +521,12 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     if (REVENUE_RECOGNIZED_STATUSES.includes(nextStatus) && PREPAID_METHODS.includes(payMethod) && payStatus !== "paid") {
       return res.status(400).json({
         message: "Prepaid order must be paid before confirmation/fulfillment",
+      });
+    }
+
+    if (nextStatus === "processing" && current !== "confirmed") {
+      return res.status(400).json({
+        message: "Order must be confirmed before it can move to processing",
       });
     }
 
@@ -481,6 +561,9 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     order.shipment.trackingId = nextTrackingId;
     order.shipment.trackingUrl = nextTrackingUrl;
     order.shipment.bookingRef = nextBookingRef;
+    if (typeof notes === "string") {
+      order.notes = notes.trim();
+    }
 
     // Courier charge is kept in sync with customer-facing shipping fee.
     // This prevents double-charging and keeps a single delivery fee model.
@@ -551,9 +634,9 @@ exports.adminDispatchOrder = async (req, res) => {
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     const st = String(order.status || "").toLowerCase();
-    if (["cancelled", "returned", "delivered"].includes(st)) {
+    if (st !== "processing") {
       return res.status(400).json({
-        message: `Cannot dispatch order in ${st} status`,
+        message: "Only processing orders can be dispatched",
       });
     }
     const payMethod = String(order?.payment?.method || "").toUpperCase();
