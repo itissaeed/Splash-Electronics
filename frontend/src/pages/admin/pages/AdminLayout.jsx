@@ -369,6 +369,8 @@ export default function AdminLayout() {
               <Route path="/" element={<Navigate to="/admin/overview" replace />} />
               <Route path="/overview" element={<AdminOverview />} />
               <Route path="/products" element={<AdminProducts />} />
+              <Route path="/products/new" element={<AdminProducts />} />
+              <Route path="/products/:productId/edit" element={<AdminProducts />} />
               <Route path="/categories" element={<AdminCategories />} />
               <Route path="/orders" element={<AdminOrders />} />
               <Route path="/inventory" element={<AdminInventory />} />
