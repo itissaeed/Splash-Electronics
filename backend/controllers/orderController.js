@@ -298,8 +298,7 @@ exports.validateCoupon = async (req, res) => {
     }
 
     let itemsTotal = 0;
-    const productIds = [];
-    const categoryIds = [];
+    const couponItems = [];
 
     for (const item of cart.items) {
       const product = await Product.findOne({
@@ -317,11 +316,14 @@ exports.validateCoupon = async (req, res) => {
       }
 
       const unitPrice = Number(variant.price ?? item.priceAtAdd ?? 0);
-      itemsTotal += unitPrice * Number(item.qty || 0);
-      productIds.push(product._id);
-      if (product.category) {
-        categoryIds.push(product.category);
-      }
+      const lineTotal = unitPrice * Number(item.qty || 0);
+      itemsTotal += lineTotal;
+      couponItems.push({
+        productId: product._id,
+        categoryId: product.category || null,
+        qty: Number(item.qty || 0),
+        lineTotal,
+      });
     }
 
     const shippingAddress = req.body?.shippingAddress || {};
@@ -332,8 +334,8 @@ exports.validateCoupon = async (req, res) => {
       ? await validateCouponForItems({
           couponCode,
           itemsTotal,
-          productIds,
-          categoryIds,
+          couponItems,
+          userId: req.user._id,
         })
       : null;
 
@@ -360,6 +362,11 @@ exports.validateCoupon = async (req, res) => {
             value: couponResult.coupon.value,
             minCartTotal: couponResult.coupon.minCartTotal || 0,
             maxDiscount: couponResult.coupon.maxDiscount || null,
+            qualifyingSubtotal: Number(couponResult.qualifyingSubtotal || 0),
+            discountBase: Number(couponResult.discountBase || 0),
+            customerEligibility: couponResult.coupon.customerEligibility || "ALL",
+            discountAppliesTo: couponResult.coupon.discountAppliesTo || "ELIGIBLE_ITEMS",
+            perCustomerUsageLimit: Number(couponResult.coupon.perCustomerUsageLimit || 0),
           }
         : null,
       totals: {

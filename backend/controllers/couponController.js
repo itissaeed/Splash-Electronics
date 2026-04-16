@@ -1,5 +1,6 @@
 // controllers/couponController.js
 const Coupon = require("../models/Coupon");
+const mongoose = require("mongoose");
 
 const toNum = (v, def) => {
   const n = Number(v);
@@ -9,6 +10,63 @@ const toNum = (v, def) => {
 const normalizeCouponType = (value) => {
   const type = String(value || "").toUpperCase().trim();
   return type === "FLAT" ? "FIXED" : type;
+};
+
+const normalizeEligibility = (value) => {
+  const normalized = String(value || "ALL").toUpperCase().trim();
+  return ["ALL", "SPECIFIC_USERS", "NEW_CUSTOMERS", "RETURNING_CUSTOMERS"].includes(normalized)
+    ? normalized
+    : "ALL";
+};
+
+const normalizeDiscountAppliesTo = (value) => {
+  const normalized = String(value || "ELIGIBLE_ITEMS").toUpperCase().trim();
+  return ["ELIGIBLE_ITEMS", "ENTIRE_CART"].includes(normalized)
+    ? normalized
+    : "ELIGIBLE_ITEMS";
+};
+
+const normalizeIdArray = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => String(entry || "").trim())
+    .filter((entry) => mongoose.Types.ObjectId.isValid(entry));
+};
+
+const toCodeSlug = (value) =>
+  String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 12);
+
+const randomCodePart = (length = 6) => {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < length; i += 1) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return out;
+};
+
+exports.adminGenerateCouponCode = async (req, res) => {
+  try {
+    const baseHint = toCodeSlug(req.query.prefix || req.query.hint || "SPLASH");
+    const prefix = baseHint || "SPLASH";
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const code = `${prefix}-${randomCodePart(6)}`;
+      const existing = await Coupon.exists({ code });
+      if (!existing) {
+        return res.json({ code });
+      }
+    }
+
+    return res.status(500).json({ message: "Failed to generate a unique coupon code" });
+  } catch (err) {
+    console.error("adminGenerateCouponCode error:", err);
+    return res.status(500).json({ message: "Failed to generate coupon code" });
+  }
 };
 
 // GET /api/admin/coupons?keyword=&page=&limit=
@@ -61,6 +119,9 @@ exports.adminListCoupons = async (req, res) => {
     const totalCoupons = await Coupon.countDocuments(filter);
 
     const coupons = await Coupon.find(filter)
+      .populate("applicableProducts", "name slug")
+      .populate("applicableCategories", "name slug")
+      .populate("applicableUsers", "name email")
       .sort({ createdAt: -1 })
       .skip(pageSize * (page - 1))
       .limit(pageSize)
@@ -110,9 +171,15 @@ exports.adminCreateCoupon = async (req, res) => {
       maxDiscount,
       minCartTotal,
       usageLimit,
+      perCustomerUsageLimit,
       validFrom,
       validTo,
       isActive,
+      customerEligibility,
+      discountAppliesTo,
+      applicableProducts,
+      applicableCategories,
+      applicableUsers,
     } = req.body;
 
     if (!code || !type || value === undefined) {
@@ -129,7 +196,14 @@ exports.adminCreateCoupon = async (req, res) => {
       maxDiscount: maxDiscount !== undefined ? toNum(maxDiscount, 0) : undefined,
       minCartTotal: minCartTotal !== undefined ? toNum(minCartTotal, 0) : undefined,
       usageLimit: usageLimit !== undefined ? toNum(usageLimit, 0) : 0,
+      perCustomerUsageLimit:
+        perCustomerUsageLimit !== undefined ? toNum(perCustomerUsageLimit, 0) : 0,
       isActive: !!isActive,
+      customerEligibility: normalizeEligibility(customerEligibility),
+      discountAppliesTo: normalizeDiscountAppliesTo(discountAppliesTo),
+      applicableProducts: normalizeIdArray(applicableProducts),
+      applicableCategories: normalizeIdArray(applicableCategories),
+      applicableUsers: normalizeIdArray(applicableUsers),
     };
 
     if (validFrom) payload.validFrom = new Date(validFrom);
@@ -159,15 +233,31 @@ exports.adminUpdateCoupon = async (req, res) => {
       maxDiscount,
       minCartTotal,
       usageLimit,
+      perCustomerUsageLimit,
       validFrom,
       validTo,
       isActive,
+      customerEligibility,
+      discountAppliesTo,
+      applicableProducts,
+      applicableCategories,
+      applicableUsers,
     } = req.body;
 
     const coupon = await Coupon.findById(req.params.id);
     if (!coupon) return res.status(404).json({ message: "Coupon not found" });
 
-    if (code !== undefined) coupon.code = String(code).toUpperCase().trim();
+    if (code !== undefined) {
+      const nextCode = String(code).toUpperCase().trim();
+      const existing = await Coupon.findOne({
+        code: nextCode,
+        _id: { $ne: coupon._id },
+      }).select("_id");
+      if (existing) {
+        return res.status(409).json({ message: "Coupon code already exists" });
+      }
+      coupon.code = nextCode;
+    }
     if (description !== undefined) coupon.description = description.trim();
     if (type !== undefined) coupon.type = normalizeCouponType(type);
     if (value !== undefined) coupon.value = toNum(value, coupon.value);
@@ -177,12 +267,24 @@ exports.adminUpdateCoupon = async (req, res) => {
       coupon.minCartTotal =
         minCartTotal === null ? undefined : toNum(minCartTotal, 0);
     if (usageLimit !== undefined) coupon.usageLimit = toNum(usageLimit, 0);
+    if (perCustomerUsageLimit !== undefined)
+      coupon.perCustomerUsageLimit = toNum(perCustomerUsageLimit, 0);
     if (isActive !== undefined) coupon.isActive = !!isActive;
+    if (customerEligibility !== undefined)
+      coupon.customerEligibility = normalizeEligibility(customerEligibility);
+    if (discountAppliesTo !== undefined)
+      coupon.discountAppliesTo = normalizeDiscountAppliesTo(discountAppliesTo);
 
     if (validFrom !== undefined)
       coupon.validFrom = validFrom ? new Date(validFrom) : undefined;
     if (validTo !== undefined)
       coupon.validTo = validTo ? new Date(validTo) : undefined;
+    if (applicableProducts !== undefined)
+      coupon.applicableProducts = normalizeIdArray(applicableProducts);
+    if (applicableCategories !== undefined)
+      coupon.applicableCategories = normalizeIdArray(applicableCategories);
+    if (applicableUsers !== undefined)
+      coupon.applicableUsers = normalizeIdArray(applicableUsers);
 
     const updated = await coupon.save();
     res.json(updated);

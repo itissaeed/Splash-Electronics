@@ -13,6 +13,7 @@ import {
   FaMoneyBillWave,
 } from "react-icons/fa";
 import api from "../utils/api";
+import { getProductDisplayPricing } from "../utils/productPricing";
 import { UserContext } from "./context/UserContext";
 import useCompareItems from "../utils/useCompare";
 import {
@@ -30,7 +31,6 @@ const money = (n) => {
   return `৳${num.toLocaleString("en-BD")}`;
 };
 
-const getOriginalPrice = (product) => Number(product?.originalPrice || 0);
 
 const CategorySkeleton = () => (
   <div className="rounded-2xl border bg-white p-4 shadow-sm animate-pulse">
@@ -520,10 +520,11 @@ export default function Home() {
                     p?.images?.[0]?.url ||
                     fallbackImg;
 
-                  const price = p?.basePrice ?? p?.variants?.[0]?.price ?? p?.price ?? 0;
-                  const originalPrice = getOriginalPrice(p);
-                  const hasDiscount = originalPrice > price;
-                  const saveAmount = hasDiscount ? originalPrice - price : 0;
+                  const pricing = getProductDisplayPricing(p);
+                  const price = pricing.price;
+                  const originalPrice = pricing.originalPrice;
+                  const hasDiscount = pricing.hasDiscount;
+                  const saveAmount = pricing.saveAmount;
                   const productKey = p?.slug || p?._id;
                   const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
                   const compareKey = getCompareKey(p);
@@ -553,9 +554,9 @@ export default function Home() {
                                 Save: {money(saveAmount)}
                               </span>
                             ) : null}
-                            {p?.promoLabel ? (
+                            {pricing.label ? (
                               <span className="rounded-full bg-fuchsia-700 px-3 py-1 text-xs font-bold text-white shadow">
-                                {p.promoLabel}
+                                {pricing.label}
                               </span>
                             ) : null}
                           </div>

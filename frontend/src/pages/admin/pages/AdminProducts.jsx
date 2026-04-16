@@ -482,8 +482,6 @@ const createEmptyFormData = () => ({
   highlightsText: "",
   specsText: "",
   basePrice: "",
-  originalPrice: "",
-  promoLabel: "",
   warrantyMonths: "",
   isFeatured: false,
   isActive: true,
@@ -646,8 +644,6 @@ export default function AdminProducts() {
       highlightsText: highlightsArrayToText(product?.highlights),
       specsText: specsObjectToText(product?.specs),
       basePrice: product?.basePrice ?? "",
-      originalPrice: product?.originalPrice ?? "",
-      promoLabel: product?.promoLabel ?? "",
       warrantyMonths: product?.warrantyMonths ?? "",
       isFeatured: !!product?.isFeatured,
       isActive: product?.isActive !== false,
@@ -1189,8 +1185,6 @@ export default function AdminProducts() {
       highlights: parseHighlightsText(formData.highlightsText),
       specs: parseSpecsText(formData.specsText),
       basePrice: Number(formData.basePrice || 0),
-      originalPrice: Number(formData.originalPrice || 0),
-      promoLabel: String(formData.promoLabel || "").trim(),
       warrantyMonths: Number(formData.warrantyMonths || 0),
       isFeatured: !!formData.isFeatured,
       isActive: !!formData.isActive,
@@ -1767,29 +1761,13 @@ export default function AdminProducts() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-gray-600">Original Price (à§³)</label>
-                  <input
-                    name="originalPrice"
-                    type="number"
-                    value={formData.originalPrice}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                  />
-                  <div className="mt-1 text-[11px] text-gray-500">
-                    Shows the crossed price and calculates the save amount.
-                  </div>
-                </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-gray-600">Promo Label</label>
-                  <input
-                    name="promoLabel"
-                    value={formData.promoLabel}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-                    placeholder="Gift: Apple 20W Adapter"
-                  />
+                <div className="md:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <div className="text-sm font-bold text-amber-900">Offers Are Managed Separately</div>
+                  <div className="mt-1 text-xs leading-5 text-amber-800">
+                    Sale labels and save-money pricing now belong in the admin <span className="font-semibold">Offers</span> section instead of the product form.
+                    Use that page to run campaigns and manage storefront discount presentation centrally.
+                  </div>
                 </div>
 
                 <div>
@@ -2168,3 +2146,6 @@ export default function AdminProducts() {
     </div>
   );
 }
+
+
+

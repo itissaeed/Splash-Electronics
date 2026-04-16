@@ -372,38 +372,151 @@ exports.adminAnalyticsOverview = async (req, res) => {
 exports.adminDemandForecast = async (req, res) => {
   try {
     const now = new Date();
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
-    const daysBack = Math.max(7, toNum(req.query.daysBack, 90)); // min 7 days
+    const daysBack = Math.max(7, toNum(req.query.daysBack, 90));
     const horizonDays = Math.max(1, toNum(req.query.horizonDays, 30));
-    const top = Math.max(5, toNum(req.query.top, 30)); // number of products
+    const top = Math.max(5, toNum(req.query.top, 30));
+    const sourceLimit = Math.max(top * 4, 60);
 
     const from = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
+    const momentumWindowDays = Math.max(3, Math.min(14, Math.floor(daysBack / 3)));
+    const recentWindowStart = new Date(now.getTime() - momentumWindowDays * 24 * 60 * 60 * 1000);
+    const priorWindowStart = new Date(recentWindowStart.getTime() - momentumWindowDays * 24 * 60 * 60 * 1000);
+    const safetyStockDays = 7;
 
-    const matchStage = {
+    const orderMatchStage = {
       createdAt: { $gte: from, $lte: now },
       ...buildRevenueMatch(),
     };
 
-    // Aggregate per product from order items
-    const perProduct = await Order.aggregate([
-      { $match: matchStage },
-      { $unwind: "$items" },
-      {
-        $group: {
-          _id: { product: "$items.product", name: "$items.nameSnapshot" },
-          qtyTotal: { $sum: "$items.qty" },
-          revenueTotal: {
-            $sum: { $multiply: ["$items.qty", "$items.price"] },
+    const [orderAgg, viewAgg] = await Promise.all([
+      Order.aggregate([
+        { $match: orderMatchStage },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: { product: "$items.product", name: "$items.nameSnapshot" },
+            qtyTotal: { $sum: "$items.qty" },
+            revenueTotal: {
+              $sum: { $multiply: ["$items.qty", "$items.price"] },
+            },
+            recentQty: {
+              $sum: {
+                $cond: [{ $gte: ["$createdAt", recentWindowStart] }, "$items.qty", 0],
+              },
+            },
+            priorQty: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$createdAt", priorWindowStart] },
+                      { $lt: ["$createdAt", recentWindowStart] },
+                    ],
+                  },
+                  "$items.qty",
+                  0,
+                ],
+              },
+            },
+            buyerSet: {
+              $addToSet: {
+                $cond: [
+                  { $in: ["$analytics.visitorKey", ["", null]] },
+                  null,
+                  "$analytics.visitorKey",
+                ],
+              },
+            },
+            activeOrderDays: {
+              $addToSet: {
+                $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+              },
+            },
           },
         },
-      },
-      { $sort: { qtyTotal: -1 } },
-      { $limit: top },
+        { $sort: { qtyTotal: -1, revenueTotal: -1 } },
+        { $limit: sourceLimit },
+      ]),
+      ProductView.aggregate([
+        { $match: { viewedAt: { $gte: from, $lte: now } } },
+        {
+          $group: {
+            _id: "$product",
+            pageViews: { $sum: 1 },
+            uniqueViewerSet: { $addToSet: "$visitorKey" },
+            recentViews: {
+              $sum: {
+                $cond: [{ $gte: ["$viewedAt", recentWindowStart] }, 1, 0],
+              },
+            },
+            priorViews: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$viewedAt", priorWindowStart] },
+                      { $lt: ["$viewedAt", recentWindowStart] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            pageViews: 1,
+            recentViews: 1,
+            priorViews: 1,
+            uniqueViewers: {
+              $size: {
+                $filter: {
+                  input: "$uniqueViewerSet",
+                  as: "viewer",
+                  cond: { $not: [{ $in: ["$$viewer", ["", null]] }] },
+                },
+              },
+            },
+          },
+        },
+        { $sort: { pageViews: -1, uniqueViewers: -1 } },
+        { $limit: sourceLimit },
+      ]),
     ]);
 
-    if (!perProduct || perProduct.length === 0) {
+    const orderMap = {};
+    for (const row of orderAgg || []) {
+      const productId = row?._id?.product ? String(row._id.product) : "";
+      if (!productId) continue;
+      orderMap[productId] = row;
+    }
+
+    const viewMap = {};
+    for (const row of viewAgg || []) {
+      const productId = row?._id ? String(row._id) : "";
+      if (!productId) continue;
+      viewMap[productId] = row;
+    }
+
+    const productIds = Array.from(
+      new Set([...Object.keys(orderMap), ...Object.keys(viewMap)])
+    );
+
+    if (!productIds.length) {
       return res.json({
         range: { from, to: now, daysBack, horizonDays },
+        model: {
+          version: "traffic-weighted-v2",
+          momentumWindowDays,
+          safetyStockDays,
+          orderWeightDefault: 0.65,
+          trafficWeightDefault: 0.35,
+        },
         productForecasts: [],
         categoryForecasts: [],
         summary: {
@@ -411,11 +524,19 @@ exports.adminDemandForecast = async (req, res) => {
           totalForecastRevenue: 0,
           productCount: 0,
           categoryCount: 0,
+          totalPageViews: 0,
+          totalUniqueViewers: 0,
+          avgConversionRate: 0,
+          avgConfidenceScore: 0,
+          trendingUpCount: 0,
+          highIntentSkuCount: 0,
+          stockoutRiskCount: 0,
+          projectedStockoutCount: 0,
+          totalSuggestedReorderQty: 0,
         },
       });
     }
 
-    const productIds = perProduct.map((p) => p._id.product);
     const products = await Product.find({ _id: { $in: productIds } })
       .populate("category", "name")
       .populate("brand", "name")
@@ -423,42 +544,114 @@ exports.adminDemandForecast = async (req, res) => {
 
     const productMap = {};
     for (const p of products) {
-      productMap[p._id.toString()] = p;
+      productMap[String(p._id)] = p;
     }
 
-    const forecasts = [];
+    let totalQtySignals = 0;
+    let totalBuyerSignals = 0;
+    let totalUniqueViewerSignals = 0;
+
+    for (const productId of productIds) {
+      const orderRow = orderMap[productId];
+      const viewRow = viewMap[productId];
+      const qtyTotal = Number(orderRow?.qtyTotal || 0);
+      const buyerCount = (orderRow?.buyerSet || []).filter(Boolean).length;
+      const uniqueViewers = Number(viewRow?.uniqueViewers || 0);
+
+      totalQtySignals += qtyTotal;
+      totalBuyerSignals += buyerCount;
+      totalUniqueViewerSignals += uniqueViewers;
+    }
+
+    const globalConversionRate =
+      totalUniqueViewerSignals > 0 ? totalBuyerSignals / totalUniqueViewerSignals : 0.025;
+    const globalUnitsPerBuyer =
+      totalBuyerSignals > 0 ? totalQtySignals / totalBuyerSignals : 1;
+
     const categoryMap = {};
+    const forecasts = [];
     let stockoutRiskCount = 0;
     let projectedStockoutCount = 0;
+    let trendingUpCount = 0;
+    let highIntentSkuCount = 0;
 
-    for (const row of perProduct) {
-      const prodId = row._id.product;
-      const prodIdStr = String(prodId);
-      const prodDoc = productMap[prodIdStr];
+    for (const productId of productIds) {
+      const orderRow = orderMap[productId];
+      const viewRow = viewMap[productId];
+      const prodDoc = productMap[productId];
+      if (!prodDoc) continue;
 
-      const qtyTotal = row.qtyTotal || 0;
-      const revenueTotal = row.revenueTotal || 0;
+      const qtyTotal = Number(orderRow?.qtyTotal || 0);
+      const revenueTotal = Number(orderRow?.revenueTotal || 0);
+      const recentQty = Number(orderRow?.recentQty || 0);
+      const priorQty = Number(orderRow?.priorQty || 0);
+      const pageViews = Number(viewRow?.pageViews || 0);
+      const uniqueViewers = Number(viewRow?.uniqueViewers || 0);
+      const recentViews = Number(viewRow?.recentViews || 0);
+      const priorViews = Number(viewRow?.priorViews || 0);
+      const buyerCount = (orderRow?.buyerSet || []).filter(Boolean).length;
+      const activeOrderDays = (orderRow?.activeOrderDays || []).filter(Boolean).length;
 
       const avgDailyQty = qtyTotal / daysBack;
-      const forecastQty = avgDailyQty * horizonDays;
-      const avgPrice = qtyTotal > 0 ? revenueTotal / qtyTotal : 0;
+      const avgPrice =
+        qtyTotal > 0
+          ? revenueTotal / qtyTotal
+          : Number(prodDoc?.basePrice || prodDoc?.variants?.[0]?.price || 0);
+      const unitsPerBuyer =
+        buyerCount > 0
+          ? qtyTotal / buyerCount
+          : Math.max(1, globalUnitsPerBuyer);
+      const conversionRate =
+        uniqueViewers > 0 ? buyerCount / uniqueViewers : 0;
+      const effectiveConversionRate =
+        conversionRate > 0
+          ? conversionRate
+          : clamp(globalConversionRate * (pageViews >= 30 ? 1 : 0.7), 0.005, 0.3);
+
+      const orderTrendFactor = clamp(
+        priorQty > 0 ? recentQty / priorQty : recentQty > 0 ? 1.18 : 1,
+        0.65,
+        1.8
+      );
+      const trafficTrendFactor = clamp(
+        priorViews > 0 ? recentViews / priorViews : recentViews > 0 ? 1.15 : 1,
+        0.7,
+        1.8
+      );
+      const momentumFactor = clamp(
+        orderTrendFactor * 0.6 + trafficTrendFactor * 0.4,
+        0.75,
+        1.6
+      );
+
+      const baselineForecastQty = avgDailyQty * horizonDays * momentumFactor;
+      const projectedDailyViews = (pageViews / daysBack) * (0.55 + trafficTrendFactor * 0.45);
+      const trafficDrivenForecastQty =
+        projectedDailyViews * horizonDays * effectiveConversionRate * unitsPerBuyer;
+
+      let trafficWeight = 0;
+      if (qtyTotal > 0 && pageViews > 0) trafficWeight = 0.35;
+      else if (qtyTotal > 0) trafficWeight = 0.1;
+      else if (pageViews > 0) trafficWeight = 0.75;
+      const orderWeight = 1 - trafficWeight;
+
+      const forecastQty = baselineForecastQty * orderWeight + trafficDrivenForecastQty * trafficWeight;
       const forecastRevenue = forecastQty * avgPrice;
 
       const brandName = prodDoc?.brand?.name || null;
       const categoryId = prodDoc?.category?._id || null;
       const categoryName = prodDoc?.category?.name || "Unknown";
       const currentStock = (prodDoc?.variants || []).reduce(
-        (sum, v) => sum + Number(v?.countInStock || 0),
+        (sum, variant) => sum + Number(variant?.countInStock || 0),
         0
       );
       const daysOfCover = avgDailyQty > 0 ? currentStock / avgDailyQty : null;
       const projectedStockAtHorizon = currentStock - forecastQty;
-      const safetyStockDays = 7;
-      const safetyStockUnits = avgDailyQty * safetyStockDays;
+      const safetyStockUnits = (forecastQty / Math.max(horizonDays, 1)) * safetyStockDays;
       const targetStockLevel = forecastQty + safetyStockUnits;
       const suggestedReorderQty = Math.max(0, targetStockLevel - currentStock);
       const riskLevel =
-        avgDailyQty <= 0
+        forecastQty <= 0
           ? "stable"
           : currentStock <= 0
           ? "stockout"
@@ -468,16 +661,48 @@ exports.adminDemandForecast = async (req, res) => {
 
       if (riskLevel === "stockout") stockoutRiskCount += 1;
       if (riskLevel === "stockout" || riskLevel === "at_risk") projectedStockoutCount += 1;
+      if (trafficTrendFactor >= 1.12 || orderTrendFactor >= 1.12) trendingUpCount += 1;
+      if (pageViews >= 40 && effectiveConversionRate >= Math.max(globalConversionRate * 0.9, 0.015)) {
+        highIntentSkuCount += 1;
+      }
 
-      const f = {
-        productId: prodId,
-        name: row._id.name || prodDoc?.name || "Unknown product",
+      const confidenceScore = Math.round(
+        clamp(
+          Math.min(30, qtyTotal * 1.6) +
+            Math.min(20, buyerCount * 4) +
+            Math.min(20, uniqueViewers * 0.45) +
+            Math.min(15, activeOrderDays * 2.4) +
+            Math.min(15, (recentViews + recentQty * 4) * 0.35),
+          15,
+          98
+        )
+      );
+      const confidenceLabel =
+        confidenceScore >= 75 ? "High" : confidenceScore >= 50 ? "Medium" : "Emerging";
+      const demandScore = Math.round(
+        clamp(
+          forecastQty * 5 +
+            pageViews * 0.18 +
+            uniqueViewers * 0.35 +
+            effectiveConversionRate * 100,
+          1,
+          999
+        )
+      );
+
+      const forecast = {
+        productId: prodDoc._id,
+        slug: prodDoc.slug || "",
+        name: orderRow?._id?.name || prodDoc.name || "Unknown product",
         brand: brandName,
         categoryId,
         category: categoryName,
         qtyTotal,
         revenueTotal,
         avgDailyQty,
+        avgPrice,
+        baselineForecastQty,
+        trafficDrivenForecastQty,
         forecastQty,
         forecastRevenue,
         currentStock,
@@ -486,50 +711,116 @@ exports.adminDemandForecast = async (req, res) => {
         safetyStockUnits,
         suggestedReorderQty,
         riskLevel,
+        pageViews,
+        uniqueViewers,
+        buyerCount,
+        conversionRate,
+        effectiveConversionRate,
+        unitsPerBuyer,
+        projectedDailyViews,
+        recentQty,
+        priorQty,
+        recentViews,
+        priorViews,
+        orderTrendFactor,
+        trafficTrendFactor,
+        momentumFactor,
+        activeOrderDays,
+        orderWeight,
+        trafficWeight,
+        confidenceScore,
+        confidenceLabel,
+        demandScore,
       };
 
-      forecasts.push(f);
+      forecasts.push(forecast);
 
-      // category aggregation
-      const catKey = categoryId ? String(categoryId) : "unknown";
-      if (!categoryMap[catKey]) {
-        categoryMap[catKey] = {
+      const categoryKey = categoryId ? String(categoryId) : "unknown";
+      if (!categoryMap[categoryKey]) {
+        categoryMap[categoryKey] = {
           categoryId,
           categoryName,
           forecastQty: 0,
           forecastRevenue: 0,
+          pageViews: 0,
+          uniqueViewers: 0,
+          buyerCount: 0,
+          confidenceScoreTotal: 0,
+          skuCount: 0,
         };
       }
-      categoryMap[catKey].forecastQty += forecastQty;
-      categoryMap[catKey].forecastRevenue += forecastRevenue;
+
+      categoryMap[categoryKey].forecastQty += forecastQty;
+      categoryMap[categoryKey].forecastRevenue += forecastRevenue;
+      categoryMap[categoryKey].pageViews += pageViews;
+      categoryMap[categoryKey].uniqueViewers += uniqueViewers;
+      categoryMap[categoryKey].buyerCount += buyerCount;
+      categoryMap[categoryKey].confidenceScoreTotal += confidenceScore;
+      categoryMap[categoryKey].skuCount += 1;
     }
 
-    const categoryForecasts = Object.values(categoryMap).sort(
-      (a, b) => b.forecastRevenue - a.forecastRevenue
-    );
+    const rankedForecasts = forecasts
+      .sort((a, b) => {
+        if (b.demandScore !== a.demandScore) return b.demandScore - a.demandScore;
+        return b.forecastRevenue - a.forecastRevenue;
+      })
+      .slice(0, top);
+
+    const categoryForecasts = Object.values(categoryMap)
+      .map((row) => ({
+        ...row,
+        avgConfidenceScore:
+          row.skuCount > 0 ? Math.round(row.confidenceScoreTotal / row.skuCount) : 0,
+        conversionRate:
+          row.uniqueViewers > 0 ? row.buyerCount / row.uniqueViewers : 0,
+      }))
+      .sort((a, b) => b.forecastRevenue - a.forecastRevenue);
 
     const summary = {
-      totalForecastQty: forecasts.reduce(
-        (sum, f) => sum + (f.forecastQty || 0),
+      totalForecastQty: rankedForecasts.reduce((sum, row) => sum + (row.forecastQty || 0), 0),
+      totalForecastRevenue: rankedForecasts.reduce(
+        (sum, row) => sum + (row.forecastRevenue || 0),
         0
       ),
-      totalForecastRevenue: forecasts.reduce(
-        (sum, f) => sum + (f.forecastRevenue || 0),
-        0
-      ),
-      productCount: forecasts.length,
+      productCount: rankedForecasts.length,
       categoryCount: categoryForecasts.length,
+      totalPageViews: rankedForecasts.reduce((sum, row) => sum + (row.pageViews || 0), 0),
+      totalUniqueViewers: rankedForecasts.reduce(
+        (sum, row) => sum + (row.uniqueViewers || 0),
+        0
+      ),
+      avgConversionRate:
+        rankedForecasts.length > 0
+          ? rankedForecasts.reduce(
+              (sum, row) => sum + Number(row.effectiveConversionRate || 0),
+              0
+            ) / rankedForecasts.length
+          : 0,
+      avgConfidenceScore:
+        rankedForecasts.length > 0
+          ? rankedForecasts.reduce((sum, row) => sum + (row.confidenceScore || 0), 0) /
+            rankedForecasts.length
+          : 0,
+      trendingUpCount,
+      highIntentSkuCount,
       stockoutRiskCount,
       projectedStockoutCount,
-      totalSuggestedReorderQty: forecasts.reduce(
-        (sum, f) => sum + (f.suggestedReorderQty || 0),
+      totalSuggestedReorderQty: rankedForecasts.reduce(
+        (sum, row) => sum + (row.suggestedReorderQty || 0),
         0
       ),
     };
 
     res.json({
       range: { from, to: now, daysBack, horizonDays },
-      productForecasts: forecasts,
+      model: {
+        version: "traffic-weighted-v2",
+        momentumWindowDays,
+        safetyStockDays,
+        orderWeightDefault: 0.65,
+        trafficWeightDefault: 0.35,
+      },
+      productForecasts: rankedForecasts,
       categoryForecasts,
       summary,
     });

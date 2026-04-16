@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import api from "../../../utils/api";
+
+const COUPON_DRAFT_KEY = "admin_coupon_form_draft_v1";
 
 const tokenHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -49,8 +51,121 @@ function MetricCard({ label, value, subtitle }) {
   );
 }
 
+function SearchableScopePicker({
+  title,
+  placeholder,
+  helpText,
+  items,
+  selectedIds,
+  onChange,
+  getItemLabel,
+  disabled = false,
+  disabledMessage = "",
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const selectedSet = new Set((selectedIds || []).map(String));
+  const selectedItems = items.filter((item) => selectedSet.has(String(item?._id)));
+  const filteredItems = items
+    .filter((item) => !selectedSet.has(String(item?._id)))
+    .filter((item) => {
+      if (!normalizedQuery) return true;
+      return getItemLabel(item).toLowerCase().includes(normalizedQuery);
+    })
+    .slice(0, 8);
+
+  const addItem = (id) => {
+    if (disabled) return;
+    if (selectedSet.has(String(id))) return;
+    onChange([...(selectedIds || []), String(id)]);
+    setQuery("");
+  };
+
+  const removeItem = (id) => {
+    onChange((selectedIds || []).filter((entry) => String(entry) !== String(id)));
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 ${disabled ? "bg-gray-50" : "bg-white"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <label className="text-sm font-semibold text-gray-700">{title}</label>
+          <p className="mt-1 text-xs text-gray-500">
+            {disabled ? disabledMessage || helpText : helpText}
+          </p>
+        </div>
+        <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
+          {selectedItems.length} selected
+        </div>
+      </div>
+
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="mt-3 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 disabled:cursor-not-allowed disabled:bg-gray-100"
+      />
+
+      <div className="mt-3 rounded-2xl border bg-gray-50/80 p-2">
+        {disabled ? (
+          <div className="px-2 py-6 text-center text-sm text-gray-500">
+            {disabledMessage || "This selector is currently disabled."}
+          </div>
+        ) : filteredItems.length ? (
+          <div className="space-y-2">
+            {filteredItems.map((item) => (
+              <div
+                key={item._id}
+                className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 shadow-sm"
+              >
+                <div className="min-w-0 text-sm text-gray-700">
+                  <div className="truncate font-medium">{getItemLabel(item)}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => addItem(item._id)}
+                  className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+                >
+                  Add
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="px-2 py-6 text-center text-sm text-gray-500">
+            {normalizedQuery ? "No matches found." : "Start typing to search and add items."}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {selectedItems.length ? (
+          selectedItems.map((item) => (
+            <button
+              key={item._id}
+              type="button"
+              onClick={() => removeItem(item._id)}
+              className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+              <span className="max-w-[200px] truncate">{getItemLabel(item)}</span>
+              <span aria-hidden="true">x</span>
+            </button>
+          ))
+        ) : (
+          <div className="text-xs text-gray-400">Nothing selected yet.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminCoupons() {
   const [coupons, setCoupons] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -59,6 +174,9 @@ export default function AdminCoupons() {
   const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const hasHydratedDraftRef = useRef(false);
 
   // form
   const [editingId, setEditingId] = useState(null);
@@ -71,9 +189,15 @@ export default function AdminCoupons() {
     maxDiscount: "",
     minCartTotal: "",
     usageLimit: "",
+    perCustomerUsageLimit: "",
     validFrom: "",
     validTo: "",
     isActive: true,
+    customerEligibility: "ALL",
+    discountAppliesTo: "ELIGIBLE_ITEMS",
+    applicableProducts: [],
+    applicableCategories: [],
+    applicableUsers: [],
   });
 
   const resetForm = () => {
@@ -86,10 +210,18 @@ export default function AdminCoupons() {
       maxDiscount: "",
       minCartTotal: "",
       usageLimit: "",
+      perCustomerUsageLimit: "",
       validFrom: "",
       validTo: "",
       isActive: true,
+      customerEligibility: "ALL",
+      discountAppliesTo: "ELIGIBLE_ITEMS",
+      applicableProducts: [],
+      applicableCategories: [],
+      applicableUsers: [],
     });
+    localStorage.removeItem(COUPON_DRAFT_KEY);
+    setDraftRestored(false);
   };
 
   const handleFormChange = (e) => {
@@ -98,6 +230,32 @@ export default function AdminCoupons() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+  };
+
+  const updateFormList = (name, values) => {
+    setForm((prev) => ({
+      ...prev,
+      [name]: values,
+    }));
+  };
+
+  const fetchDependencies = async () => {
+    try {
+      const [productRes, categoryRes, customerRes] = await Promise.all([
+        api.get("/products/admin", { headers: tokenHeader() }),
+        api.get("/categories"),
+        api.get("/admin/customers", {
+          headers: tokenHeader(),
+          params: { page: 1, limit: 1000 },
+        }),
+      ]);
+
+      setProducts(productRes.data?.products || []);
+      setCategories(Array.isArray(categoryRes.data) ? categoryRes.data : []);
+      setCustomers(customerRes.data?.users || []);
+    } catch (e) {
+      console.error("Failed to load coupon dependencies:", e);
+    }
   };
 
   const fetchCoupons = async (opts = {}) => {
@@ -137,8 +295,56 @@ export default function AdminCoupons() {
 
   useEffect(() => {
     fetchCoupons();
+    fetchDependencies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (hasHydratedDraftRef.current) return;
+    hasHydratedDraftRef.current = true;
+    try {
+      const rawDraft = localStorage.getItem(COUPON_DRAFT_KEY);
+      if (!rawDraft) return;
+      const parsed = JSON.parse(rawDraft);
+      if (!parsed || typeof parsed !== "object") return;
+      if (!parsed.form || typeof parsed.form !== "object") return;
+
+      setEditingId(parsed.editingId || null);
+      setForm((prev) => ({
+        ...prev,
+        ...parsed.form,
+        applicableProducts: Array.isArray(parsed.form.applicableProducts)
+          ? parsed.form.applicableProducts
+          : [],
+        applicableCategories: Array.isArray(parsed.form.applicableCategories)
+          ? parsed.form.applicableCategories
+          : [],
+        applicableUsers: Array.isArray(parsed.form.applicableUsers)
+          ? parsed.form.applicableUsers
+          : [],
+      }));
+      setDraftRestored(true);
+    } catch (error) {
+      console.error("Failed to restore coupon draft:", error);
+      localStorage.removeItem(COUPON_DRAFT_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedDraftRef.current) return;
+    try {
+      localStorage.setItem(
+        COUPON_DRAFT_KEY,
+        JSON.stringify({
+          editingId,
+          form,
+          savedAt: new Date().toISOString(),
+        })
+      );
+    } catch (error) {
+      console.error("Failed to save coupon draft:", error);
+    }
+  }, [editingId, form]);
 
   const onSearchSubmit = (e) => {
     e.preventDefault();
@@ -166,10 +372,17 @@ export default function AdminCoupons() {
       maxDiscount: c.maxDiscount ?? "",
       minCartTotal: c.minCartTotal ?? "",
       usageLimit: c.usageLimit ?? "",
+      perCustomerUsageLimit: c.perCustomerUsageLimit ?? "",
       validFrom: c.validFrom ? c.validFrom.slice(0, 10) : "",
       validTo: c.validTo ? c.validTo.slice(0, 10) : "",
       isActive: c.isActive !== false,
+      customerEligibility: c.customerEligibility || "ALL",
+      discountAppliesTo: c.discountAppliesTo || "ELIGIBLE_ITEMS",
+      applicableProducts: (c.applicableProducts || []).map((item) => item?._id || item),
+      applicableCategories: (c.applicableCategories || []).map((item) => item?._id || item),
+      applicableUsers: (c.applicableUsers || []).map((item) => item?._id || item),
     });
+    setDraftRestored(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -184,6 +397,32 @@ export default function AdminCoupons() {
         e?.response?.data?.message ||
           "Failed to deactivate coupon. Check server logs."
       );
+    }
+  };
+
+  const handleGenerateCode = async () => {
+    try {
+      setGeneratingCode(true);
+      const prefixHint =
+        form.code.trim() ||
+        form.description.trim() ||
+        form.customerEligibility ||
+        form.type;
+      const { data } = await api.get("/admin/coupons/generate-code", {
+        headers: tokenHeader(),
+        params: { prefix: prefixHint },
+      });
+      if (data?.code) {
+        setForm((prev) => ({
+          ...prev,
+          code: String(data.code).toUpperCase(),
+        }));
+      }
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to generate coupon code.");
+    } finally {
+      setGeneratingCode(false);
     }
   };
 
@@ -208,9 +447,16 @@ export default function AdminCoupons() {
         minCartTotal:
           form.minCartTotal !== "" ? Number(form.minCartTotal) : null,
         usageLimit: form.usageLimit !== "" ? Number(form.usageLimit) : 0,
+        perCustomerUsageLimit:
+          form.perCustomerUsageLimit !== "" ? Number(form.perCustomerUsageLimit) : 0,
         validFrom: form.validFrom || null,
         validTo: form.validTo || null,
         isActive: !!form.isActive,
+        customerEligibility: form.customerEligibility,
+        discountAppliesTo: form.discountAppliesTo,
+        applicableProducts: form.applicableProducts,
+        applicableCategories: form.applicableCategories,
+        applicableUsers: form.applicableUsers,
       };
 
       if (editingId) {
@@ -286,6 +532,12 @@ export default function AdminCoupons() {
         </div>
       )}
 
+      {draftRestored && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Restored your unsaved coupon draft from this browser.
+        </div>
+      )}
+
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <MetricCard
@@ -332,16 +584,30 @@ export default function AdminCoupons() {
               <label className="text-sm font-semibold text-gray-700">
                 Code
               </label>
-              <input
-                name="code"
-                value={form.code}
-                onChange={handleFormChange}
-                placeholder="e.g. NEWUSER200"
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm uppercase"
-                required
-              />
+              <div className="mt-1 flex gap-2">
+                <input
+                  name="code"
+                  value={form.code}
+                  onChange={handleFormChange}
+                  placeholder="e.g. NEWUSER200"
+                  className="w-full rounded-xl border px-3 py-2 text-sm uppercase"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerateCode}
+                  disabled={generatingCode}
+                  className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold ${
+                    generatingCode
+                      ? "cursor-not-allowed bg-gray-200 text-gray-500"
+                      : "bg-gray-900 text-white hover:bg-gray-800"
+                  }`}
+                >
+                  {generatingCode ? "Generating..." : "Generate"}
+                </button>
+              </div>
               <p className="mt-1 text-xs text-gray-500">
-                Shown to customers. Will be uppercased.
+                Shown to customers. Will be uppercased. Use Generate to get a unique code checked against existing coupons.
               </p>
             </div>
 
@@ -378,7 +644,7 @@ export default function AdminCoupons() {
           </div>
 
           {/* Row 2 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-semibold text-gray-700">
                 Max discount (optional)
@@ -423,10 +689,24 @@ export default function AdminCoupons() {
                 className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
               />
             </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Per customer limit
+              </label>
+              <input
+                type="number"
+                name="perCustomerUsageLimit"
+                value={form.perCustomerUsageLimit}
+                onChange={handleFormChange}
+                placeholder="e.g. 1"
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
+              />
+            </div>
           </div>
 
           {/* Row 3 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-semibold text-gray-700">
                 Valid from (optional)
@@ -451,6 +731,41 @@ export default function AdminCoupons() {
                 onChange={handleFormChange}
                 className="mt-1 w-full rounded-xl border px-3 py-2 text-sm"
               />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Customer eligibility
+              </label>
+              <select
+                name="customerEligibility"
+                value={form.customerEligibility}
+                onChange={handleFormChange}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-white"
+              >
+                <option value="ALL">All customers</option>
+                <option value="SPECIFIC_USERS">Specific customers</option>
+                <option value="NEW_CUSTOMERS">New customers only</option>
+                <option value="RETURNING_CUSTOMERS">Returning customers only</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-gray-700">
+                Discount applies to
+              </label>
+              <select
+                name="discountAppliesTo"
+                value={form.discountAppliesTo}
+                onChange={handleFormChange}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-white"
+              >
+                <option value="ELIGIBLE_ITEMS">Eligible items only</option>
+                <option value="ENTIRE_CART">Whole cart after qualification</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                For scoped coupons, this controls whether only matching items or the whole cart is discounted.
+              </p>
             </div>
 
             <div className="flex items-center gap-3 mt-6">
@@ -479,6 +794,53 @@ export default function AdminCoupons() {
               placeholder="Notes about where this coupon is used (Facebook campaign, new users, etc.)"
               className="mt-1 w-full rounded-xl border px-3 py-2 text-sm min-h-[80px]"
             />
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <div className="text-sm font-semibold text-gray-800">
+                Scope and Audience
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Real-world admin panels usually make this searchable: add matching products, categories, and customers, then remove them from the selected list if needed.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <SearchableScopePicker
+                title="Specific products"
+                placeholder="Search products by name"
+                helpText="Leave empty to allow all products. Matching products qualify for the coupon."
+                items={products}
+                selectedIds={form.applicableProducts}
+                onChange={(values) => updateFormList("applicableProducts", values)}
+                getItemLabel={(product) => product?.name || "Unnamed product"}
+              />
+
+              <SearchableScopePicker
+                title="Specific categories"
+                placeholder="Search categories"
+                helpText="Category scope works with product scope. A match on either can qualify."
+                items={categories}
+                selectedIds={form.applicableCategories}
+                onChange={(values) => updateFormList("applicableCategories", values)}
+                getItemLabel={(category) => category?.name || "Unnamed category"}
+              />
+
+              <SearchableScopePicker
+                title="Specific users"
+                placeholder="Search customers by name or email"
+                helpText="Used when customer eligibility is set to specific customers."
+                items={customers}
+                selectedIds={form.applicableUsers}
+                onChange={(values) => updateFormList("applicableUsers", values)}
+                getItemLabel={(customer) =>
+                  [customer?.name, customer?.email].filter(Boolean).join(" • ") || "Unnamed customer"
+                }
+                disabled={form.customerEligibility !== "SPECIFIC_USERS"}
+                disabledMessage="Switch customer eligibility to Specific customers to search and add users here."
+              />
+            </div>
           </div>
 
           {/* Buttons */}
@@ -577,6 +939,29 @@ export default function AdminCoupons() {
                             {c.description}
                           </div>
                         )}
+                        <div className="mt-1 text-xs text-gray-500">
+                          Scope: {(c.applicableProducts?.length || 0) + (c.applicableCategories?.length || 0) + (c.applicableUsers?.length || 0) > 0
+                            ? [
+                                c.applicableProducts?.length ? `${c.applicableProducts.length} product` : null,
+                                c.applicableCategories?.length ? `${c.applicableCategories.length} category` : null,
+                                c.applicableUsers?.length ? `${c.applicableUsers.length} user` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(", ")
+                            : "All shoppers and products"}
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          Eligibility: {c.customerEligibility === "SPECIFIC_USERS"
+                            ? "Specific customers"
+                            : c.customerEligibility === "NEW_CUSTOMERS"
+                            ? "New customers"
+                            : c.customerEligibility === "RETURNING_CUSTOMERS"
+                            ? "Returning customers"
+                            : "All customers"}
+                          {" • "}
+                          Applies to: {c.discountAppliesTo === "ENTIRE_CART" ? "Whole cart" : "Eligible items"}
+                          {c.perCustomerUsageLimit > 0 ? ` • Per customer: ${c.perCustomerUsageLimit}` : ""}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs">
                         {c.type === "PERCENT"

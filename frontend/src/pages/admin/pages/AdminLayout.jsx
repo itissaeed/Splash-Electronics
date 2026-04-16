@@ -18,9 +18,11 @@ import {
   Users,
   User,
   TicketPercent,
+  Tag,
   BarChart3,
   LineChart,
   RotateCcw,
+  Truck,
   Settings as SettingsIcon,
   Bell,
   Menu,
@@ -34,9 +36,11 @@ import AdminOrders from "./AdminOrders";
 import AdminInventory from "./AdminInventory";
 import AdminCustomers from "./AdminCustomers";
 import AdminCoupons from "./AdminCoupons";
+import AdminOffers from "./AdminOffers";
 import AdminAnalytics from "./AdminAnalytics";
 import AdminForecasting from "./AdminForecasting";
 import AdminSettings from "./AdminSettings";
+import AdminCommerce from "./AdminCommerce";
 import AdminCategories from "./AdminCategories";
 import AdminReturns from "./AdminReturns";
 import AdminProfile from "./AdminProfile";
@@ -51,10 +55,12 @@ const navItems = [
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/customers", label: "Customers", icon: Users },
+  { to: "/admin/offers", label: "Offers", icon: Tag },
   { to: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { to: "/admin/sales", label: "Sales Analytics", icon: BarChart3 },
   { to: "/admin/forecasting", label: "Forecasting", icon: LineChart },
   { to: "/admin/returns", label: "Returns", icon: RotateCcw },
+  { to: "/admin/commerce", label: "Commerce", icon: Truck },
   { to: "/admin/settings", label: "Settings", icon: SettingsIcon },
 ];
 
@@ -375,11 +381,13 @@ export default function AdminLayout() {
               <Route path="/orders" element={<AdminOrders />} />
               <Route path="/inventory" element={<AdminInventory />} />
               <Route path="/customers" element={<AdminCustomers />} />
+              <Route path="/offers" element={<AdminOffers />} />
               <Route path="/coupons" element={<AdminCoupons />} />
               <Route path="/sales" element={<AdminAnalytics />} />
               <Route path="/analytics" element={<Navigate to="/admin/sales" replace />} />
               <Route path="/forecasting" element={<AdminForecasting />} />
               <Route path="/returns" element={<AdminReturns />} />
+              <Route path="/commerce" element={<AdminCommerce />} />
               <Route path="/profile" element={<AdminProfile />} />
               <Route path="/settings" element={<AdminSettings />} />
             </Routes>
