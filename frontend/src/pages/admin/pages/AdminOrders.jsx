@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../../../utils/api";
 import { buildTrackingUrl } from "../../../utils/shipmentTracking";
+import { COURIER_STATUS_LABELS, FULFILLMENT_MODE_LABELS, getShipmentTimeline } from "../../../utils/shipmentTimeline";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 
@@ -10,6 +11,7 @@ const tokenHeader = () => ({
 });
 
 const COURIER_OPTIONS = ["Pathao", "RedX", "Sundarban", "eCourier", "Steadfast"];
+const COURIER_STATUS_OPTIONS = Object.keys(COURIER_STATUS_LABELS);
 const STATUS_FLOW = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
@@ -90,6 +92,7 @@ export default function AdminOrders() {
   const [selected, setSelected] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [dispatching, setDispatching] = useState(false);
+  const [savingShipment, setSavingShipment] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -186,6 +189,9 @@ export default function AdminOrders() {
     trackingUrl,
     bookingRef,
     pickupDate,
+    fulfillmentMode,
+    courierStatus,
+    courierStatusNote,
     notes,
   }) => {
     const normalizedStatus = String(nextStatus || "").toLowerCase().trim();
@@ -206,6 +212,9 @@ export default function AdminOrders() {
           trackingId: normalizedTrackingId,
           trackingUrl: String(trackingUrl || "").trim(),
           bookingRef: String(bookingRef || "").trim(),
+          fulfillmentMode,
+          courierStatus,
+          courierStatusNote,
           courierCharge: undefined,
           pickupDate: pickupDate || undefined,
           notes,
@@ -238,6 +247,46 @@ export default function AdminOrders() {
       alert(e?.response?.data?.message || "Failed to book demo shipment");
     } finally {
       setDispatching(false);
+    }
+  };
+
+  const saveShipmentUpdate = async ({
+    orderNo,
+    courier,
+    trackingId,
+    trackingUrl,
+    bookingRef,
+    pickupDate,
+    fulfillmentMode,
+    courierStatus,
+    courierStatusNote,
+    notes,
+  }) => {
+    try {
+      setSavingShipment(true);
+      const { data } = await api.patch(
+        `/admin/orders/${orderNo}/shipment`,
+        {
+          courier: String(courier || "").trim(),
+          trackingId: String(trackingId || "").trim(),
+          trackingUrl: String(trackingUrl || "").trim(),
+          bookingRef: String(bookingRef || "").trim(),
+          pickupDate: pickupDate || undefined,
+          fulfillmentMode,
+          courierStatus,
+          courierStatusNote,
+          notes,
+        },
+        { headers: tokenHeader() }
+      );
+      await fetchOrders();
+      setSelected(data);
+      alert("Shipment update saved.");
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to save shipment update");
+    } finally {
+      setSavingShipment(false);
     }
   };
 
@@ -584,8 +633,10 @@ export default function AdminOrders() {
                 order={selected}
                 updating={updating}
                 dispatching={dispatching}
+                savingShipment={savingShipment}
                 deleting={deleting}
                 onUpdate={(payload) => updateStatus(payload)}
+                onSaveShipment={(payload) => saveShipmentUpdate(payload)}
                 onDispatch={(orderNo, courierProvider) => dispatchShipment(orderNo, courierProvider)}
                 onDelete={(orderNo) => deleteOrder(orderNo)}
               />
@@ -619,8 +670,10 @@ function OrderUpdatePanel({
   order,
   updating,
   dispatching,
+  savingShipment,
   deleting,
   onUpdate,
+  onSaveShipment,
   onDispatch,
   onDelete,
 }) {
@@ -634,6 +687,15 @@ function OrderUpdatePanel({
   const [trackingId, setTrackingId] = useState(order.shipment?.trackingId || "");
   const [trackingUrl, setTrackingUrl] = useState(order.shipment?.trackingUrl || "");
   const [bookingRef, setBookingRef] = useState(order.shipment?.bookingRef || "");
+  const [fulfillmentMode, setFulfillmentMode] = useState(
+    order.shipment?.fulfillmentMode || "THIRD_PARTY_COURIER"
+  );
+  const [courierStatus, setCourierStatus] = useState(
+    order.shipment?.courierStatus || "AWAITING_BOOKING"
+  );
+  const [courierStatusNote, setCourierStatusNote] = useState(
+    order.shipment?.courierStatusNote || ""
+  );
   const [pickupDate, setPickupDate] = useState(
     order.shipment?.pickupDate
       ? new Date(order.shipment.pickupDate).toISOString().slice(0, 10)
@@ -650,6 +712,7 @@ function OrderUpdatePanel({
   const nextActions = STATUS_FLOW[currentStatus] || [];
   const canShip = nextActions.includes("shipped");
   const canDispatch = currentStatus === "processing";
+  const shipmentTimeline = getShipmentTimeline(order);
   const workflowHint =
     currentStatus === "pending"
       ? "Step 1: verify the order details before confirming."
@@ -670,6 +733,9 @@ function OrderUpdatePanel({
     setTrackingId(order.shipment?.trackingId || "");
     setTrackingUrl(order.shipment?.trackingUrl || "");
     setBookingRef(order.shipment?.bookingRef || "");
+    setFulfillmentMode(order.shipment?.fulfillmentMode || "THIRD_PARTY_COURIER");
+    setCourierStatus(order.shipment?.courierStatus || "AWAITING_BOOKING");
+    setCourierStatusNote(order.shipment?.courierStatusNote || "");
     setPickupDate(
       order.shipment?.pickupDate
         ? new Date(order.shipment.pickupDate).toISOString().slice(0, 10)
@@ -714,6 +780,21 @@ function OrderUpdatePanel({
         </div>
 
         <div>
+          <label className="text-sm font-semibold text-gray-700">Fulfillment mode</label>
+          <select
+            value={fulfillmentMode}
+            onChange={(e) => setFulfillmentMode(e.target.value)}
+            className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+          >
+            {Object.entries(FULFILLMENT_MODE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="text-sm font-semibold text-gray-700">Courier</label>
           <select
             value={courierOption}
@@ -741,6 +822,21 @@ function OrderUpdatePanel({
         </div>
 
         <div>
+          <label className="text-sm font-semibold text-gray-700">Courier status</label>
+          <select
+            value={courierStatus}
+            onChange={(e) => setCourierStatus(e.target.value)}
+            className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+          >
+            {COURIER_STATUS_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {COURIER_STATUS_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label className="text-sm font-semibold text-gray-700">Tracking ID</label>
           <input
             value={trackingId}
@@ -755,7 +851,7 @@ function OrderUpdatePanel({
               rel="noreferrer"
               className="mt-2 inline-block text-xs font-semibold text-indigo-600 hover:underline"
             >
-              Open tracking link
+              Open courier tracking
             </a>
           ) : null}
           {canShip ? (
@@ -796,6 +892,15 @@ function OrderUpdatePanel({
               <div className="mt-1 w-full rounded-xl border bg-gray-50 px-3 py-2 text-sm text-gray-700">
                 {money(order?.pricing?.shippingFee || 0)}
               </div>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Courier status note</label>
+              <textarea
+                value={courierStatusNote}
+                onChange={(e) => setCourierStatusNote(e.target.value)}
+                placeholder="What did the courier update say?"
+                className="mt-1 min-h-[72px] w-full rounded-xl border px-3 py-2 text-sm"
+              />
             </div>
             <div>
               <label className="text-sm font-semibold text-gray-700">Tracking URL</label>
@@ -845,6 +950,9 @@ function OrderUpdatePanel({
                       trackingId,
                       trackingUrl,
                       bookingRef,
+                      fulfillmentMode,
+                      courierStatus,
+                      courierStatusNote,
                       pickupDate,
                       notes,
                     })
@@ -859,6 +967,30 @@ function OrderUpdatePanel({
             )}
           </div>
         </div>
+
+        <button
+          type="button"
+          disabled={savingShipment}
+          onClick={() =>
+            onSaveShipment({
+              orderNo: order.orderNo,
+              courier: effectiveCourier,
+              trackingId,
+              trackingUrl,
+              bookingRef,
+              fulfillmentMode,
+              courierStatus,
+              courierStatusNote,
+              pickupDate,
+              notes,
+            })
+          }
+          className={`w-full rounded-xl py-3 text-sm font-semibold text-white ${
+            savingShipment ? "bg-slate-300" : "bg-slate-900 hover:bg-slate-800"
+          }`}
+        >
+          {savingShipment ? "Saving shipment..." : "Save Courier Update"}
+        </button>
 
         <button
           type="button"
@@ -919,6 +1051,31 @@ function OrderUpdatePanel({
           <span className="font-semibold text-gray-800">
             {order.shippingAddress?.division || "-"}, {order.shippingAddress?.district || "-"}
           </span>
+        </div>
+
+        <div className="rounded-xl border bg-gray-50 p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
+            Manual tracking timeline
+          </div>
+          <div className="mt-3 space-y-3">
+            {shipmentTimeline.length === 0 ? (
+              <div className="text-sm text-gray-500">No shipment events recorded yet.</div>
+            ) : (
+              shipmentTimeline.map((event) => (
+                <div key={event.id} className="rounded-xl border bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-gray-900">{event.label}</div>
+                    <div className="text-[11px] text-gray-500">
+                      {event.createdAt ? new Date(event.createdAt).toLocaleString() : "-"}
+                    </div>
+                  </div>
+                  {event.details ? (
+                    <div className="mt-1 text-xs text-gray-600">{event.details}</div>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

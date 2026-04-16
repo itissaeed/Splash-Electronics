@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/api";
 import { buildTrackingUrl } from "../../utils/shipmentTracking";
+import { COURIER_STATUS_LABELS, FULFILLMENT_MODE_LABELS, getShipmentTimeline } from "../../utils/shipmentTimeline";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 const fallbackImg =
@@ -53,6 +54,27 @@ const formatDate = (value) => {
   });
 };
 
+const getDeliveryPartnerMessage = (shipment) => {
+  const mode = String(shipment?.fulfillmentMode || "").toUpperCase();
+  if (mode === "OWN_DELIVERY") {
+    return "This order is being delivered directly by Splash Electronics.";
+  }
+  if (shipment?.courier) {
+    return `This order is being delivered by ${shipment.courier} on behalf of Splash Electronics.`;
+  }
+  return "This order is being delivered by a third-party courier on behalf of Splash Electronics.";
+};
+
+const copyToClipboard = async (value) => {
+  if (!value || !navigator?.clipboard?.writeText) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 function LoadingSkeleton() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
@@ -102,6 +124,7 @@ export default function OrderDetails() {
   const [refundReason, setRefundReason] = useState("");
   const [refundTimeOption, setRefundTimeOption] = useState("WITHIN_3_DAYS");
   const [refundFormError, setRefundFormError] = useState("");
+  const [copiedTracking, setCopiedTracking] = useState(false);
 
   const load = async () => {
     try {
@@ -154,9 +177,10 @@ export default function OrderDetails() {
   const pay = order.payment || {};
   const pricing = order.pricing || {};
   const shipment = order.shipment || {};
+  const shipmentTimeline = getShipmentTimeline(order);
   const visibleGrandTotal =
     Number(pricing?.itemsTotal || 0) +
-    Number(pricing?.shippingFee || 0) +
+    Number(pricing?.shippingFee || 0) -
     Number(pricing?.discountTotal || 0);
   const trackingUrl =
     String(shipment?.trackingUrl || "").trim() ||
@@ -201,6 +225,16 @@ export default function OrderDetails() {
   const doRequestRefund = async () => {
     setRefundFormError("");
     setRefundModalOpen(true);
+  };
+
+  const handleCopyTracking = async () => {
+    const ok = await copyToClipboard(shipment?.trackingId);
+    if (!ok) {
+      alert("Could not copy the tracking number automatically.");
+      return;
+    }
+    setCopiedTracking(true);
+    window.setTimeout(() => setCopiedTracking(false), 1800);
   };
 
   const submitRefundRequest = async () => {
@@ -297,8 +331,7 @@ export default function OrderDetails() {
               ) : null}
 
               <div className="mt-5 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-                Delivery partner: This order is fulfilled by Splash Electronics and delivered by a
-                third-party courier service.
+                Delivery partner: {getDeliveryPartnerMessage(shipment)}
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -486,18 +519,41 @@ export default function OrderDetails() {
                   <div className="font-semibold text-gray-900">
                     {shipment?.courier || "Courier"} | {shipment?.trackingId || "-"}
                   </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    Fulfillment: {FULFILLMENT_MODE_LABELS[shipment?.fulfillmentMode] || "Third-party courier"}
+                  </div>
+                  {shipment?.courierStatus ? (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Courier status: {COURIER_STATUS_LABELS[shipment.courierStatus] || shipment.courierStatus}
+                    </div>
+                  ) : null}
                   {trackingUrl ? (
-                    <a
-                      href={trackingUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-xs font-semibold text-indigo-600 hover:underline"
-                    >
-                      Track shipment
-                    </a>
+                    <div className="mt-1">
+                      <a
+                        href={trackingUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-block text-xs font-semibold text-indigo-600 hover:underline"
+                      >
+                        Open courier tracking
+                      </a>
+                      {shipment?.trackingId ? (
+                        <div className="mt-1 text-[11px] text-gray-500">
+                          If the courier page asks for a tracking number, use:{" "}
+                          <span className="font-semibold text-gray-700">{shipment.trackingId}</span>
+                          <button
+                            type="button"
+                            onClick={handleCopyTracking}
+                            className="ml-2 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                          >
+                            {copiedTracking ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                   <div className="mt-1 text-xs text-gray-500">
-                    Delivered by third-party courier on behalf of Splash Electronics.
+                    {getDeliveryPartnerMessage(shipment)}
                   </div>
                   {shipment?.deliveryOption ? (
                     <div className="mt-1 text-xs text-gray-500">
@@ -540,6 +596,27 @@ export default function OrderDetails() {
                   ) : null}
                 </div>
               ) : null}
+            </section>
+
+            <section className="rounded-3xl border bg-white p-5 shadow-sm">
+              <div className="font-extrabold text-gray-900">Shipment Timeline</div>
+              <div className="mt-4 space-y-3">
+                {shipmentTimeline.length === 0 ? (
+                  <div className="text-sm text-gray-500">No shipment updates yet.</div>
+                ) : (
+                  shipmentTimeline.map((event) => (
+                    <div key={event.id} className="rounded-2xl border bg-gray-50 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-gray-900">{event.label}</div>
+                        <div className="text-[11px] text-gray-500">{formatDate(event.createdAt)}</div>
+                      </div>
+                      {event.details ? (
+                        <div className="mt-1 text-xs text-gray-600">{event.details}</div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
             </section>
 
             {order?.notes ? (

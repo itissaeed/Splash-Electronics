@@ -35,6 +35,30 @@ const canRequestRefund = (status, paymentStatus) => {
 const REFUND_TIME_OPTIONS = ["WITHIN_24_HOURS", "WITHIN_3_DAYS", "WITHIN_7_DAYS"];
 const REVENUE_RECOGNIZED_STATUSES = ["confirmed", "processing", "shipped", "delivered"];
 const STOCK_DEDUCTION_STATUSES = ["shipped", "delivered"];
+const COURIER_STATUSES = [
+  "AWAITING_BOOKING",
+  "BOOKED",
+  "PICKED",
+  "IN_TRANSIT",
+  "AT_HUB",
+  "OUT_FOR_DELIVERY",
+  "DELIVERED",
+  "DELIVERY_FAILED",
+  "RETURN_INITIATED",
+  "RETURNED_TO_MERCHANT",
+];
+const COURIER_STATUS_META = {
+  AWAITING_BOOKING: { label: "Awaiting booking", code: "COURIER_AWAITING_BOOKING" },
+  BOOKED: { label: "Courier booked", code: "COURIER_BOOKED" },
+  PICKED: { label: "Parcel picked up", code: "COURIER_PICKED" },
+  IN_TRANSIT: { label: "In transit", code: "COURIER_IN_TRANSIT" },
+  AT_HUB: { label: "Reached courier hub", code: "COURIER_AT_HUB" },
+  OUT_FOR_DELIVERY: { label: "Out for delivery", code: "COURIER_OUT_FOR_DELIVERY" },
+  DELIVERED: { label: "Delivered by courier", code: "COURIER_DELIVERED" },
+  DELIVERY_FAILED: { label: "Delivery attempt failed", code: "COURIER_DELIVERY_FAILED" },
+  RETURN_INITIATED: { label: "Return initiated", code: "COURIER_RETURN_INITIATED" },
+  RETURNED_TO_MERCHANT: { label: "Returned to merchant", code: "COURIER_RETURNED_TO_MERCHANT" },
+};
 const addDays = (dateLike, days) => {
   const base = new Date(dateLike || new Date());
   if (Number.isNaN(base.getTime())) return new Date();
@@ -49,6 +73,158 @@ const recomputeGrandTotal = (order) => {
   const discountTotal = Number(order?.pricing?.discountTotal || 0);
   order.pricing = order.pricing || {};
   order.pricing.grandTotal = itemsTotal + shippingFee - discountTotal;
+};
+
+const createShipmentEvent = ({
+  code,
+  label,
+  details = "",
+  source = "system",
+  visibleToCustomer = true,
+  createdAt = new Date(),
+}) => ({
+  code,
+  label,
+  details,
+  source,
+  visibleToCustomer,
+  createdAt,
+});
+
+const pushShipmentEvent = (order, event) => {
+  order.shipment = order.shipment || {};
+  order.shipment.events = Array.isArray(order.shipment.events) ? order.shipment.events : [];
+  const lastEvent = order.shipment.events[order.shipment.events.length - 1];
+  if (
+    lastEvent &&
+    lastEvent.code === event.code &&
+    String(lastEvent.details || "").trim() === String(event.details || "").trim()
+  ) {
+    return;
+  }
+  order.shipment.events.push(event);
+};
+
+const syncInternalShipmentEvent = (order, status) => {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "confirmed") {
+    pushShipmentEvent(order, createShipmentEvent({
+      code: "ORDER_CONFIRMED",
+      label: "Order confirmed",
+      details: "The order has been reviewed and confirmed by the store.",
+    }));
+  }
+  if (normalized === "processing") {
+    pushShipmentEvent(order, createShipmentEvent({
+      code: "ORDER_PROCESSING",
+      label: "Preparing shipment",
+      details: "The parcel is being packed and prepared for dispatch.",
+    }));
+  }
+  if (normalized === "shipped") {
+    pushShipmentEvent(order, createShipmentEvent({
+      code: "ORDER_SHIPPED",
+      label: "Handed to delivery partner",
+      details: "The parcel has left the store and is now with the delivery partner.",
+    }));
+  }
+  if (normalized === "delivered") {
+    pushShipmentEvent(order, createShipmentEvent({
+      code: "ORDER_DELIVERED",
+      label: "Order delivered",
+      details: "The order has been marked as delivered.",
+    }));
+  }
+  if (normalized === "cancelled") {
+    pushShipmentEvent(order, createShipmentEvent({
+      code: "ORDER_CANCELLED",
+      label: "Order cancelled",
+      details: "The order was cancelled before delivery.",
+    }));
+  }
+  if (normalized === "returned") {
+    pushShipmentEvent(order, createShipmentEvent({
+      code: "ORDER_RETURNED",
+      label: "Order returned",
+      details: "The shipment was returned after delivery handling.",
+    }));
+  }
+};
+
+const syncCourierStatus = (order, courierStatus, courierStatusNote, source = "admin") => {
+  const normalized = String(courierStatus || "").trim().toUpperCase();
+  if (!normalized) return;
+  if (!COURIER_STATUSES.includes(normalized)) {
+    const err = new Error("Invalid courier status");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  order.shipment = order.shipment || {};
+  order.shipment.courierStatus = normalized;
+  order.shipment.courierStatusNote = String(courierStatusNote || "").trim();
+  order.shipment.courierStatusUpdatedAt = new Date();
+
+  const meta = COURIER_STATUS_META[normalized];
+  pushShipmentEvent(order, createShipmentEvent({
+    code: meta.code,
+    label: meta.label,
+    details: order.shipment.courierStatusNote,
+    source,
+  }));
+};
+
+const applyShipmentAdminFields = ({
+  order,
+  courier,
+  trackingId,
+  trackingUrl,
+  bookingRef,
+  pickupDate,
+  fulfillmentMode,
+  notes,
+}) => {
+  order.shipment = order.shipment || {};
+
+  const nextCourier = String(courier ?? order.shipment?.courier ?? "").trim();
+  const nextTrackingId = String(trackingId ?? order.shipment?.trackingId ?? "").trim();
+  const nextTrackingUrl = String(trackingUrl ?? order.shipment?.trackingUrl ?? "").trim();
+  const nextBookingRef = String(bookingRef ?? order.shipment?.bookingRef ?? "").trim();
+
+  order.shipment.courier = nextCourier;
+  order.shipment.trackingId = nextTrackingId;
+  order.shipment.trackingUrl = nextTrackingUrl;
+  order.shipment.bookingRef = nextBookingRef;
+
+  if (fulfillmentMode) {
+    const nextFulfillmentMode = String(fulfillmentMode).trim().toUpperCase();
+    if (!["THIRD_PARTY_COURIER", "OWN_DELIVERY"].includes(nextFulfillmentMode)) {
+      const err = new Error("Invalid fulfillment mode");
+      err.statusCode = 400;
+      throw err;
+    }
+    order.shipment.fulfillmentMode = nextFulfillmentMode;
+  }
+
+  if (typeof notes === "string") {
+    order.notes = notes.trim();
+  }
+
+  order.shipment.courierCharge = Number(order?.pricing?.shippingFee || 0);
+
+  if (pickupDate) {
+    const dt = new Date(pickupDate);
+    if (!Number.isNaN(dt.getTime())) {
+      order.shipment.pickupDate = dt;
+    }
+  }
+
+  return {
+    nextCourier,
+    nextTrackingId,
+    nextTrackingUrl,
+    nextBookingRef,
+  };
 };
 
 const allowedAdminTransitions = {
@@ -505,6 +681,9 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       trackingUrl,
       bookingRef,
       pickupDate,
+      fulfillmentMode,
+      courierStatus,
+      courierStatusNote,
       notes,
     } = req.body;
 
@@ -551,12 +730,17 @@ exports.adminUpdateOrderStatus = async (req, res) => {
     }
 
     order.status = nextStatus;
-    order.shipment = order.shipment || {};
 
-    const nextCourier = String(courier ?? order.shipment?.courier ?? "").trim();
-    const nextTrackingId = String(trackingId ?? order.shipment?.trackingId ?? "").trim();
-    const nextTrackingUrl = String(trackingUrl ?? order.shipment?.trackingUrl ?? "").trim();
-    const nextBookingRef = String(bookingRef ?? order.shipment?.bookingRef ?? "").trim();
+    const { nextCourier, nextTrackingId } = applyShipmentAdminFields({
+      order,
+      courier,
+      trackingId,
+      trackingUrl,
+      bookingRef,
+      pickupDate,
+      fulfillmentMode,
+      notes,
+    });
 
     if (nextStatus === "shipped" && (!nextCourier || !nextTrackingId)) {
       return res.status(400).json({
@@ -564,30 +748,14 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       });
     }
 
-    order.shipment.courier = nextCourier;
-    order.shipment.trackingId = nextTrackingId;
-    order.shipment.trackingUrl = nextTrackingUrl;
-    order.shipment.bookingRef = nextBookingRef;
-    if (typeof notes === "string") {
-      order.notes = notes.trim();
-    }
-
-    // Courier charge is kept in sync with customer-facing shipping fee.
-    // This prevents double-charging and keeps a single delivery fee model.
-    order.shipment.courierCharge = Number(order?.pricing?.shippingFee || 0);
-
-    if (pickupDate) {
-      const dt = new Date(pickupDate);
-      if (!Number.isNaN(dt.getTime())) {
-        order.shipment.pickupDate = dt;
-      }
-    }
-
     if (nextStatus === "shipped" && !order.shipment.shippedAt) {
       order.shipment.shippedAt = new Date();
     }
     if (nextStatus === "shipped") {
       order.shipment.pickupDate = order.shipment.shippedAt || new Date();
+      if (!courierStatus) {
+        syncCourierStatus(order, "BOOKED", "", "system");
+      }
     }
     if (nextStatus === "shipped" && !order.shipment.expectedDeliveryDate) {
       const fallbackDays = Number(order.shipment?.estimatedDaysMax || 4);
@@ -599,11 +767,18 @@ exports.adminUpdateOrderStatus = async (req, res) => {
 
     if (nextStatus === "delivered") {
       order.shipment.deliveredAt = new Date();
+      syncCourierStatus(order, courierStatus || "DELIVERED", courierStatusNote, courierStatus ? "admin" : "system");
       if (order.payment?.method === "COD") {
         order.payment.status = "paid";
         order.payment.paidAt = new Date();
       }
     }
+
+    if (courierStatus && nextStatus !== "delivered") {
+      syncCourierStatus(order, courierStatus, courierStatusNote, "admin");
+    }
+
+    syncInternalShipmentEvent(order, nextStatus);
 
     if (nextStatus === "returned") {
       const returnReason = "admin_marked_returned_in_orders";
@@ -630,6 +805,51 @@ exports.adminUpdateOrderStatus = async (req, res) => {
   } catch (e) {
     console.error("adminUpdateOrderStatus:", e);
     res.status(e.statusCode || 500).json({ message: e.message || "Failed to update order status" });
+  }
+};
+
+// Admin: PATCH /api/admin/orders/:orderNo/shipment
+// body: { courierStatus?, courierStatusNote?, courier?, trackingId?, ... }
+exports.adminUpdateShipment = async (req, res) => {
+  try {
+    const order = await Order.findOne({ orderNo: req.params.orderNo });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    const {
+      courier,
+      trackingId,
+      trackingUrl,
+      bookingRef,
+      pickupDate,
+      fulfillmentMode,
+      courierStatus,
+      courierStatusNote,
+      notes,
+    } = req.body;
+
+    applyShipmentAdminFields({
+      order,
+      courier,
+      trackingId,
+      trackingUrl,
+      bookingRef,
+      pickupDate,
+      fulfillmentMode,
+      notes,
+    });
+
+    if (courierStatus) {
+      syncCourierStatus(order, courierStatus, courierStatusNote, "admin");
+    } else if (typeof courierStatusNote === "string" && order.shipment?.courierStatus) {
+      order.shipment.courierStatusNote = courierStatusNote.trim();
+      order.shipment.courierStatusUpdatedAt = new Date();
+    }
+
+    const updated = await order.save();
+    return res.json(updated);
+  } catch (e) {
+    console.error("adminUpdateShipment:", e);
+    return res.status(e.statusCode || 500).json({ message: e.message || "Failed to update shipment" });
   }
 };
 
@@ -669,14 +889,17 @@ exports.adminDispatchOrder = async (req, res) => {
     order.shipment.trackingId = String(shipment.trackingId || "").trim();
     order.shipment.trackingUrl = String(shipment.trackingUrl || "").trim();
     order.shipment.bookingRef = String(shipment.bookingRef || "").trim();
+    order.shipment.fulfillmentMode = "THIRD_PARTY_COURIER";
     order.shipment.courierCharge = Number(order?.pricing?.shippingFee || 0);
     const now = new Date();
     order.shipment.shippedAt = now;
     order.shipment.pickupDate = now; // dispatch pickup and shipped timestamp are aligned
     const etaDays = Number(order.shipment?.estimatedDaysMax || 4);
     order.shipment.expectedDeliveryDate = addDays(now, etaDays);
+    syncCourierStatus(order, "BOOKED", `${provider.name} shipment booked`, "courier");
 
     order.status = "shipped";
+    syncInternalShipmentEvent(order, "shipped");
     recomputeGrandTotal(order);
     const updated = await order.save();
     return res.json({
@@ -731,6 +954,7 @@ exports.cancelMyOrder = async (req, res) => {
     await restockOrderItems(order);
     order.status = "cancelled";
     order.notes = [order.notes, "Cancelled by customer"].filter(Boolean).join(" | ");
+    syncInternalShipmentEvent(order, "cancelled");
     await ensureRefundRequestForCancelledPaidOrder(
       order,
       `Auto-created refund request after customer cancelled order ${order.orderNo}`
@@ -761,6 +985,8 @@ exports.confirmMyDelivery = async (req, res) => {
     order.status = "delivered";
     order.shipment = order.shipment || {};
     order.shipment.deliveredAt = new Date();
+    syncCourierStatus(order, "DELIVERED", "Delivery confirmed by customer", "customer");
+    syncInternalShipmentEvent(order, "delivered");
     if (order.payment?.method === "COD" && order.payment?.status !== "paid") {
       order.payment.status = "paid";
       order.payment.paidAt = new Date();

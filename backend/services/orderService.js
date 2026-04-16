@@ -21,6 +21,22 @@ const toNum = (v, def) => {
 const DEFAULT_IMAGE_URL =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
 
+const createShipmentEvent = ({
+  code,
+  label,
+  details = "",
+  source = "system",
+  visibleToCustomer = true,
+  createdAt = new Date(),
+}) => ({
+  code,
+  label,
+  details,
+  source,
+  visibleToCustomer,
+  createdAt,
+});
+
 const getVariantImage = (variant) => {
   const first = Array.isArray(variant?.images) ? variant.images[0] : null;
   if (!first) return DEFAULT_IMAGE_URL;
@@ -451,14 +467,24 @@ const createOrderFromCartForUser = async ({
         : undefined,
     },
     shipment: {
+      fulfillmentMode: "THIRD_PARTY_COURIER",
       deliveryOption: shippingQuote.deliveryOption,
       estimatedDaysMin: shippingQuote.estimatedDaysMin,
       estimatedDaysMax: shippingQuote.estimatedDaysMax,
+      courierStatus: "AWAITING_BOOKING",
+      courierStatusUpdatedAt: new Date(),
       quote: {
         serviceable: shippingQuote.serviceable,
         appliedFreeShipping: shippingQuote.appliedFreeShipping,
         freeShippingThreshold: shippingQuote.freeShippingThreshold,
       },
+      events: [
+        createShipmentEvent({
+          code: "ORDER_PLACED",
+          label: "Order placed",
+          details: `Order received with ${shippingQuote.deliveryOption.toLowerCase()} delivery.`,
+        }),
+      ],
     },
     analytics: {
       visitorKey: String(visitorKey || "").trim(),

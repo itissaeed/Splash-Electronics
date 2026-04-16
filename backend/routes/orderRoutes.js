@@ -9,6 +9,7 @@ const {
   getOrderByOrderNo,
   adminGetOrders,
   adminUpdateOrderStatus,
+  adminUpdateShipment,
   cancelMyOrder,
   confirmMyDelivery,
   requestMyRefund,
@@ -24,5 +25,6 @@ router.get("/:orderNo", protect, getOrderByOrderNo);
 
 router.get("/admin/all", protect, admin, adminGetOrders);
 router.put("/admin/:orderNo/status", protect, admin, adminUpdateOrderStatus);
+router.patch("/admin/:orderNo/shipment", protect, admin, adminUpdateShipment);
 
 module.exports = router;

@@ -31,6 +31,15 @@ const paymentSchema = new mongoose.Schema({
   paidAt: Date,
 }, { _id: false });
 
+const shipmentEventSchema = new mongoose.Schema({
+  code: { type: String, required: true },
+  label: { type: String, required: true },
+  details: { type: String, default: "" },
+  source: { type: String, enum: ["system", "admin", "courier", "customer"], default: "system" },
+  visibleToCustomer: { type: Boolean, default: true },
+  createdAt: { type: Date, default: Date.now },
+}, { _id: true });
+
 const orderSchema = new mongoose.Schema({
   orderNo: { type: String, required: true, unique: true }, // readable order code
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -73,6 +82,11 @@ const orderSchema = new mongoose.Schema({
   },
 
   shipment: {
+    fulfillmentMode: {
+      type: String,
+      enum: ["THIRD_PARTY_COURIER", "OWN_DELIVERY"],
+      default: "THIRD_PARTY_COURIER",
+    },
     deliveryOption: { type: String, enum: ["STANDARD", "EXPRESS"], default: "STANDARD" },
     estimatedDaysMin: Number,
     estimatedDaysMax: Number,
@@ -90,6 +104,25 @@ const orderSchema = new mongoose.Schema({
     expectedDeliveryDate: Date,
     shippedAt: Date,
     deliveredAt: Date,
+    courierStatus: {
+      type: String,
+      enum: [
+        "AWAITING_BOOKING",
+        "BOOKED",
+        "PICKED",
+        "IN_TRANSIT",
+        "AT_HUB",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+        "DELIVERY_FAILED",
+        "RETURN_INITIATED",
+        "RETURNED_TO_MERCHANT",
+      ],
+      default: "AWAITING_BOOKING",
+    },
+    courierStatusNote: String,
+    courierStatusUpdatedAt: Date,
+    events: [shipmentEventSchema],
   },
 
   notes: String,
