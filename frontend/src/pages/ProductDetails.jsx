@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../utils/api";
+import { getProductDisplayPricing } from "../utils/productPricing";
 import useCompareItems from "../utils/useCompare";
 import { UserContext } from "./context/UserContext";
 import {
@@ -478,13 +479,14 @@ export default function ProductDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVariantId, gallery.join("|")]);
 
-  const price = useMemo(() => {
-    return selectedVariant?.price ?? product?.basePrice ?? 0;
-  }, [selectedVariant, product]);
-
-  const originalPrice = useMemo(() => Number(product?.originalPrice || 0), [product]);
-  const hasDiscount = originalPrice > price;
-  const saveAmount = hasDiscount ? originalPrice - price : 0;
+  const pricing = useMemo(
+    () => getProductDisplayPricing(product, selectedVariant),
+    [product, selectedVariant]
+  );
+  const price = pricing.price;
+  const originalPrice = pricing.originalPrice;
+  const hasDiscount = pricing.hasDiscount;
+  const saveAmount = pricing.saveAmount;
 
   const stock = useMemo(() => {
     return getVariantAvailableStock(selectedVariant);
@@ -846,7 +848,7 @@ export default function ProductDetails() {
                   {product?.warrantyMonths ? chip(`Warranty: ${product.warrantyMonths} mo`) : null}
                   {catName ? chip(catName) : null}
                   {hasDiscount ? chip(`Save ${money(saveAmount)}`) : null}
-                  {product?.promoLabel ? chip(product.promoLabel) : null}
+                  {pricing.label ? chip(pricing.label) : null}
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">

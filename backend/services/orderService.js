@@ -146,8 +146,8 @@ const getShippingQuote = async ({
 const validateCouponForItems = async ({
   couponCode,
   itemsTotal,
-  productIds = [],
-  categoryIds = [],
+  couponItems = [],
+  userId,
   session,
 }) => {
   const code = String(couponCode || "").toUpperCase().trim();
@@ -176,43 +176,110 @@ const validateCouponForItems = async ({
     err.statusCode = 400;
     throw err;
   }
-  if (itemsTotal < (coupon.minCartTotal || 0)) {
-    const err = new Error("Cart total too low for this coupon");
+  const applicableProducts = (coupon.applicableProducts || []).map((id) => String(id));
+  const applicableCategories = (coupon.applicableCategories || []).map((id) => String(id));
+  const applicableUsers = (coupon.applicableUsers || []).map((id) => String(id));
+  const hasProductScope = applicableProducts.length > 0;
+  const hasCategoryScope = applicableCategories.length > 0;
+  const customerEligibility = String(coupon.customerEligibility || "ALL").toUpperCase();
+  const hasUserScope = customerEligibility === "SPECIFIC_USERS" && applicableUsers.length > 0;
+
+  if (customerEligibility === "SPECIFIC_USERS" && !hasUserScope) {
+    const err = new Error("Coupon customer eligibility is not configured");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (hasUserScope && !applicableUsers.includes(String(userId || ""))) {
+    const err = new Error("Coupon is not available for this account");
     err.statusCode = 400;
     throw err;
   }
 
-  const applicableProducts = (coupon.applicableProducts || []).map((id) => String(id));
-  const applicableCategories = (coupon.applicableCategories || []).map((id) => String(id));
-  const hasProductScope = applicableProducts.length > 0;
-  const hasCategoryScope = applicableCategories.length > 0;
+  const previousOrderCount = userId
+    ? await Order.countDocuments({
+        user: userId,
+        status: "delivered",
+      }).session(session)
+    : 0;
+  if (customerEligibility === "NEW_CUSTOMERS" && previousOrderCount > 0) {
+    const err = new Error("Coupon is only available for new customers");
+    err.statusCode = 400;
+    throw err;
+  }
+  if (customerEligibility === "RETURNING_CUSTOMERS" && previousOrderCount === 0) {
+    const err = new Error("Coupon is only available for returning customers");
+    err.statusCode = 400;
+    throw err;
+  }
 
-  if (hasProductScope || hasCategoryScope) {
-    const productMatch = productIds.some((id) => applicableProducts.includes(String(id)));
-    const categoryMatch = categoryIds.some((id) => applicableCategories.includes(String(id)));
-    if (!productMatch && !categoryMatch) {
-      const err = new Error("Coupon is not applicable to the items in your cart");
+  if (coupon.perCustomerUsageLimit > 0 && userId) {
+    const customerUsageCount = await Order.countDocuments({
+      user: userId,
+      "coupon.couponId": coupon._id,
+      "coupon.usageCountedAt": { $exists: true, $ne: null },
+    }).session(session);
+    if (customerUsageCount >= coupon.perCustomerUsageLimit) {
+      const err = new Error("You have already reached the usage limit for this coupon");
       err.statusCode = 400;
       throw err;
     }
   }
 
+  const normalizedCouponItems = Array.isArray(couponItems) ? couponItems : [];
+  const eligibleItems = normalizedCouponItems.filter((item) => {
+    const productMatch = hasProductScope
+      ? applicableProducts.includes(String(item?.productId || ""))
+      : false;
+    const categoryMatch = hasCategoryScope
+      ? applicableCategories.includes(String(item?.categoryId || ""))
+      : false;
+    if (!hasProductScope && !hasCategoryScope) return true;
+    return productMatch || categoryMatch;
+  });
+  const eligibleSubtotal = eligibleItems.reduce(
+    (sum, item) => sum + Math.max(0, Number(item?.lineTotal || 0)),
+    0
+  );
+
+  if ((hasProductScope || hasCategoryScope) && eligibleSubtotal <= 0) {
+    const err = new Error("Coupon is not applicable to the items in your cart");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const hasScopedTargets = hasProductScope || hasCategoryScope;
+  const qualifyingSubtotal = hasScopedTargets ? eligibleSubtotal : itemsTotal;
+  if (qualifyingSubtotal < (coupon.minCartTotal || 0)) {
+    const err = new Error(
+      hasProductScope || hasCategoryScope
+        ? "Eligible items total is too low for this coupon"
+        : "Cart total too low for this coupon"
+    );
+    err.statusCode = 400;
+    throw err;
+  }
+
   let discountTotal = 0;
   const couponType = normalizeCouponType(coupon.type);
+  const discountBase = hasScopedTargets && coupon.discountAppliesTo === "ENTIRE_CART"
+    ? itemsTotal
+    : qualifyingSubtotal;
   if (couponType === "PERCENT") {
-    discountTotal = (itemsTotal * coupon.value) / 100;
+    discountTotal = (discountBase * coupon.value) / 100;
     if (coupon.maxDiscount) {
       discountTotal = Math.min(discountTotal, coupon.maxDiscount);
     }
   } else {
-    discountTotal = coupon.value;
+    discountTotal = Math.min(coupon.value, discountBase);
   }
 
-  discountTotal = Math.min(discountTotal, itemsTotal);
+  discountTotal = Math.min(discountTotal, discountBase, itemsTotal);
 
   return {
     coupon,
     discountTotal,
+    qualifyingSubtotal,
+    discountBase,
     couponApplied: {
       couponId: coupon._id,
       code: coupon.code,
@@ -264,8 +331,7 @@ const createOrderFromCartForUser = async ({
   const orderItems = [];
   const reservationLedgerItems = [];
   let itemsTotal = 0;
-  const productIds = [];
-  const categoryIds = [];
+  const couponItems = [];
   const requestedPairs = cart.items.map((ci) => ({
     productId: ci.product,
     variantId: ci.variantId,
@@ -322,11 +388,14 @@ const createOrderFromCartForUser = async ({
       newAvailable: Math.max(0, availableStock - Number(ci.qty || 0)),
     });
 
-    productIds.push(product._id);
-    if (product.category) {
-      categoryIds.push(product.category);
-    }
-    itemsTotal += unitPrice * ci.qty;
+    const lineTotal = unitPrice * ci.qty;
+    couponItems.push({
+      productId: product._id,
+      categoryId: product.category || null,
+      qty: Number(ci.qty || 0),
+      lineTotal,
+    });
+    itemsTotal += lineTotal;
   }
 
   let discountTotal = 0;
@@ -336,8 +405,8 @@ const createOrderFromCartForUser = async ({
     const couponResult = await validateCouponForItems({
       couponCode,
       itemsTotal,
-      productIds,
-      categoryIds,
+      couponItems,
+      userId,
       session,
     });
     discountTotal = couponResult.discountTotal;

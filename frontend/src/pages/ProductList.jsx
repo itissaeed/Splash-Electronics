@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import api from "../utils/api";
+import { getProductDisplayPricing } from "../utils/productPricing";
 import Breadcrumb from "../BreadCrumb";
 import {
   FaCheck,
@@ -27,7 +28,6 @@ const money = (n) => {
   return `৳${num.toLocaleString("en-BD")}`;
 };
 
-const getOriginalPrice = (product) => Number(product?.originalPrice || 0);
 
 const getProductStock = (product) =>
   (Array.isArray(product?.variants) ? product.variants : []).reduce(
@@ -887,10 +887,11 @@ export default function ProductListPage() {
                 p?.images?.[0]?.url ||
                 fallbackImg;
 
-              const price = p?.basePrice ?? p?.variants?.[0]?.price ?? p?.price ?? 0;
-              const originalPrice = getOriginalPrice(p);
-              const hasDiscount = originalPrice > price;
-              const saveAmount = hasDiscount ? originalPrice - price : 0;
+              const pricing = getProductDisplayPricing(p);
+              const price = pricing.price;
+              const originalPrice = pricing.originalPrice;
+              const hasDiscount = pricing.hasDiscount;
+              const saveAmount = pricing.saveAmount;
               const stockCount = getProductStock(p);
               const inStock = stockCount > 0;
 
@@ -920,9 +921,9 @@ export default function ProductListPage() {
                             Save: {money(saveAmount)}
                           </span>
                         ) : null}
-                        {p?.promoLabel ? (
+                        {pricing.label ? (
                           <span className="rounded-full bg-fuchsia-700 px-3 py-1 text-xs font-bold text-white shadow">
-                            {p.promoLabel}
+                            {pricing.label}
                           </span>
                         ) : null}
                           <span

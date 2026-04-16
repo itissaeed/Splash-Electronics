@@ -9,6 +9,7 @@ const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 const { getVisitorKey } = require("../utils/visitorKey");
 const { enrichProductsWithInventory } = require("../services/stockReservationService");
+const { applyOfferPricingToProducts } = require("../services/offerPricingService");
 
 // helper: safe number parsing
 const toNum = (v, def) => {
@@ -303,6 +304,7 @@ exports.getProducts = async (req, res) => {
         Object.entries(dynamicFilters).every(([key, value]) => productMatchesFilter(product, key, value))
       );
       filteredProducts = await enrichProductsWithInventory(filteredProducts);
+      await applyOfferPricingToProducts(filteredProducts);
 
       if (req.query.inStock === "true") {
         filteredProducts = filteredProducts.filter(
@@ -325,6 +327,7 @@ exports.getProducts = async (req, res) => {
       const allProducts = await baseQuery;
       const annotated = await enrichProductsWithInventory(allProducts);
       const filtered = annotated.filter((product) => Number(product?.inventorySummary?.available || 0) > 0);
+      await applyOfferPricingToProducts(filtered);
       const total = filtered.length;
       const products = filtered.slice(pageSize * (page - 1), pageSize * (page - 1) + pageSize);
       return res.json({
@@ -338,6 +341,7 @@ exports.getProducts = async (req, res) => {
     const count = await Product.countDocuments(filter);
     const products = await baseQuery.limit(pageSize).skip(pageSize * (page - 1));
     await enrichProductsWithInventory(products);
+    await applyOfferPricingToProducts(products);
 
     res.json({ products, page, pages: Math.ceil(count / pageSize), total: count });
   } catch (error) {
@@ -417,6 +421,7 @@ exports.getProductById = async (req, res) => {
 
     await recordProductView({ product, req });
     await enrichProductsWithInventory([product]);
+    await applyOfferPricingToProducts([product]);
     res.json(product);
   } catch (error) {
     console.error("getProductById Error:", error);
@@ -438,6 +443,7 @@ exports.getProductBySlug = async (req, res) => {
 
     await recordProductView({ product, req });
     await enrichProductsWithInventory([product]);
+    await applyOfferPricingToProducts([product]);
     res.json(product);
   } catch (error) {
     console.error("getProductBySlug Error:", error);
@@ -454,6 +460,7 @@ exports.getAllProductsAdmin = async (req, res) => {
       .sort({ createdAt: -1 });
 
     await enrichProductsWithInventory(products);
+    await applyOfferPricingToProducts(products);
     res.json({ products });
   } catch (error) {
     console.error("getAllProductsAdmin Error:", error);
@@ -471,8 +478,6 @@ exports.createProduct = async (req, res) => {
       category,
       description,
       basePrice,
-      originalPrice,
-      promoLabel,
       highlights,
       specs,
       warrantyMonths,
@@ -503,8 +508,6 @@ exports.createProduct = async (req, res) => {
       category,
       description,
       basePrice: computeBasePrice(basePrice, normalizedVariants),
-      originalPrice: toNum(originalPrice, 0),
-      promoLabel: String(promoLabel || "").trim(),
       highlights: Array.isArray(highlights) ? highlights : [],
       specs: specs || {},
       warrantyMonths: toNum(warrantyMonths, 0),
@@ -540,10 +543,6 @@ exports.updateProduct = async (req, res) => {
     if (up.brand !== undefined) product.brand = up.brand;
     if (up.category !== undefined) product.category = up.category;
     if (up.description !== undefined) product.description = up.description;
-    if (up.originalPrice !== undefined)
-      product.originalPrice = toNum(up.originalPrice, product.originalPrice);
-    if (up.promoLabel !== undefined)
-      product.promoLabel = String(up.promoLabel || "").trim();
 
     if (up.highlights !== undefined)
       product.highlights = Array.isArray(up.highlights) ? up.highlights : product.highlights;
@@ -615,6 +614,7 @@ exports.getFeaturedProducts = async (req, res) => {
       .sort({ createdAt: -1 });
 
     await enrichProductsWithInventory(products);
+    await applyOfferPricingToProducts(products);
     res.json(products);
   } catch (error) {
     console.error("getFeaturedProducts Error:", error);

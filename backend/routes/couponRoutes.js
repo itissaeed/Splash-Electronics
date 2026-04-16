@@ -3,11 +3,15 @@ const express = require("express");
 const router = express.Router();
 const { protect, admin } = require("../middleware/authMiddleware");
 const {
+  adminGenerateCouponCode,
   adminListCoupons,
   adminCreateCoupon,
   adminUpdateCoupon,
   adminDeleteCoupon,
 } = require("../controllers/couponController");
+
+// GET /api/admin/coupons/generate-code
+router.get("/generate-code", protect, admin, adminGenerateCouponCode);
 
 // GET /api/admin/coupons
 router.get("/", protect, admin, adminListCoupons);

@@ -19,6 +19,7 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const adminCustomerRoutes = require('./routes/adminCustomerRoutes');
 const couponRoutes = require('./routes/couponRoutes');
+const offerRoutes = require('./routes/offerRoutes');
 const adminSettingsRoutes = require('./routes/adminSettingsRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
@@ -73,6 +74,7 @@ app.use('/api/admin/orders', adminOrderRoutes);
 app.use('/api/admin/inventory', inventoryRoutes);
 app.use('/api/admin/customers', adminCustomerRoutes); 
 app.use('/api/admin/coupons', couponRoutes);
+app.use('/api/admin/offers', offerRoutes);
 app.use('/api/admin/analytics', analyticsRoutes);
 app.use('/api/admin/settings', adminSettingsRoutes);
 

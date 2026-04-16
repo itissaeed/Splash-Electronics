@@ -133,7 +133,11 @@ exports.adminUpdateReturnStatus = async (req, res) => {
 exports.getMyReturns = async (req, res) => {
   try {
     const filter = req.user.isAdmin ? {} : { user: req.user._id };
-    const rows = await ReturnRefund.find(filter).sort({ createdAt: -1 }).populate("order").lean();
+    const rows = await ReturnRefund.find(filter)
+      .sort({ createdAt: -1 })
+      .populate("order")
+      .populate("user", "name email phone")
+      .lean();
     res.json(rows);
   } catch (e) {
     console.error("getMyReturns:", e);
