@@ -467,6 +467,99 @@ test("adminUpdateOrderStatus rejects skipping directly from pending to shipped",
   }
 });
 
+test("adminUpdateShipment records courier updates without changing the main order status", async () => {
+  const order = {
+    _id: "order-5",
+    orderNo: "ORD-SHIPMENT-1",
+    status: "shipped",
+    user: "user-1",
+    pricing: { shippingFee: 100, itemsTotal: 2400, discountTotal: 0, grandTotal: 2500 },
+    shipment: {
+      courier: "Pathao",
+      trackingId: "TRK-OLD",
+      courierStatus: "IN_TRANSIT",
+      events: [],
+    },
+    async save() {
+      return this;
+    },
+  };
+
+  const { loaded: orderController, restore } = withFreshModule({
+    target: "controllers/orderController.js",
+    mocks: {
+      "models/Order.js": {
+        findOne: async () => order,
+        aggregate: async () => [],
+      },
+      "models/product.js": {
+        findById: async () => null,
+      },
+      "models/Cart.js": {},
+      "models/InventoryLedger.js": {
+        create: async () => null,
+      },
+      "models/ReturnRefund.js": {
+        findOne: async () => null,
+        create: async () => null,
+      },
+      "services/orderService.js": {
+        createOrderFromCartForUser: async () => {
+          throw new Error("not used");
+        },
+        getShippingQuote: async () => ({}),
+        validateCouponForItems: async () => ({}),
+      },
+      "utils/shippingValidation.js": {
+        validateShippingPayload: () => ({ ok: true }),
+      },
+      "services/courier.js": {
+        getCourierProvider: () => ({
+          createShipment: async () => ({
+            courier: "Pathao",
+            trackingId: "TRK-1",
+          }),
+        }),
+      },
+      "utils/visitorKey.js": {
+        getVisitorKey: () => "visitor-1",
+      },
+      "services/stockReservationService.js": {
+        PREPAID_METHODS: ["BKASH", "NAGAD", "CARD", "BANK", "SSLCOMMERZ"],
+        releaseExpiredReservations: async () => null,
+        releaseReservationForOrder: async () => null,
+        getReservedQtyMap: async () => new Map(),
+        getAvailableStock: ({ physicalStock, reservedQty }) =>
+          Math.max(0, Number(physicalStock || 0) - Number(reservedQty || 0)),
+      },
+    },
+  });
+
+  try {
+    const req = {
+      params: { orderNo: "ORD-SHIPMENT-1" },
+      user: { _id: "admin-1", isAdmin: true },
+      body: {
+        courierStatus: "OUT_FOR_DELIVERY",
+        courierStatusNote: "Courier called the customer before arrival",
+        trackingId: "TRK-NEW",
+      },
+    };
+    const res = createResponse();
+
+    await orderController.adminUpdateShipment(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(order.status, "shipped");
+    assert.equal(order.shipment.trackingId, "TRK-NEW");
+    assert.equal(order.shipment.courierStatus, "OUT_FOR_DELIVERY");
+    assert.equal(order.shipment.events.length, 1);
+    assert.equal(order.shipment.events[0].code, "COURIER_OUT_FOR_DELIVERY");
+  } finally {
+    restore();
+  }
+});
+
 const run = async () => {
   let failed = 0;
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../utils/api";
 import { buildTrackingUrl } from "../../utils/shipmentTracking";
+import { COURIER_STATUS_LABELS } from "../../utils/shipmentTimeline";
 
 const tokenHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
@@ -51,6 +52,16 @@ const formatDate = (value) => {
   });
 };
 
+const copyToClipboard = async (value) => {
+  if (!value || !navigator?.clipboard?.writeText) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-4">
@@ -80,6 +91,7 @@ export default function MyOrders() {
   const [errMsg, setErrMsg] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [copiedOrderId, setCopiedOrderId] = useState("");
   const navigate = useNavigate();
 
   const fetchMyOrders = async () => {
@@ -148,6 +160,16 @@ export default function MyOrders() {
       activeCount,
     };
   }, [orders]);
+
+  const handleCopyTracking = async (orderId, trackingId) => {
+    const ok = await copyToClipboard(trackingId);
+    if (!ok) {
+      alert("Could not copy the tracking number automatically.");
+      return;
+    }
+    setCopiedOrderId(orderId);
+    window.setTimeout(() => setCopiedOrderId(""), 1800);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -306,10 +328,31 @@ export default function MyOrders() {
                                   rel="noreferrer"
                                   className="font-semibold text-indigo-600 hover:underline"
                                 >
-                                  Track
+                                  Open courier tracking
                                 </a>
                               </>
                             ) : null}
+                          </p>
+                        ) : null}
+                        {o?.shipment?.trackingId && trackingUrl ? (
+                          <p className="mt-1 text-[11px] text-gray-500">
+                            Use tracking number:{" "}
+                            <span className="font-semibold text-gray-700">{o.shipment.trackingId}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyTracking(o._id, o.shipment.trackingId)}
+                              className="ml-2 rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+                            >
+                              {copiedOrderId === o._id ? "Copied" : "Copy"}
+                            </button>
+                          </p>
+                        ) : null}
+                        {o?.shipment?.courierStatus ? (
+                          <p className="mt-1 text-xs text-gray-500">
+                            Courier update:{" "}
+                            <span className="font-semibold text-gray-700">
+                              {COURIER_STATUS_LABELS[o.shipment.courierStatus] || o.shipment.courierStatus}
+                            </span>
                           </p>
                         ) : null}
                       </div>
