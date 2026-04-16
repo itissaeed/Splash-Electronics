@@ -56,7 +56,9 @@ const assertUniqueSkus = (variants = []) => {
 };
 
 const roundToTenth = (value) => Math.round(value * 10) / 10;
+const PUBLICATION_STATUSES = new Set(["draft", "published", "archived"]);
 const ACTIVE_STOREFRONT_PRODUCT_FILTER = {
+  publicationStatus: "published",
   isActive: true,
   isDeleted: { $ne: true },
 };
@@ -206,6 +208,255 @@ const hasDeliveredPurchaseForProduct = async ({ productId, userId }) => {
   });
 
   return Boolean(purchaseMatch);
+};
+
+const normalizePublicationStatus = (rawStatus, fallback = "draft") => {
+  const normalized = String(rawStatus || "")
+    .trim()
+    .toLowerCase();
+  return PUBLICATION_STATUSES.has(normalized) ? normalized : fallback;
+};
+
+const resolvePublicationStatus = ({
+  publicationStatus,
+  isActive,
+  fallback = "draft",
+}) => {
+  if (publicationStatus !== undefined) {
+    return normalizePublicationStatus(publicationStatus, fallback);
+  }
+
+  if (isActive === true) return "published";
+  if (isActive === false) return fallback === "published" ? "draft" : fallback;
+  return fallback;
+};
+
+const applyPublicationStatusToProduct = (product, nextStatus) => {
+  product.publicationStatus = nextStatus;
+  product.isActive = nextStatus === "published" && !product.isDeleted;
+};
+
+const collectNormalizedSkus = (variants = []) =>
+  Array.from(
+    new Set(
+      (Array.isArray(variants) ? variants : [])
+        .map((variant) => String(variant?.sku || "").trim())
+        .filter(Boolean)
+        .map((sku) => sku.toLowerCase())
+    )
+  );
+
+const assertSkusAvailable = async (variants = [], excludeProductId = null) => {
+  const normalizedSkus = collectNormalizedSkus(variants);
+  if (!normalizedSkus.length) return;
+
+  const query = {
+    "variants.sku": { $in: normalizedSkus },
+  };
+
+  if (excludeProductId) {
+    query._id = { $ne: excludeProductId };
+  }
+
+  const conflictingProducts = await Product.find(query).select("name variants.sku");
+  if (!conflictingProducts.length) return;
+
+  const conflictingSku = normalizedSkus.find((sku) =>
+    conflictingProducts.some((product) =>
+      (product?.variants || []).some(
+        (variant) => String(variant?.sku || "").trim().toLowerCase() === sku
+      )
+    )
+  );
+
+  if (!conflictingSku) return;
+
+  const err = new Error(`SKU already exists: ${conflictingSku}`);
+  err.statusCode = 409;
+  throw err;
+};
+
+const slugifyText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+const makeUniqueSlug = async (baseSlug) => {
+  const root = slugifyText(baseSlug) || `product-${Date.now()}`;
+  let candidate = root;
+  let suffix = 2;
+
+  while (await Product.exists({ slug: candidate })) {
+    candidate = `${root}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+};
+
+const skuExists = async (sku) => {
+  if (!sku) return false;
+  const exists = await Product.exists({ "variants.sku": String(sku).trim() });
+  return Boolean(exists);
+};
+
+const makeUniqueSku = async (baseSku, reserved = new Set()) => {
+  const root = String(baseSku || "").trim() || "SKU";
+  let candidate = root;
+  let suffix = 2;
+
+  while (reserved.has(candidate.toLowerCase()) || (await skuExists(candidate))) {
+    candidate = `${root}-${suffix}`;
+    suffix += 1;
+  }
+
+  reserved.add(candidate.toLowerCase());
+  return candidate;
+};
+
+const normalizeBoolean = (value, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (["true", "1", "yes", "y", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "n", "off"].includes(normalized)) return false;
+  return fallback;
+};
+
+const splitPipeValues = (value) =>
+  String(value || "")
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const downloadRemoteImageBuffer = async (url) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const error = new Error(`Failed to download image: ${url}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (!contentType.startsWith("image/")) {
+    const error = new Error(`URL did not return an image: ${url}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+};
+
+const attachVariantImagesFromUrls = async (product, variants = []) => {
+  if (!product || !Array.isArray(variants) || !variants.length) return { uploadedCount: 0, errors: [] };
+
+  let uploadedCount = 0;
+  const errors = [];
+
+  for (const variantInput of variants) {
+    const sku = String(variantInput?.sku || "").trim();
+    const imageUrls = splitPipeValues(variantInput?.imageUrls);
+    if (!sku || !imageUrls.length) continue;
+
+    const variant = (product.variants || []).find(
+      (item) => String(item?.sku || "").trim().toLowerCase() === sku.toLowerCase()
+    );
+
+    if (!variant) {
+      errors.push({ sku, message: `Variant not found for image import: ${sku}` });
+      continue;
+    }
+
+    for (const imageUrl of imageUrls) {
+      try {
+        const buffer = await downloadRemoteImageBuffer(imageUrl);
+        const result = await uploadFromBuffer(buffer);
+        variant.images.push({ url: result.secure_url, public_id: result.public_id });
+        uploadedCount += 1;
+      } catch (error) {
+        errors.push({
+          sku,
+          imageUrl,
+          message: error.message || `Failed to import image for SKU ${sku}`,
+        });
+      }
+    }
+  }
+
+  if (uploadedCount > 0) {
+    await product.save();
+  }
+
+  return { uploadedCount, errors };
+};
+
+const createProductDocument = async (input = {}) => {
+  const {
+    name,
+    slug,
+    brand,
+    category,
+    description,
+    basePrice,
+    highlights,
+    specs,
+    warrantyMonths,
+    tags,
+    isFeatured,
+    publicationStatus,
+    isActive,
+    variants,
+  } = input;
+
+  if (!name || !slug || !brand || !category || !description) {
+    const error = new Error("name, slug, brand, category, description are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const normalizedSlug = String(slug).toLowerCase().trim();
+  const exists = await Product.findOne({ slug: normalizedSlug });
+  if (exists) {
+    const error = new Error("Product slug already exists");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const normalizedVariants = Array.isArray(variants) ? variants : [];
+  if (normalizedVariants.length) assertUniqueSkus(normalizedVariants);
+  await assertSkusAvailable(normalizedVariants);
+
+  const nextStatus = resolvePublicationStatus({
+    publicationStatus,
+    isActive,
+    fallback: "draft",
+  });
+
+  return Product.create({
+    name: String(name).trim(),
+    slug: normalizedSlug,
+    brand,
+    category,
+    description,
+    basePrice: computeBasePrice(basePrice, normalizedVariants),
+    highlights: Array.isArray(highlights) ? highlights : [],
+    specs: specs || {},
+    warrantyMonths: toNum(warrantyMonths, 0),
+    tags: Array.isArray(tags) ? tags : [],
+    publicationStatus: nextStatus,
+    isFeatured: normalizeBoolean(isFeatured, false),
+    variants: normalizedVariants,
+    rating: 0,
+    numReviews: 0,
+    isActive: nextStatus === "published",
+    isDeleted: false,
+    deletedAt: null,
+  });
 };
 
 // --- Public: GET /api/products (pagination + filters) ---
@@ -483,6 +734,8 @@ exports.createProduct = async (req, res) => {
       warrantyMonths,
       tags,
       isFeatured,
+      publicationStatus,
+      isActive,
       variants, // [{sku, attributes:{color,ram,storage}, price, countInStock, isDefault}]
     } = req.body;
 
@@ -500,6 +753,13 @@ exports.createProduct = async (req, res) => {
     // ✅ SKU uniqueness inside this product
     const normalizedVariants = Array.isArray(variants) ? variants : [];
     if (normalizedVariants.length) assertUniqueSkus(normalizedVariants);
+    await assertSkusAvailable(normalizedVariants);
+
+    const nextStatus = resolvePublicationStatus({
+      publicationStatus,
+      isActive,
+      fallback: "draft",
+    });
 
     const product = await Product.create({
       name: String(name).trim(),
@@ -512,11 +772,12 @@ exports.createProduct = async (req, res) => {
       specs: specs || {},
       warrantyMonths: toNum(warrantyMonths, 0),
       tags: Array.isArray(tags) ? tags : [],
+      publicationStatus: nextStatus,
       isFeatured: !!isFeatured,
       variants: normalizedVariants,
       rating: 0,
       numReviews: 0,
-      isActive: true,
+      isActive: nextStatus === "published",
       isDeleted: false,
       deletedAt: null,
     });
@@ -526,6 +787,99 @@ exports.createProduct = async (req, res) => {
     console.error("createProduct Error:", error);
     res.status(error.statusCode || 500).json({
       message: error.message || "Failed to create product",
+    });
+  }
+};
+
+// --- Admin: POST /api/admin/products/bulk-import ---
+exports.bulkImportProducts = async (req, res) => {
+  try {
+    const products = Array.isArray(req.body?.products) ? req.body.products : [];
+    if (!products.length) {
+      return res.status(400).json({ message: "products array is required" });
+    }
+
+    const fileSlugSet = new Set();
+    const fileSkuSet = new Set();
+    const created = [];
+    const errors = [];
+
+    for (const [index, rawProduct] of products.entries()) {
+      const rowNumber = Number(rawProduct?.rowNumber || index + 2);
+
+      try {
+        const normalizedName = String(rawProduct?.name || "").trim();
+        const normalizedSlug = slugifyText(rawProduct?.slug || normalizedName);
+
+        if (!normalizedName) {
+          throw Object.assign(new Error("Product name is required"), { statusCode: 400 });
+        }
+        if (!normalizedSlug) {
+          throw Object.assign(new Error("Product slug is required"), { statusCode: 400 });
+        }
+
+        const slugKey = normalizedSlug.toLowerCase();
+        if (fileSlugSet.has(slugKey)) {
+          throw Object.assign(new Error(`Duplicate CSV slug: ${normalizedSlug}`), { statusCode: 400 });
+        }
+        fileSlugSet.add(slugKey);
+
+        const variants = Array.isArray(rawProduct?.variants) ? rawProduct.variants : [];
+        const normalizedVariantSkus = collectNormalizedSkus(variants);
+        for (const sku of normalizedVariantSkus) {
+          if (fileSkuSet.has(sku)) {
+            throw Object.assign(new Error(`Duplicate CSV SKU: ${sku}`), { statusCode: 400 });
+          }
+          fileSkuSet.add(sku);
+        }
+
+        const product = await createProductDocument({
+          ...rawProduct,
+          name: normalizedName,
+          slug: normalizedSlug,
+        });
+
+        const imageImport = await attachVariantImagesFromUrls(
+          product,
+          Array.isArray(rawProduct?.variants) ? rawProduct.variants : []
+        );
+
+        created.push({
+          rowNumber,
+          _id: product._id,
+          name: product.name,
+          slug: product.slug,
+          publicationStatus: product.publicationStatus,
+          uploadedImageCount: imageImport.uploadedCount,
+        });
+        if (imageImport.errors.length) {
+          errors.push(
+            ...imageImport.errors.map((item) => ({
+              rowNumber,
+              name: product.name,
+              message: item.message,
+            }))
+          );
+        }
+      } catch (error) {
+        errors.push({
+          rowNumber,
+          name: String(rawProduct?.name || "").trim() || `Row ${rowNumber}`,
+          message: error.message || "Failed to import row",
+        });
+      }
+    }
+
+    res.status(created.length ? 201 : 400).json({
+      createdCount: created.length,
+      failedCount: errors.length,
+      created,
+      errors,
+    });
+  } catch (error) {
+    console.error("bulkImportProducts Error:", error);
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Failed to bulk import products",
     });
   }
 };
@@ -552,14 +906,13 @@ exports.updateProduct = async (req, res) => {
     if (up.tags !== undefined) product.tags = Array.isArray(up.tags) ? up.tags : product.tags;
 
     if (up.isFeatured !== undefined) product.isFeatured = !!up.isFeatured;
-    if (up.isActive !== undefined) product.isActive = !!up.isActive;
 
     // variants replace (simple approach)
     if (up.variants !== undefined) {
       const nextVariants = Array.isArray(up.variants) ? up.variants : product.variants;
       // ✅ SKU uniqueness inside this product
       assertUniqueSkus(nextVariants);
-
+      await assertSkusAvailable(nextVariants, product._id);
       product.variants = nextVariants;
     }
 
@@ -569,12 +922,83 @@ exports.updateProduct = async (req, res) => {
       product.variants
     );
 
+    if (up.publicationStatus !== undefined || up.isActive !== undefined) {
+      const nextStatus = resolvePublicationStatus({
+        publicationStatus: up.publicationStatus,
+        isActive: up.isActive,
+        fallback: product.publicationStatus || (product.isActive ? "published" : "draft"),
+      });
+      applyPublicationStatusToProduct(product, nextStatus);
+    }
+
     const updated = await product.save();
     res.json(updated);
   } catch (error) {
     console.error("updateProduct Error:", error);
     res.status(error.statusCode || 500).json({
       message: error.message || "Failed to update product",
+    });
+  }
+};
+
+// --- Admin: POST /api/admin/products/:id/duplicate ---
+exports.duplicateProduct = async (req, res) => {
+  try {
+    const source = await Product.findById(req.params.id);
+    if (!source) return res.status(404).json({ message: "Product not found" });
+
+    const duplicateSlug = await makeUniqueSlug(`${source.slug || source.name}-copy`);
+    const skuReservations = new Set();
+    const duplicatedVariants = [];
+
+    for (const variant of source.variants || []) {
+      const nextSku = await makeUniqueSku(`${variant.sku || "SKU"}-COPY`, skuReservations);
+      duplicatedVariants.push({
+        sku: nextSku,
+        attributes:
+          typeof variant.attributes?.toObject === "function"
+            ? variant.attributes.toObject()
+            : Object.fromEntries(Object.entries(variant.attributes || {})),
+        price: Number(variant.price || 0),
+        countInStock: 0,
+        lowStockThreshold: Number(variant.lowStockThreshold || 5),
+        images: [],
+        isDefault: !!variant.isDefault,
+      });
+    }
+
+    const duplicate = await Product.create({
+      name: `${source.name} Copy`,
+      slug: duplicateSlug,
+      brand: source.brand,
+      category: source.category,
+      description: source.description,
+      basePrice: computeBasePrice(source.basePrice, duplicatedVariants),
+      highlights: Array.isArray(source.highlights) ? source.highlights : [],
+      specs:
+        typeof source.specs?.toObject === "function" ? source.specs.toObject() : source.specs || {},
+      warrantyMonths: toNum(source.warrantyMonths, 0),
+      tags: Array.isArray(source.tags) ? source.tags : [],
+      publicationStatus: "draft",
+      isFeatured: false,
+      variants: duplicatedVariants,
+      rating: 0,
+      numReviews: 0,
+      reviews: [],
+      viewCount: 0,
+      lastViewedAt: null,
+      isActive: false,
+      isDeleted: false,
+      deletedAt: null,
+      metaTitle: source.metaTitle || "",
+      metaDescription: source.metaDescription || "",
+    });
+
+    res.status(201).json(duplicate);
+  } catch (error) {
+    console.error("duplicateProduct Error:", error);
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Failed to duplicate product",
     });
   }
 };
@@ -592,6 +1016,7 @@ exports.deleteProduct = async (req, res) => {
     product.isDeleted = true;
     product.deletedAt = new Date();
     product.isActive = false;
+    product.publicationStatus = "archived";
     await product.save();
 
     res.json({ message: "Product deleted from storefront but kept in database" });

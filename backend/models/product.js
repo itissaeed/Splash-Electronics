@@ -43,6 +43,11 @@ const productSchema = new mongoose.Schema({
 
   warrantyMonths: { type: Number, default: 0 },
   tags: [{ type: String }],
+  publicationStatus: {
+    type: String,
+    enum: ["draft", "published", "archived"],
+    default: "published",
+  },
 
   rating: { type: Number, required: true, default: 0 },
   numReviews: { type: Number, required: true, default: 0 },
@@ -61,6 +66,13 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 productSchema.index({ name: "text", description: "text", tags: "text" });
-productSchema.index({ category: 1, brand: 1, isFeatured: 1, isActive: 1, isDeleted: 1 });
+productSchema.index({
+  category: 1,
+  brand: 1,
+  publicationStatus: 1,
+  isFeatured: 1,
+  isActive: 1,
+  isDeleted: 1,
+});
 
 module.exports = mongoose.model("Product", productSchema);
