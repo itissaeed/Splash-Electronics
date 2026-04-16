@@ -4,6 +4,9 @@ import api from "../../../utils/api";
 import {
   ArrowLeft,
   Plus,
+  Copy,
+  Upload,
+  Download,
   Pencil,
   Trash2,
   X,
@@ -18,6 +21,16 @@ import {
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
 const PRODUCT_CREATE_DRAFT_KEY = "admin_product_create_draft_v1";
+const PRODUCT_STATUS_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "published", label: "Published" },
+  { value: "archived", label: "Archived" },
+];
+const BULK_IMPORT_TEMPLATE = [
+  "name,slug,brand,category,description,sku,price,stock,publicationStatus,defaultVariant,imageUrls,highlights,color,ram,storage,spec_display_size,spec_chipset",
+  '"Galaxy A55","galaxy-a55","Samsung","Smartphones","Balanced midrange phone","GALAXY-A55-128-BLK",45999,14,published,yes,"https://example.com/a55-blue-front.jpg|https://example.com/a55-blue-back.jpg","AMOLED display|Long battery life","Awesome Iceblue","8GB","128GB","6.6 inch","Exynos 1480"',
+  '"Galaxy A55","galaxy-a55","Samsung","Smartphones","Balanced midrange phone","GALAXY-A55-256-NVY",51999,9,published,no,"https://example.com/a55-navy-front.jpg","AMOLED display|Long battery life","Awesome Navy","8GB","256GB","6.6 inch","Exynos 1480"',
+].join("\n");
 
 const moneyBDT = (n) => {
   const num = Number(n);
@@ -32,6 +45,116 @@ const slugify = (text) =>
     .replace(/[^\w\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
+
+const getPublicationStatus = (productLike) => {
+  const normalized = String(productLike?.publicationStatus || "")
+    .trim()
+    .toLowerCase();
+  if (["draft", "published", "archived"].includes(normalized)) return normalized;
+  return productLike?.isActive ? "published" : "draft";
+};
+
+const getStatusBadgeClassName = (status) => {
+  if (status === "published") return "bg-green-50 text-green-700";
+  if (status === "archived") return "bg-amber-50 text-amber-700";
+  return "bg-slate-100 text-slate-700";
+};
+
+const parseBooleanCell = (value, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (["true", "1", "yes", "y", "on"].includes(normalized)) return true;
+  if (["false", "0", "no", "n", "off"].includes(normalized)) return false;
+  return fallback;
+};
+
+const splitPipeValues = (value) =>
+  String(value || "")
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const isLikelyUrl = (value) => {
+  try {
+    const url = new URL(String(value || "").trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const parseKeyValueList = (value) =>
+  String(value || "")
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .reduce((acc, item) => {
+      const idx = item.indexOf(":");
+      if (idx < 0) return acc;
+      const key = toAttributeKey(item.slice(0, idx));
+      const parsedValue = item.slice(idx + 1).trim();
+      if (key && parsedValue) acc[key] = parsedValue;
+      return acc;
+    }, {});
+
+const parseCsvLine = (line) => {
+  const values = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      values.push(current);
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current);
+  return values.map((value) => value.trim());
+};
+
+const parseCsvText = (text) => {
+  const lines = String(text || "")
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+
+  if (!lines.length) return { headers: [], rows: [] };
+
+  const headers = parseCsvLine(lines[0]).map((header) => String(header || "").trim());
+  const rows = lines.slice(1).map((line, index) => {
+    const values = parseCsvLine(line);
+    const row = headers.reduce((acc, header, headerIndex) => {
+      acc[header] = values[headerIndex] ?? "";
+      return acc;
+    }, {});
+
+    return {
+      rowNumber: index + 2,
+      values: row,
+    };
+  });
+
+  return { headers, rows };
+};
 
 const DEFAULT_VARIANT_ATTRIBUTE_KEYS = ["color", "ram", "storage"];
 const PHONE_KEYS = [
@@ -484,7 +607,7 @@ const createEmptyFormData = () => ({
   basePrice: "",
   warrantyMonths: "",
   isFeatured: false,
-  isActive: true,
+  publicationStatus: "draft",
 });
 
 const createEmptyProductSnapshot = () => ({
@@ -546,6 +669,7 @@ export default function AdminProducts() {
   const [q, setQ] = useState("");
   const [filterBrand, setFilterBrand] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [onlyFeatured, setOnlyFeatured] = useState(false);
   const [onlyActive, setOnlyActive] = useState(false);
 
@@ -559,6 +683,13 @@ export default function AdminProducts() {
   const [createName, setCreateName] = useState("");
   const [createSlug, setCreateSlug] = useState("");
   const [createAttributes, setCreateAttributes] = useState("");
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [bulkImportRows, setBulkImportRows] = useState([]);
+  const [bulkImportFileName, setBulkImportFileName] = useState("");
+  const [bulkImportSourceText, setBulkImportSourceText] = useState("");
+  const [autoCreateImportDependencies, setAutoCreateImportDependencies] = useState(true);
+  const [bulkImportFeedback, setBulkImportFeedback] = useState(null);
+  const [importingProducts, setImportingProducts] = useState(false);
 
   // form
   const [formData, setFormData] = useState(createEmptyFormData);
@@ -603,6 +734,23 @@ export default function AdminProducts() {
     navigate("/admin/products/new");
   };
 
+  const closeImportModal = () => {
+    if (importingProducts) return;
+    setIsImportModalOpen(false);
+    setBulkImportRows([]);
+    setBulkImportFileName("");
+    setBulkImportSourceText("");
+    setBulkImportFeedback(null);
+  };
+
+  const openImportModal = () => {
+    setBulkImportFeedback(null);
+    setBulkImportRows([]);
+    setBulkImportFileName("");
+    setBulkImportSourceText("");
+    setIsImportModalOpen(true);
+  };
+
   const fetchAll = async () => {
     try {
       setLoading(true);
@@ -630,9 +778,378 @@ export default function AdminProducts() {
     }
   };
 
+  const findEntityIdByCsvValue = (items, rawValue) => {
+    const normalized = String(rawValue || "").trim().toLowerCase();
+    if (!normalized) return "";
+
+    const match = items.find((item) => {
+      const id = String(item?._id || "").trim().toLowerCase();
+      const slug = String(item?.slug || "").trim().toLowerCase();
+      const name = String(item?.name || "").trim().toLowerCase();
+      return normalized === id || normalized === slug || normalized === name;
+    });
+
+    return match?._id || "";
+  };
+
+  const buildBulkImportPreviewRows = (
+    csvText,
+    {
+      brandsList = brands,
+      categoriesList = categories,
+      allowMissingDependencies = autoCreateImportDependencies,
+    } = {}
+  ) => {
+    const parsed = parseCsvText(csvText);
+    const existingSlugSet = new Set(products.map((product) => String(product?.slug || "").trim().toLowerCase()).filter(Boolean));
+    const existingSkuSet = new Set(
+      products
+        .flatMap((product) => product?.variants || [])
+        .map((variant) => String(variant?.sku || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const rowEntries = parsed.rows.map(({ rowNumber, values }) => {
+      const getValue = (key) => values[key] ?? values[key?.toLowerCase?.()] ?? "";
+      const name = String(getValue("name")).trim();
+      const slug = slugify(getValue("slug") || name);
+      const brandLabel = String(getValue("brand")).trim();
+      const categoryLabel = String(getValue("category")).trim();
+      const brandId = findEntityIdByCsvValue(brandsList, brandLabel);
+      const categoryId = findEntityIdByCsvValue(categoriesList, categoryLabel);
+      const description = String(getValue("description")).trim();
+      const sku = String(getValue("sku")).trim();
+      const priceValue = Number(getValue("price") || getValue("basePrice") || 0);
+      const stockValue = Number(getValue("stock") || getValue("countInStock") || 0);
+      const lowStockThreshold = Number(getValue("lowStockThreshold") || 5);
+      const highlights = splitPipeValues(getValue("highlights"));
+      const imageUrls = splitPipeValues(getValue("imageUrls"));
+      const specMap = {
+        ...parseKeyValueList(getValue("specs")),
+      };
+      const attrMap = {
+        ...parseKeyValueList(getValue("attributes")),
+      };
+
+      Object.entries(values).forEach(([rawHeader, rawCell]) => {
+        const header = toAttributeKey(rawHeader);
+        const value = String(rawCell || "").trim();
+        if (!value) return;
+
+        if (header.startsWith("spec_")) {
+          specMap[header.slice(5)] = value;
+          return;
+        }
+
+        if (header.startsWith("attr_")) {
+          attrMap[header.slice(5)] = value;
+          return;
+        }
+
+        if (["color", "ram", "storage"].includes(header)) {
+          attrMap[header] = value;
+        }
+      });
+
+      const issues = [];
+      if (!name) issues.push("Missing product name");
+      if (!slug) issues.push("Missing slug or name");
+      if (!description) issues.push("Missing description");
+      if (!sku) issues.push("Missing SKU");
+      if (!Number.isFinite(priceValue)) issues.push("Invalid price");
+      if (!Number.isFinite(stockValue)) issues.push("Invalid stock");
+      if (!brandId && !brandLabel) issues.push("Missing brand");
+      if (!categoryId && !categoryLabel) issues.push("Missing category");
+      if (slug && existingSlugSet.has(slug.toLowerCase())) issues.push(`Slug already exists: ${slug}`);
+      if (sku && existingSkuSet.has(sku.toLowerCase())) issues.push(`SKU already exists: ${sku}`);
+      if (imageUrls.some((url) => !isLikelyUrl(url))) issues.push("One or more image URLs are invalid");
+      if (!brandId && brandLabel && !allowMissingDependencies) {
+        issues.push(`Unknown brand: ${brandLabel}`);
+      }
+      if (!categoryId && categoryLabel && !allowMissingDependencies) {
+        issues.push(`Unknown category: ${categoryLabel}`);
+      }
+
+      return {
+        rowNumber,
+        name,
+        slug,
+        productKey: (slug || slugify(name || `row-${rowNumber}`)).toLowerCase(),
+        brandLabel,
+        brandId,
+        categoryLabel,
+        categoryId,
+        description,
+        publicationStatus:
+          String(getValue("publicationStatus") || "draft").trim().toLowerCase() || "draft",
+        isFeatured: parseBooleanCell(getValue("isFeatured"), false),
+        warrantyMonths: Number(getValue("warrantyMonths") || 0),
+        highlights,
+        specs: specMap,
+        basePrice: Number.isFinite(priceValue) ? priceValue : 0,
+        variant: {
+          sku,
+          price: Number.isFinite(priceValue) ? priceValue : 0,
+          countInStock: Number.isFinite(stockValue) ? stockValue : 0,
+          lowStockThreshold: Number.isFinite(lowStockThreshold) ? lowStockThreshold : 5,
+          isDefault: parseBooleanCell(getValue("defaultVariant"), false),
+          imageUrls,
+          attributes: attrMap,
+        },
+        issues,
+      };
+    });
+
+    const skuSet = new Set();
+    rowEntries.forEach((row) => {
+      const skuKey = String(row.variant?.sku || "").trim().toLowerCase();
+      if (!skuKey) return;
+      if (skuSet.has(skuKey)) row.issues.push(`Duplicate CSV SKU: ${row.variant.sku}`);
+      else skuSet.add(skuKey);
+    });
+
+    const grouped = new Map();
+    rowEntries.forEach((row) => {
+      if (!grouped.has(row.productKey)) grouped.set(row.productKey, []);
+      grouped.get(row.productKey).push(row);
+    });
+
+    return Array.from(grouped.values())
+      .map((rows) => {
+        const first = rows[0];
+        const issues = [...rows.flatMap((row) => row.issues)];
+
+        const inconsistentField = (field, formatter = (value) => value) => {
+          const values = Array.from(
+            new Set(
+              rows
+                .map((row) => formatter(row[field]))
+                .filter((value) => value !== undefined && value !== null && String(value).trim() !== "")
+            )
+          );
+          return values.length > 1 ? values : null;
+        };
+
+        if (inconsistentField("name")) issues.push("Rows for this product use different names");
+        if (inconsistentField("brandLabel")) issues.push("Rows for this product use different brands");
+        if (inconsistentField("categoryLabel")) issues.push("Rows for this product use different categories");
+        if (inconsistentField("description")) issues.push("Rows for this product use different descriptions");
+        if (inconsistentField("publicationStatus")) issues.push("Rows for this product use different publication statuses");
+
+        const attributeKeys = Array.from(
+          new Set(rows.flatMap((row) => Object.keys(row.variant?.attributes || {})).filter(Boolean))
+        );
+        const defaultVariantCount = rows.filter((row) => row.variant?.isDefault).length;
+        const variants = rows.map((row, index) => ({
+          ...row.variant,
+          isDefault: defaultVariantCount ? !!row.variant?.isDefault : index === 0,
+        }));
+        const imageCount = variants.reduce(
+          (sum, variant) => sum + (Array.isArray(variant.imageUrls) ? variant.imageUrls.length : 0),
+          0
+        );
+
+        const payload =
+          issues.length === 0
+            ? {
+                rowNumber: first.rowNumber,
+                name: first.name,
+                slug: first.slug,
+                brand: first.brandId,
+                category: first.categoryId,
+                description: first.description,
+                basePrice:
+                  rows.reduce((min, row) => Math.min(min, Number(row.basePrice || 0)), Number.POSITIVE_INFINITY) ||
+                  0,
+                warrantyMonths: Number(first.warrantyMonths || 0),
+                highlights: first.highlights,
+                specs: rows.reduce((acc, row) => ({ ...acc, ...(row.specs || {}) }), {}),
+                isFeatured: !!first.isFeatured,
+                publicationStatus: first.publicationStatus,
+                variants,
+              }
+            : null;
+
+        return {
+          rowNumber: first.rowNumber,
+          rowNumbers: rows.map((row) => row.rowNumber),
+          name: first.name || `Product ${first.rowNumber}`,
+          slug: first.slug,
+          sku: rows.map((row) => row.variant?.sku).filter(Boolean).join(", "),
+          skuCount: variants.length,
+          imageCount,
+          status: first.publicationStatus || "draft",
+          issues: Array.from(new Set(issues)),
+          missingBrandName: !first.brandId ? first.brandLabel : "",
+          missingCategoryName: !first.categoryId ? first.categoryLabel : "",
+          attributeKeys,
+          payload,
+        };
+      })
+      .sort((a, b) => a.rowNumber - b.rowNumber);
+  };
+
   useEffect(() => {
     fetchAll();
   }, []);
+
+  useEffect(() => {
+    if (!bulkImportSourceText) return;
+    setBulkImportRows(buildBulkImportPreviewRows(bulkImportSourceText));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkImportSourceText, autoCreateImportDependencies, brands, categories, products]);
+
+  const downloadBulkImportTemplate = () => {
+    const blob = new Blob([BULK_IMPORT_TEMPLATE], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "product-import-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkImportFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const previewRows = buildBulkImportPreviewRows(text);
+      setBulkImportFileName(file.name);
+      setBulkImportSourceText(text);
+      setBulkImportRows(previewRows);
+      setBulkImportFeedback(null);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to read CSV file.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const ensureBulkImportDependencies = async () => {
+    const missingBrands = Array.from(
+      new Set(
+        bulkImportRows
+          .map((row) => row.missingBrandName)
+          .filter(Boolean)
+          .map((value) => String(value).trim())
+      )
+    );
+    const missingCategories = Array.from(
+      new Set(
+        bulkImportRows
+          .map((row) => row.missingCategoryName)
+          .filter(Boolean)
+          .map((value) => String(value).trim())
+      )
+    );
+
+    const createdBrands = [];
+    const createdCategories = [];
+
+    for (const brandName of missingBrands) {
+      try {
+        const { data } = await api.post("/brands", {
+          name: brandName,
+          slug: slugify(brandName),
+        });
+        createdBrands.push(data);
+      } catch (error) {
+        if (error?.response?.status !== 409) throw error;
+      }
+    }
+
+    for (const categoryName of missingCategories) {
+      const matchingRows = bulkImportRows.filter((row) => row.missingCategoryName === categoryName);
+      const attributes = Array.from(
+        new Set(matchingRows.flatMap((row) => row.attributeKeys || []).filter(Boolean))
+      );
+      const highlightsTemplate = matchingRows.find((row) => row.payload?.highlights?.length)?.payload?.highlights || [];
+      const specsTemplate = matchingRows.find((row) => row.payload)?.payload?.specs || {};
+
+      try {
+        const { data } = await api.post("/categories", {
+          name: categoryName,
+          slug: slugify(categoryName),
+          attributes,
+          highlightsTemplate,
+          specsTemplate,
+        });
+        createdCategories.push(data);
+      } catch (error) {
+        if (error?.response?.status !== 409) throw error;
+      }
+    }
+
+    if (!missingBrands.length && !missingCategories.length) {
+      return { brandsList: brands, categoriesList: categories };
+    }
+
+    const brandsList = [...brands, ...createdBrands];
+    const categoriesList = [...categories, ...createdCategories];
+
+    const [freshBrandsRes, freshCategoriesRes] = await Promise.all([
+      api.get("/brands"),
+      api.get("/categories"),
+    ]);
+
+    const nextBrands = Array.isArray(freshBrandsRes.data) ? freshBrandsRes.data : brandsList;
+    const nextCategories = Array.isArray(freshCategoriesRes.data) ? freshCategoriesRes.data : categoriesList;
+    setBrands(nextBrands);
+    setCategories(nextCategories);
+
+    return {
+      brandsList: nextBrands,
+      categoriesList: nextCategories,
+    };
+  };
+
+  const submitBulkImport = async () => {
+    if (!bulkImportRows.length) {
+      alert("Upload a CSV file first.");
+      return;
+    }
+
+    try {
+      setImportingProducts(true);
+
+      let previewRows = bulkImportRows;
+      let dependencyLists = { brandsList: brands, categoriesList: categories };
+
+      if (autoCreateImportDependencies) {
+        dependencyLists = await ensureBulkImportDependencies();
+        previewRows = buildBulkImportPreviewRows(bulkImportSourceText, {
+          ...dependencyLists,
+          allowMissingDependencies: true,
+        });
+        setBulkImportRows(previewRows);
+      }
+
+      const validRows = previewRows.filter((row) => row.payload && row.issues.length === 0);
+      if (!validRows.length) {
+        alert("No valid products are ready to import.");
+        return;
+      }
+
+      const { data } = await api.post("/products/bulk-import", {
+        products: validRows.map((row) => row.payload),
+      });
+
+      setBulkImportFeedback({
+        createdCount: Number(data?.createdCount || 0),
+        failedCount: Number(data?.failedCount || 0),
+        created: Array.isArray(data?.created) ? data.created : [],
+        errors: Array.isArray(data?.errors) ? data.errors : [],
+      });
+      await fetchAll();
+    } catch (error) {
+      console.error(error);
+      alert(error?.response?.data?.message || "Failed to bulk import products.");
+    } finally {
+      setImportingProducts(false);
+    }
+  };
 
   const buildSnapshotFromProduct = (product) => {
     const nextFormData = {
@@ -646,7 +1163,7 @@ export default function AdminProducts() {
       basePrice: product?.basePrice ?? "",
       warrantyMonths: product?.warrantyMonths ?? "",
       isFeatured: !!product?.isFeatured,
-      isActive: product?.isActive !== false,
+      publicationStatus: getPublicationStatus(product),
     };
 
     const mappedVariants = (product?.variants || []).map((variant) => ({
@@ -898,18 +1415,28 @@ export default function AdminProducts() {
       const matchesCategory =
         !filterCategory || (p?.category?._id || p?.category) === filterCategory;
 
+      const publicationStatus = getPublicationStatus(p);
       const matchesFeatured = !onlyFeatured || !!p.isFeatured;
-      const matchesActive = !onlyActive || !!p.isActive;
+      const matchesActive = !onlyActive || publicationStatus === "published";
+      const matchesStatus = !filterStatus || publicationStatus === filterStatus;
 
       return (
         matchesText &&
         matchesBrand &&
         matchesCategory &&
         matchesFeatured &&
+        matchesStatus &&
         matchesActive
       );
     });
-  }, [products, q, filterBrand, filterCategory, onlyFeatured, onlyActive]);
+  }, [products, q, filterBrand, filterCategory, filterStatus, onlyFeatured, onlyActive]);
+
+  const bulkImportSummary = useMemo(() => {
+    const totalRows = bulkImportRows.length;
+    const validRows = bulkImportRows.filter((row) => row.payload && row.issues.length === 0).length;
+    const invalidRows = totalRows - validRows;
+    return { totalRows, validRows, invalidRows };
+  }, [bulkImportRows]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -1037,6 +1564,23 @@ export default function AdminProducts() {
     navigate(`/admin/products/${p._id}/edit`);
   };
 
+  const duplicateProduct = async (product) => {
+    const ok = window.confirm(
+      `Create a draft copy of "${product?.name || "this product"}" with fresh SKUs?`
+    );
+    if (!ok) return;
+
+    try {
+      const { data } = await api.post(`/products/${product._id}/duplicate`);
+      await fetchAll();
+      hasHydratedEditorRef.current = false;
+      navigate(`/admin/products/${data?._id}/edit`);
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to duplicate product.");
+    }
+  };
+
   const leaveEditor = ({ discardDraft = false } = {}) => {
     if (isDirty) {
       const ok = window.confirm("You have unsaved product changes. Leave this page?");
@@ -1119,8 +1663,8 @@ export default function AdminProducts() {
     return true;
   };
 
-  const saveProduct = async (e) => {
-    e.preventDefault();
+  const saveProduct = async (e, statusOverride = null) => {
+    e?.preventDefault?.();
 
     if (brands.length === 0 || categories.length === 0) {
       alert("Please create at least one Brand and one Category first.");
@@ -1176,6 +1720,8 @@ export default function AdminProducts() {
       }
     }
 
+    const nextPublicationStatus = statusOverride || formData.publicationStatus || "draft";
+
     const payload = {
       name: formData.name.trim(),
       slug: slugify(formData.slug),
@@ -1186,8 +1732,9 @@ export default function AdminProducts() {
       specs: parseSpecsText(formData.specsText),
       basePrice: Number(formData.basePrice || 0),
       warrantyMonths: Number(formData.warrantyMonths || 0),
+      publicationStatus: nextPublicationStatus,
       isFeatured: !!formData.isFeatured,
-      isActive: !!formData.isActive,
+      isActive: nextPublicationStatus === "published",
       variants: cleanedVariants,
     };
 
@@ -1327,6 +1874,7 @@ export default function AdminProducts() {
         0
     );
   const imageFromProduct = (p) => p?.variants?.[0]?.images?.[0]?.url || fallbackImg;
+  const saveProductWithStatus = (status) => saveProduct(null, status);
 
   return (
     <div className="space-y-6">
@@ -1337,16 +1885,25 @@ export default function AdminProducts() {
             <div>
               <h1 className="text-2xl font-extrabold text-gray-900">Products</h1>
               <p className="text-sm text-gray-500">
-                Manage products, variants, images, featured & active status.
+                Create products one by one, duplicate similar products, and manage draft versus published items.
               </p>
             </div>
 
-            <button
-              onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500"
-            >
-              <Plus size={18} /> Add Product
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={openImportModal}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Upload size={18} /> Bulk Import CSV
+              </button>
+              <button
+                onClick={openCreate}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500"
+              >
+                <Plus size={18} /> Add Product
+              </button>
+            </div>
           </div>
 
           {/* Helpful warning if missing base data */}
@@ -1386,7 +1943,7 @@ export default function AdminProducts() {
 
           {/* Filters */}
           <div className="premium-card rounded-2xl p-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
           <div className="md:col-span-2 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
               <Search size={16} />
@@ -1425,6 +1982,19 @@ export default function AdminProducts() {
             ))}
           </select>
 
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
+          >
+            <option value="">All statuses</option>
+            {PRODUCT_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+
           <div className="flex items-center gap-3 justify-between md:justify-end">
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
               <input
@@ -1441,7 +2011,7 @@ export default function AdminProducts() {
                 checked={onlyActive}
                 onChange={(e) => setOnlyActive(e.target.checked)}
               />
-              Active only
+              Published only
             </label>
           </div>
         </div>
@@ -1488,6 +2058,7 @@ export default function AdminProducts() {
                   const img = imageFromProduct(p);
                   const price = priceFromProduct(p);
                   const stock = stockFromProduct(p);
+                  const publicationStatus = getPublicationStatus(p);
 
                   return (
                     <tr key={p._id} className="border-t">
@@ -1530,12 +2101,15 @@ export default function AdminProducts() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-xs font-semibold px-2 py-1 rounded-full ${p.isActive
-                              ? "bg-green-50 text-green-700"
-                              : "bg-gray-100 text-gray-700"
-                              }`}
+                            className={`text-xs font-semibold px-2 py-1 rounded-full ${getStatusBadgeClassName(
+                              publicationStatus
+                            )}`}
                           >
-                            {p.isActive ? "Active" : "Inactive"}
+                            {publicationStatus === "published"
+                              ? "Published"
+                              : publicationStatus === "archived"
+                              ? "Archived"
+                              : "Draft"}
                           </span>
 
                           {p.isDeleted && (
@@ -1560,6 +2134,14 @@ export default function AdminProducts() {
                             title="Edit"
                           >
                             <Pencil size={16} />
+                          </button>
+
+                          <button
+                            onClick={() => duplicateProduct(p)}
+                            className="p-2 rounded-lg border hover:bg-gray-50"
+                            title="Duplicate"
+                          >
+                            <Copy size={16} />
                           </button>
 
                           <button
@@ -1596,7 +2178,7 @@ export default function AdminProducts() {
                 {editingId ? "Edit Product" : "Add Product"}
               </h1>
               <p className="text-sm text-gray-500">
-                Manage base info, variants, images, featured state, and inventory in one full-page editor.
+                Manage base info, variants, images, inventory, and whether this product is still a draft or ready for the storefront.
               </p>
             </div>
 
@@ -1605,7 +2187,7 @@ export default function AdminProducts() {
                 ? "Unsaved changes are being protected."
                 : editingId
                 ? "Editing existing product"
-                : "Draft saved. It won't appear in the store until you save."}
+                : "New products start as drafts unless you publish them."}
             </div>
           </div>
 
@@ -1618,7 +2200,7 @@ export default function AdminProducts() {
                 <div className="text-sm text-gray-500">
                   {editingId
                     ? "Changes here update the live product record."
-                    : "New products stay in your local draft until you save them."}
+                    : "New products stay in your local draft until you save or publish them."}
                 </div>
               </div>
 
@@ -1649,15 +2231,21 @@ export default function AdminProducts() {
                   Featured
                 </label>
 
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-                  <input
-                    type="checkbox"
-                    name="isActive"
-                    checked={formData.isActive}
+                <div className="min-w-[220px]">
+                  <label className="text-xs font-semibold text-gray-600">Product status</label>
+                  <select
+                    name="publicationStatus"
+                    value={formData.publicationStatus}
                     onChange={handleChange}
-                  />
-                  Active
-                </label>
+                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
+                  >
+                    {PRODUCT_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* base fields */}
@@ -1758,15 +2346,6 @@ export default function AdminProducts() {
                   />
                   <div className="mt-1 text-[11px] text-gray-500">
                     Auto-set from the lowest variant price when variants are provided.
-                  </div>
-                </div>
-
-
-                <div className="md:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                  <div className="text-sm font-bold text-amber-900">Offers Are Managed Separately</div>
-                  <div className="mt-1 text-xs leading-5 text-amber-800">
-                    Sale labels and save-money pricing now belong in the admin <span className="font-semibold">Offers</span> section instead of the product form.
-                    Use that page to run campaigns and manage storefront discount presentation centrally.
                   </div>
                 </div>
 
@@ -2060,13 +2639,233 @@ export default function AdminProducts() {
                   disabled={saving}
                 >
                   <Check size={18} />
-                  {saving ? "Saving..." : editingId ? "Update Product" : "Create Product"}
+                  {saving
+                    ? "Saving..."
+                    : formData.publicationStatus === "published"
+                    ? editingId
+                      ? "Update Published Product"
+                      : "Publish Product"
+                    : editingId
+                    ? "Save Product"
+                    : "Create Product"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => saveProductWithStatus("draft")}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  disabled={saving}
+                >
+                  {editingId ? "Save as Draft" : "Create Draft"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => saveProductWithStatus("published")}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+                  disabled={saving}
+                >
+                  {editingId ? "Save & Publish" : "Publish Now"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <Modal
+        open={isImportModalOpen}
+        title="Bulk Import Products"
+        subtitle="Upload a CSV to create many products at once. Repeated rows with the same slug are grouped into one product with multiple variants."
+        onClose={closeImportModal}
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <div className="font-semibold text-slate-900">CSV columns</div>
+            <div className="mt-1">
+              Required: <code>name</code>, <code>brand</code>, <code>category</code>, <code>description</code>, <code>sku</code>
+            </div>
+            <div className="mt-1">
+              Helpful optional columns: <code>slug</code>, <code>price</code>, <code>stock</code>, <code>publicationStatus</code>, <code>defaultVariant</code>, <code>imageUrls</code>, <code>highlights</code>, <code>color</code>, <code>ram</code>, <code>storage</code>
+            </div>
+            <div className="mt-1">
+              Advanced optional columns: any <code>spec_*</code> columns for product specs and any <code>attr_*</code> columns for variant attributes.
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={autoCreateImportDependencies}
+              onChange={(event) => setAutoCreateImportDependencies(event.target.checked)}
+            />
+            Auto-create missing brands and categories during import
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadBulkImportTemplate}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Download size={16} /> Download Template
+            </button>
+
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+              <Upload size={16} /> Choose CSV
+              <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleBulkImportFile} />
+            </label>
+
+            {bulkImportFileName && (
+              <div className="text-sm text-slate-600">Loaded: {bulkImportFileName}</div>
+            )}
+          </div>
+
+          {bulkImportRows.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Products</div>
+                  <div className="mt-1 text-2xl font-black text-slate-900">{bulkImportSummary.totalRows}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Ready</div>
+                  <div className="mt-1 text-2xl font-black text-emerald-900">{bulkImportSummary.validRows}</div>
+                </div>
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">Needs Fixing</div>
+                  <div className="mt-1 text-2xl font-black text-amber-900">{bulkImportSummary.invalidRows}</div>
+                </div>
+              </div>
+
+              <div className="max-h-[320px] overflow-auto rounded-2xl border border-slate-200">
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold">Rows</th>
+                      <th className="px-3 py-2 text-left font-semibold">Product</th>
+                      <th className="px-3 py-2 text-left font-semibold">Slug</th>
+                      <th className="px-3 py-2 text-left font-semibold">Variants</th>
+                      <th className="px-3 py-2 text-left font-semibold">Images</th>
+                      <th className="px-3 py-2 text-left font-semibold">Status</th>
+                      <th className="px-3 py-2 text-left font-semibold">Validation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkImportRows.map((row) => (
+                      <tr key={`bulk-row-${row.rowNumber}`} className="border-t border-slate-100 align-top">
+                        <td className="px-3 py-2 text-slate-500">{row.rowNumbers.join(", ")}</td>
+                        <td className="px-3 py-2 font-medium text-slate-900">{row.name}</td>
+                        <td className="px-3 py-2 text-slate-600">{row.slug || "-"}</td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {row.skuCount} SKU{row.skuCount === 1 ? "" : "s"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {row.imageCount || 0} image{row.imageCount === 1 ? "" : "s"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${getStatusBadgeClassName(row.status)}`}>
+                            {row.status || "draft"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.issues.length === 0 ? (
+                            <div className="space-y-1">
+                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                Ready
+                              </span>
+                              {autoCreateImportDependencies &&
+                                (row.missingBrandName || row.missingCategoryName) && (
+                                  <div className="text-xs text-sky-700">
+                                    Will create:
+                                    {row.missingBrandName ? ` brand "${row.missingBrandName}"` : ""}
+                                    {row.missingBrandName && row.missingCategoryName ? " and" : ""}
+                                    {row.missingCategoryName ? ` category "${row.missingCategoryName}"` : ""}
+                                  </div>
+                                )}
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              {autoCreateImportDependencies && (row.missingBrandName || row.missingCategoryName) && (
+                                <div className="text-xs text-sky-700">
+                                  Will create:
+                                  {row.missingBrandName ? ` brand "${row.missingBrandName}"` : ""}
+                                  {row.missingBrandName && row.missingCategoryName ? " and" : ""}
+                                  {row.missingCategoryName ? ` category "${row.missingCategoryName}"` : ""}
+                                </div>
+                              )}
+                              {row.issues.map((issue, issueIndex) => (
+                                <div
+                                  key={`bulk-row-${row.rowNumber}-issue-${issueIndex}`}
+                                  className="text-xs text-amber-700"
+                                >
+                                  {issue}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {bulkImportFeedback && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+              <div className="font-semibold text-slate-900">
+                Imported {bulkImportFeedback.createdCount} products
+              </div>
+              <div className="mt-1">
+                Failed rows: {bulkImportFeedback.failedCount}
+              </div>
+              {bulkImportFeedback.created?.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {bulkImportFeedback.created.map((item, index) => (
+                    <div key={`bulk-created-${index}`} className="text-xs text-slate-600">
+                      {item.name}: uploaded {item.uploadedImageCount || 0} image
+                      {item.uploadedImageCount === 1 ? "" : "s"}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {bulkImportFeedback.errors?.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {bulkImportFeedback.errors.map((error, index) => (
+                    <div key={`bulk-feedback-${index}`} className="text-xs text-amber-700">
+                      Row {error.rowNumber}: {error.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={closeImportModal}
+              className="rounded-xl border px-4 py-2 text-sm font-semibold hover:bg-gray-50"
+              disabled={importingProducts}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={submitBulkImport}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+              disabled={importingProducts || bulkImportSummary.validRows === 0}
+            >
+              {importingProducts ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              {importingProducts
+                ? "Importing..."
+                : `Import ${bulkImportSummary.validRows || 0} Product${bulkImportSummary.validRows === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Quick Add Modal */}
       <Modal
