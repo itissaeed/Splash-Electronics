@@ -58,9 +58,23 @@ const assertUniqueSkus = (variants = []) => {
 const roundToTenth = (value) => Math.round(value * 10) / 10;
 const PUBLICATION_STATUSES = new Set(["draft", "published", "archived"]);
 const ACTIVE_STOREFRONT_PRODUCT_FILTER = {
-  publicationStatus: "published",
-  isActive: true,
   isDeleted: { $ne: true },
+  $or: [
+    { publicationStatus: "published" },
+    {
+      publicationStatus: { $exists: false },
+      isActive: true,
+    },
+  ],
+};
+
+const isStorefrontVisibleProduct = (product) => {
+  if (!product || product.isDeleted === true) return false;
+  const publicationStatus = String(product.publicationStatus || "").trim().toLowerCase();
+  if (publicationStatus) {
+    return publicationStatus === "published";
+  }
+  return product.isActive === true;
 };
 
 const RESERVED_PRODUCT_FILTER_KEYS = new Set([
@@ -666,7 +680,7 @@ exports.getProductById = async (req, res) => {
 
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    if (product.isActive === false) {
+    if (!isStorefrontVisibleProduct(product)) {
       return res.status(404).json({ message: "Product not found" });
     }
 
@@ -1062,7 +1076,7 @@ exports.createProductReview = async (req, res) => {
       _id: req.params.id,
       isDeleted: { $ne: true },
     });
-    if (!product || product.isActive === false) {
+    if (!product || !isStorefrontVisibleProduct(product)) {
       return res.status(404).json({ message: "Product not found" });
     }
 
@@ -1134,7 +1148,7 @@ exports.getProductReviewEligibility = async (req, res) => {
       _id: req.params.id,
       isDeleted: { $ne: true },
     }).select("_id isActive reviews.user");
-    if (!product || product.isActive === false) {
+    if (!product || !isStorefrontVisibleProduct(product)) {
       return res.status(404).json({ message: "Product not found" });
     }
 
