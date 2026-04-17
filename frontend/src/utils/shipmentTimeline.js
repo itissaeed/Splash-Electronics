@@ -18,10 +18,11 @@ export const FULFILLMENT_MODE_LABELS = {
   OWN_DELIVERY: "Own delivery",
 };
 
-export const getShipmentTimeline = (order) => {
+export const getShipmentTimeline = (order, options = {}) => {
+  const includeHidden = options?.includeHidden === true;
   const events = Array.isArray(order?.shipment?.events) ? order.shipment.events : [];
   return events
-    .filter((event) => event?.visibleToCustomer !== false)
+    .filter((event) => includeHidden || event?.visibleToCustomer !== false)
     .map((event) => ({
       id: normalize(event?._id) || `${normalize(event?.code)}-${normalize(event?.createdAt)}`,
       code: normalize(event?.code),

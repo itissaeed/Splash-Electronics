@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
-const User = require("../models/userModel");
+const User = require("../models/UserModel");
 const { sendSignupOtpEmail } = require("../config/emailConfig");
 const { normalizeBangladeshNumber } = require("../utils/numberNormalizer");
 

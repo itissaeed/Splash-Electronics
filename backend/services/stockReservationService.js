@@ -1,6 +1,6 @@
 const Order = require("../models/Order");
 const InventoryLedger = require("../models/InventoryLedger");
-const Product = require("../models/product");
+const Product = require("../models/Product");
 
 const PREPAID_METHODS = ["BKASH", "NAGAD", "CARD", "BANK", "SSLCOMMERZ"];
 

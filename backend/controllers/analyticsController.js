@@ -1,6 +1,6 @@
 // controllers/analyticsController.js
 const Order = require("../models/Order");
-const Product = require("../models/product");
+const Product = require("../models/Product");
 const ProductView = require("../models/ProductView");
 const Cart = require("../models/Cart");
 const {

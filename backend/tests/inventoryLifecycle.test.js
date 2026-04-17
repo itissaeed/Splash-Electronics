@@ -112,7 +112,7 @@ test("createOrderFromCartForUser reserves stock and records reservation activity
             },
           })),
       },
-      "models/product.js": {
+      "models/Product.js": {
         findOne: () => asSessionQuery(fakeProduct),
       },
       "models/Coupon.js": {
@@ -123,7 +123,7 @@ test("createOrderFromCartForUser reserves stock and records reservation activity
           session: async () => null,
         }),
       },
-      "models/userModel.js": {
+      "models/UserModel.js": {
         findById: () => asSessionQuery(fakeUser),
       },
       "models/Settings.js": {
@@ -209,7 +209,7 @@ test("cancelMyOrder releases reserved stock without touching on-hand inventory",
           },
         ],
       },
-      "models/product.js": {
+      "models/Product.js": {
         findById: async () => ({
           variants: {
             id: () => ({
@@ -319,7 +319,7 @@ test("adminUpdateOrderStatus deducts on-hand stock when order is shipped from pr
           },
         ],
       },
-      "models/product.js": {
+      "models/Product.js": {
         findById: async () => product,
       },
       "models/Cart.js": {},
@@ -409,7 +409,7 @@ test("adminUpdateOrderStatus rejects skipping directly from pending to shipped",
         findOne: async () => order,
         aggregate: async () => [],
       },
-      "models/product.js": {
+      "models/Product.js": {
         findById: async () => null,
       },
       "models/Cart.js": {},
@@ -492,7 +492,7 @@ test("adminUpdateShipment records courier updates without changing the main orde
         findOne: async () => order,
         aggregate: async () => [],
       },
-      "models/product.js": {
+      "models/Product.js": {
         findById: async () => null,
       },
       "models/Cart.js": {},
@@ -556,6 +556,100 @@ test("adminUpdateShipment records courier updates without changing the main orde
     assert.equal(order.shipment.events.length, 1);
     assert.equal(order.shipment.events[0].code, "COURIER_OUT_FOR_DELIVERY");
   } finally {
+    restore();
+  }
+});
+
+test("adminUpdateShipment rejects in-transit courier progress before order is shipped", async () => {
+  const order = {
+    _id: "order-6",
+    orderNo: "ORD-SHIPMENT-2",
+    status: "processing",
+    user: "user-1",
+    pricing: { shippingFee: 100, itemsTotal: 2400, discountTotal: 0, grandTotal: 2500 },
+    shipment: {
+      courier: "Pathao",
+      trackingId: "TRK-OLD",
+      courierStatus: "AWAITING_BOOKING",
+      events: [],
+    },
+    async save() {
+      return this;
+    },
+  };
+
+  const { loaded: orderController, restore } = withFreshModule({
+    target: "controllers/orderController.js",
+    mocks: {
+      "models/Order.js": {
+        findOne: async () => order,
+        aggregate: async () => [],
+      },
+      "models/Product.js": {
+        findById: async () => null,
+      },
+      "models/Cart.js": {},
+      "models/InventoryLedger.js": {
+        create: async () => null,
+      },
+      "models/ReturnRefund.js": {
+        findOne: async () => null,
+        create: async () => null,
+      },
+      "services/orderService.js": {
+        createOrderFromCartForUser: async () => {
+          throw new Error("not used");
+        },
+        getShippingQuote: async () => ({}),
+        validateCouponForItems: async () => ({}),
+      },
+      "utils/shippingValidation.js": {
+        validateShippingPayload: () => ({ ok: true }),
+      },
+      "services/courier.js": {
+        getCourierProvider: () => ({
+          createShipment: async () => ({
+            courier: "Pathao",
+            trackingId: "TRK-1",
+          }),
+        }),
+      },
+      "utils/visitorKey.js": {
+        getVisitorKey: () => "visitor-1",
+      },
+      "services/stockReservationService.js": {
+        PREPAID_METHODS: ["BKASH", "NAGAD", "CARD", "BANK", "SSLCOMMERZ"],
+        releaseExpiredReservations: async () => null,
+        releaseReservationForOrder: async () => null,
+        getReservedQtyMap: async () => new Map(),
+        getAvailableStock: ({ physicalStock, reservedQty }) =>
+          Math.max(0, Number(physicalStock || 0) - Number(reservedQty || 0)),
+      },
+    },
+  });
+
+  const originalConsoleError = console.error;
+
+  try {
+    console.error = () => {};
+    const req = {
+      params: { orderNo: "ORD-SHIPMENT-2" },
+      user: { _id: "admin-1", isAdmin: true },
+      body: {
+        courierStatus: "IN_TRANSIT",
+        courierStatusNote: "Parcel left the origin hub",
+      },
+    };
+    const res = createResponse();
+
+    await orderController.adminUpdateShipment(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.payload.message, "Mark the order as shipped before using this courier status");
+    assert.equal(order.shipment.courierStatus, "AWAITING_BOOKING");
+    assert.equal(order.shipment.events.length, 0);
+  } finally {
+    console.error = originalConsoleError;
     restore();
   }
 });

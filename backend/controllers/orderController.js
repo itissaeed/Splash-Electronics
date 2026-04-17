@@ -1,7 +1,7 @@
 // controllers/orderController.js
 const mongoose = require("mongoose");
 const Order = require("../models/Order");
-const Product = require("../models/product");
+const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const InventoryLedger = require("../models/InventoryLedger");
 const ReturnRefund = require("../models/ReturnRefund");
@@ -65,6 +65,33 @@ const addDays = (dateLike, days) => {
   const out = new Date(base);
   out.setDate(out.getDate() + Number(days || 0));
   return out;
+};
+
+const validateCourierStatusForWorkflow = (orderStatus, courierStatus) => {
+  const normalizedOrderStatus = String(orderStatus || "").trim().toLowerCase();
+  const normalizedCourierStatus = String(courierStatus || "").trim().toUpperCase();
+  if (!normalizedCourierStatus) return;
+
+  if (
+    ["pending", "confirmed", "processing", "cancelled"].includes(normalizedOrderStatus) &&
+    !["AWAITING_BOOKING", "BOOKED"].includes(normalizedCourierStatus)
+  ) {
+    const err = new Error("Mark the order as shipped before using this courier status");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (normalizedCourierStatus === "DELIVERED" && normalizedOrderStatus !== "delivered") {
+    const err = new Error("Use the delivered workflow action before setting courier status to delivered");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (normalizedCourierStatus === "RETURNED_TO_MERCHANT" && normalizedOrderStatus !== "returned") {
+    const err = new Error("Use the returned workflow action before setting courier status to returned to merchant");
+    err.statusCode = 400;
+    throw err;
+  }
 };
 
 const recomputeGrandTotal = (order) => {
@@ -765,6 +792,10 @@ exports.adminUpdateOrderStatus = async (req, res) => {
       );
     }
 
+    if (courierStatus) {
+      validateCourierStatusForWorkflow(nextStatus, courierStatus);
+    }
+
     if (nextStatus === "delivered") {
       order.shipment.deliveredAt = new Date();
       syncCourierStatus(order, courierStatus || "DELIVERED", courierStatusNote, courierStatus ? "admin" : "system");
@@ -837,6 +868,10 @@ exports.adminUpdateShipment = async (req, res) => {
       fulfillmentMode,
       notes,
     });
+
+    if (courierStatus) {
+      validateCourierStatusForWorkflow(order.status, courierStatus);
+    }
 
     if (courierStatus) {
       syncCourierStatus(order, courierStatus, courierStatusNote, "admin");
