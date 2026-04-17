@@ -731,15 +731,15 @@ function OrderUpdatePanel({
   }, [courierStatus, currentStatus]);
   const workflowHint =
     currentStatus === "pending"
-      ? "Step 1: verify the order details before confirming."
+      ? "Review the order before confirming it."
       : currentStatus === "confirmed"
-      ? "Step 2: move the order into warehouse processing."
+      ? "Move the order to processing when fulfillment starts."
       : currentStatus === "processing"
-      ? "Step 3: add courier details, then mark the parcel as shipped."
+      ? "Add courier details before marking the order as shipped."
       : currentStatus === "shipped"
-      ? "Final delivery step: mark delivered once the customer receives it."
+      ? "Mark the order as delivered after customer receipt."
       : currentStatus === "delivered"
-      ? "Post-delivery only: use returned if the shipment comes back."
+      ? "Use returned only if the shipment comes back."
       : "This order is in a closed state.";
 
   useEffect(() => {
@@ -945,7 +945,7 @@ function OrderUpdatePanel({
             Workflow actions
           </div>
           <p className="mt-1 text-xs text-gray-500">
-            Real-world admins usually move orders one step at a time instead of jumping straight to a final status.
+            Update the order status in sequence as fulfillment progresses.
           </p>
           <div className="mt-3 grid grid-cols-1 gap-2">
             {nextActions.length === 0 ? (
@@ -1075,7 +1075,7 @@ function OrderUpdatePanel({
           </div>
           <div className="mt-3 space-y-3">
             {shipmentTimeline.length === 0 ? (
-              <div className="text-sm text-gray-500">No shipment events recorded yet.</div>
+              <div className="text-sm text-gray-500">No shipment updates yet.</div>
             ) : (
               shipmentTimeline.map((event) => (
                 <div key={event.id} className="rounded-xl border bg-white p-3">

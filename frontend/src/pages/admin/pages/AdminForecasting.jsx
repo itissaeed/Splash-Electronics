@@ -81,7 +81,7 @@ function ForecastMethodology({ model }) {
   return (
     <SectionCard
       title="How Forecast Works"
-      subtitle="Built to be explainable during a viva or project demo"
+      subtitle="How demand, traffic, and stock signals are combined"
       right={
         <span className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white">
           {model?.version || "traffic-weighted-v2"}
