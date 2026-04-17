@@ -1,7 +1,7 @@
 // controllers/returnRefundController.js
 const ReturnRefund = require("../models/ReturnRefund");
 const Order = require("../models/Order");
-const Product = require("../models/product");
+const Product = require("../models/Product");
 const InventoryLedger = require("../models/InventoryLedger");
 const { getReservedQtyMap, getAvailableStock } = require("../services/stockReservationService");
 

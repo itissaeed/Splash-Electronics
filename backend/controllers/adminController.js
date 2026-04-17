@@ -1,5 +1,5 @@
 const Order = require("../models/Order");
-const User = require("../models/userModel");
+const User = require("../models/UserModel");
 const { buildRevenueMatch } = require("../utils/revenueRecognition");
 
 exports.getAdminOverview = async (req, res) => {

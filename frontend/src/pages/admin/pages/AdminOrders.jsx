@@ -12,6 +12,10 @@ const tokenHeader = () => ({
 
 const COURIER_OPTIONS = ["Pathao", "RedX", "Sundarban", "eCourier", "Steadfast"];
 const COURIER_STATUS_OPTIONS = Object.keys(COURIER_STATUS_LABELS);
+const NON_SHIPPED_COURIER_STATUSES = ["AWAITING_BOOKING", "BOOKED"];
+const SHIPPED_COURIER_STATUS_OPTIONS = COURIER_STATUS_OPTIONS.filter(
+  (value) => !["DELIVERED", "RETURNED_TO_MERCHANT"].includes(value)
+);
 const STATUS_FLOW = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
@@ -712,7 +716,19 @@ function OrderUpdatePanel({
   const nextActions = STATUS_FLOW[currentStatus] || [];
   const canShip = nextActions.includes("shipped");
   const canDispatch = currentStatus === "processing";
-  const shipmentTimeline = getShipmentTimeline(order);
+  const shipmentTimeline = getShipmentTimeline(order, { includeHidden: true });
+  const courierStatusOptions = useMemo(() => {
+    const appendCurrentIfMissing = (options) =>
+      options.includes(courierStatus) ? options : [...options, courierStatus];
+
+    if (["pending", "confirmed", "processing", "cancelled"].includes(currentStatus)) {
+      return appendCurrentIfMissing(NON_SHIPPED_COURIER_STATUSES);
+    }
+    if (currentStatus === "shipped") {
+      return appendCurrentIfMissing(SHIPPED_COURIER_STATUS_OPTIONS);
+    }
+    return appendCurrentIfMissing(COURIER_STATUS_OPTIONS);
+  }, [courierStatus, currentStatus]);
   const workflowHint =
     currentStatus === "pending"
       ? "Step 1: verify the order details before confirming."
@@ -828,7 +844,7 @@ function OrderUpdatePanel({
             onChange={(e) => setCourierStatus(e.target.value)}
             className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
           >
-            {COURIER_STATUS_OPTIONS.map((value) => (
+            {courierStatusOptions.map((value) => (
               <option key={value} value={value}>
                 {COURIER_STATUS_LABELS[value]}
               </option>

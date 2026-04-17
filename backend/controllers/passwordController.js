@@ -1,5 +1,5 @@
 // controllers/passwordController.js
-const User = require("../models/userModel");
+const User = require("../models/UserModel");
 const { sendPasswordResetEmail } = require("../config/emailConfig");
 
 exports.forgotPassword = async (req, res) => {
