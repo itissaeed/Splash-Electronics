@@ -5,7 +5,6 @@ import {
   PackageCheck,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Truck,
 } from "lucide-react";
 import api from "../../../utils/api";
@@ -287,7 +286,7 @@ export default function AdminCommerce() {
             <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-cyan-700">Commerce Controls</p>
             <h1 className="mt-2 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Checkout And Shipping Settings</h1>
             <p className="mt-2 max-w-3xl text-sm font-medium text-slate-600">
-              A cleaner operations panel for payment rules, order numbering, delivery pricing, and regional shipping logic.
+              Manage checkout rules, order numbering, shipping prices, and regional delivery settings.
             </p>
           </div>
           <div className="text-right text-xs text-slate-500">
@@ -307,9 +306,9 @@ export default function AdminCommerce() {
               <span className="rounded-full bg-emerald-400/15 px-3 py-1 font-semibold text-emerald-200">{summary.codStatus} COD</span>
               <span className="rounded-full bg-white/10 px-3 py-1 font-semibold text-slate-200">{summary.overrideCount} override{summary.overrideCount === 1 ? "" : "s"}</span>
             </div>
-            <h2 className="mt-4 text-xl font-black tracking-tight">Operational rules, separated and presentation-ready</h2>
+            <h2 className="mt-4 text-xl font-black tracking-tight">Commerce Overview</h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-300">
-              This tab now reads more like a real admin control room: one area for checkout policy, one for shipping pricing, and one for special delivery exceptions.
+              Review key checkout and shipping settings at a glance.
             </p>
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -332,22 +331,13 @@ export default function AdminCommerce() {
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            <div className="rounded-3xl border border-cyan-100 bg-cyan-50/70 p-4">
-              <div className="flex items-center gap-2">
-                <Sparkles size={16} className="text-cyan-700" />
-                <p className="text-sm font-bold text-slate-900">Why this layout is better</p>
-              </div>
-              <p className="mt-2 text-xs leading-6 text-slate-600">
-                Teachers and reviewers can now scan key rules quickly instead of reading through one long settings page.
-              </p>
-            </div>
             <div className="rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4">
               <div className="flex items-center gap-2">
                 <CheckCircle2 size={16} className="text-emerald-700" />
-                <p className="text-sm font-bold text-slate-900">Admin workflow</p>
+                <p className="text-sm font-bold text-slate-900">Settings Summary</p>
               </div>
               <p className="mt-2 text-xs leading-6 text-slate-600">
-                Checkout policies, shipping fees, and exception regions are now grouped by the decisions an admin actually makes.
+                Update payment rules, delivery charges, and regional shipping overrides from one place.
               </p>
             </div>
           </div>
@@ -512,17 +502,17 @@ export default function AdminCommerce() {
         >
           <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-700">Use Case</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-700">Example</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">Hard-to-reach areas</p>
               <p className="mt-1 text-xs text-slate-600">Useful when a specific district costs more than the normal regional rate.</p>
             </div>
             <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Tip</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Region Rule</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">Leave district empty</p>
               <p className="mt-1 text-xs text-slate-600">That makes the rule apply to the whole division instead of only one district.</p>
             </div>
             <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Coverage</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Active Rules</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">{summary.overrideCount} active override rules</p>
               <p className="mt-1 text-xs text-slate-600">Keep this list short so operations teams can review and maintain it quickly.</p>
             </div>
@@ -552,20 +542,25 @@ export default function AdminCommerce() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || loading}
             className={`rounded-2xl px-6 py-3 text-sm font-semibold text-white shadow-sm transition ${
-              saving ? "cursor-not-allowed bg-cyan-300" : "bg-cyan-600 hover:bg-cyan-500"
+              saving || loading ? "cursor-not-allowed bg-cyan-300" : "bg-cyan-600 hover:bg-cyan-500"
             }`}
           >
-            {saving ? "Saving..." : "Save Commerce Settings"}
+            {saving ? "Saving..." : loading ? "Loading..." : "Save Commerce Settings"}
           </button>
           <button
             type="button"
             onClick={loadSettings}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            disabled={saving || loading}
+            className={`inline-flex items-center gap-2 rounded-2xl border px-6 py-3 text-sm font-semibold transition ${
+              saving || loading
+                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+            }`}
           >
-            <RefreshCw size={16} />
-            Reset From Server
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            {loading ? "Refreshing..." : "Reset From Server"}
           </button>
         </div>
       </form>
