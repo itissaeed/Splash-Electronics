@@ -13,6 +13,22 @@ const REFUND_TIME_OPTIONS = [
   { value: "WITHIN_3_DAYS", label: "Within 3 days" },
   { value: "WITHIN_7_DAYS", label: "Within 7 days" },
 ];
+const REFUND_ISSUE_TYPE_OPTIONS = [
+  { value: "DAMAGED_PRODUCT", label: "Damaged product" },
+  { value: "DEFECTIVE_PRODUCT", label: "Defective / not working" },
+  { value: "WRONG_ITEM", label: "Wrong item received" },
+  { value: "MISSING_PARTS", label: "Missing parts or accessories" },
+  { value: "DIFFERENT_FROM_DESCRIPTION", label: "Different from description" },
+  { value: "CHANGED_MIND", label: "Changed mind" },
+  { value: "OTHER", label: "Other" },
+];
+const EVIDENCE_REQUIRED_ISSUE_TYPES = new Set([
+  "DAMAGED_PRODUCT",
+  "DEFECTIVE_PRODUCT",
+  "WRONG_ITEM",
+  "MISSING_PARTS",
+  "DIFFERENT_FROM_DESCRIPTION",
+]);
 
 const STATUS_FLOW = ["pending", "confirmed", "processing", "shipped", "delivered"];
 
@@ -121,8 +137,10 @@ export default function OrderDetails() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
   const [refundModalOpen, setRefundModalOpen] = useState(false);
+  const [refundIssueType, setRefundIssueType] = useState("DAMAGED_PRODUCT");
   const [refundReason, setRefundReason] = useState("");
   const [refundTimeOption, setRefundTimeOption] = useState("WITHIN_3_DAYS");
+  const [refundEvidenceFiles, setRefundEvidenceFiles] = useState([]);
   const [refundFormError, setRefundFormError] = useState("");
   const [copiedTracking, setCopiedTracking] = useState(false);
 
@@ -239,24 +257,35 @@ export default function OrderDetails() {
 
   const submitRefundRequest = async () => {
     const reason = refundReason.trim();
+    const evidenceRequired = EVIDENCE_REQUIRED_ISSUE_TYPES.has(refundIssueType);
     if (!reason) {
       setRefundFormError("Please provide a refund reason.");
       return;
     }
+    if (evidenceRequired && refundEvidenceFiles.length === 0) {
+      setRefundFormError("Please upload product photos for this refund type.");
+      return;
+    }
     try {
       setActionLoading("refund");
+      const formData = new FormData();
+      formData.append("issueType", refundIssueType);
+      formData.append("reason", reason);
+      formData.append("refundTimeOption", refundTimeOption);
+      formData.append("notes", "Requested from customer order details page");
+      refundEvidenceFiles.forEach((file) => {
+        formData.append("evidenceImages", file);
+      });
       await api.post(
         `/orders/${orderNo}/refund`,
-        {
-          reason,
-          refundTimeOption,
-          notes: "Requested from customer order details page",
-        },
+        formData,
         { headers: tokenHeader() }
       );
       setRefundModalOpen(false);
+      setRefundIssueType("DAMAGED_PRODUCT");
       setRefundReason("");
       setRefundTimeOption("WITHIN_3_DAYS");
+      setRefundEvidenceFiles([]);
       alert("Refund request submitted. Our team will review it.");
     } catch (e) {
       const msg = e?.response?.data?.message || "Failed to request refund";
@@ -264,6 +293,10 @@ export default function OrderDetails() {
     } finally {
       setActionLoading("");
     }
+  };
+
+  const removeRefundEvidenceFile = (indexToRemove) => {
+    setRefundEvidenceFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
   };
 
   return (
@@ -371,6 +404,20 @@ export default function OrderDetails() {
                   <div className="text-sm font-bold text-amber-900">Refund Request</div>
                   <div className="mt-3 space-y-3">
                     <div>
+                      <label className="text-xs font-semibold text-amber-900">Issue type *</label>
+                      <select
+                        value={refundIssueType}
+                        onChange={(e) => setRefundIssueType(e.target.value)}
+                        className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800"
+                      >
+                        {REFUND_ISSUE_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
                       <label className="text-xs font-semibold text-amber-900">Reason *</label>
                       <textarea
                         value={refundReason}
@@ -378,6 +425,45 @@ export default function OrderDetails() {
                         placeholder="Write the reason for your refund request"
                         className="mt-1 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800 min-h-[90px]"
                       />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-amber-900">
+                        Evidence photos {EVIDENCE_REQUIRED_ISSUE_TYPES.has(refundIssueType) ? "*" : "(optional)"}
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={(e) => {
+                          setRefundEvidenceFiles(Array.from(e.target.files || []).slice(0, 5));
+                          e.target.value = "";
+                        }}
+                        className="mt-1 block w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-gray-800 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-amber-900"
+                      />
+                      <p className="mt-1 text-[11px] text-amber-800">
+                        Upload up to 5 clear product photos. These are required for damage, defect, wrong-item, missing-parts, and description-mismatch claims.
+                      </p>
+                      {refundEvidenceFiles.length > 0 ? (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {refundEvidenceFiles.map((file, index) => (
+                            <div
+                              key={`${file.name}-${file.size}-${index}`}
+                              className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-amber-900"
+                            >
+                              <span className="max-w-[180px] truncate">{file.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeRefundEvidenceFile(index)}
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[12px] font-bold text-amber-900 hover:bg-amber-200"
+                                aria-label={`Remove ${file.name}`}
+                                title="Remove image"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-amber-900">

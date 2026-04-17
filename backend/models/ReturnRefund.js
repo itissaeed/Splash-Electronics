@@ -1,6 +1,11 @@
 // models/ReturnRefund.js
 const mongoose = require("mongoose");
 
+const evidenceImageSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  public_id: { type: String, required: true },
+}, { _id: true });
+
 const returnItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
   variantId: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -14,6 +19,7 @@ const returnRefundSchema = new mongoose.Schema({
 
   items: [returnItemSchema],
   status: { type: String, enum: ["requested", "approved", "rejected", "picked", "received", "refunded"], default: "requested" },
+  evidenceImages: [evidenceImageSchema],
 
   refund: {
     amount: Number,
@@ -23,10 +29,24 @@ const returnRefundSchema = new mongoose.Schema({
   },
 
   customerRefundPreference: {
+    issueType: {
+      type: String,
+      enum: [
+        "DAMAGED_PRODUCT",
+        "DEFECTIVE_PRODUCT",
+        "WRONG_ITEM",
+        "MISSING_PARTS",
+        "DIFFERENT_FROM_DESCRIPTION",
+        "CHANGED_MIND",
+        "OTHER",
+      ],
+      default: "OTHER",
+    },
     reason: String,
     refundTimeOption: {
       type: String,
       enum: ["WITHIN_24_HOURS", "WITHIN_3_DAYS", "WITHIN_7_DAYS"],
+      default: "WITHIN_7_DAYS",
     },
   },
 
