@@ -71,6 +71,16 @@ const NEXT_ACTIONS = {
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
 const nice = (n) => Number(n || 0).toLocaleString("en-BD");
+const issueTypeLabel = (value) => {
+  if (value === "DAMAGED_PRODUCT") return "Damaged product";
+  if (value === "DEFECTIVE_PRODUCT") return "Defective / not working";
+  if (value === "WRONG_ITEM") return "Wrong item received";
+  if (value === "MISSING_PARTS") return "Missing parts or accessories";
+  if (value === "DIFFERENT_FROM_DESCRIPTION") return "Different from description";
+  if (value === "CHANGED_MIND") return "Changed mind";
+  if (value === "OTHER") return "Other";
+  return "-";
+};
 
 const timeOptionLabel = (value) => {
   if (value === "WITHIN_24_HOURS") return "Within 24 hours";
@@ -244,6 +254,7 @@ export default function AdminReturns() {
         row?.order?.orderNo,
         row?.user?.name,
         row?.user?.email,
+        row?.customerRefundPreference?.issueType,
         row?.customerRefundPreference?.reason,
         row?.notes,
       ]
@@ -411,6 +422,7 @@ export default function AdminReturns() {
                       <DetailRow label="Customer" value={selected?.user?.name || "-"} />
                       <DetailRow label="Email" value={selected?.user?.email || "-"} />
                       <DetailRow label="Phone" value={selected?.user?.phone || "-"} muted={!selected?.user?.phone} />
+                      <DetailRow label="Issue type" value={issueTypeLabel(selected?.customerRefundPreference?.issueType)} />
                       <DetailRow label="Reason" value={selected?.customerRefundPreference?.reason || selected?.notes || "-"} />
                       <DetailRow label="Preferred timeline" value={timeOptionLabel(selected?.customerRefundPreference?.refundTimeOption)} />
                       <DetailRow label="Payment method" value={selected?.order?.payment?.method || "-"} />
@@ -424,9 +436,11 @@ export default function AdminReturns() {
                         <div key={item._id} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="text-sm font-semibold text-slate-900">{item?.reason || "Return item"}</p>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {item?.product?.name || item?.reason || "Return item"}
+                              </p>
                               <p className="mt-1 text-xs text-slate-500">
-                                Product ID {String(item?.product || "-")} · Variant {String(item?.variantId || "-")}
+                                Product ID {String(item?.product?._id || item?.product || "-")} · Variant {String(item?.variantId || "-")}
                               </p>
                             </div>
                             <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700">
@@ -436,6 +450,31 @@ export default function AdminReturns() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h3 className="text-sm font-bold text-slate-900">Evidence Photos</h3>
+                    {!selected?.evidenceImages?.length ? (
+                      <p className="mt-3 text-sm text-slate-500">No customer evidence photos were attached to this request.</p>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+                        {selected.evidenceImages.map((image) => (
+                          <a
+                            key={image._id || image.public_id || image.url}
+                            href={image.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                          >
+                            <img
+                              src={image.url}
+                              alt="Refund evidence"
+                              className="h-32 w-full object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -130,6 +130,7 @@ const ensureLatePaymentRefundRequest = async (order) => {
     items,
     status: "requested",
     customerRefundPreference: {
+      issueType: "OTHER",
       reason: "Payment succeeded after reservation expiry cancellation",
       refundTimeOption: "WITHIN_7_DAYS",
     },

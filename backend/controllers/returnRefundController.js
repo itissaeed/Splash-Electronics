@@ -36,6 +36,11 @@ exports.requestReturn = async (req, res) => {
       user: req.user._id,
       items,
       status: "requested",
+      customerRefundPreference: {
+        issueType: "OTHER",
+        reason: String(notes || "").trim(),
+        refundTimeOption: "WITHIN_7_DAYS",
+      },
       notes: notes || "",
     });
 
@@ -136,6 +141,7 @@ exports.getMyReturns = async (req, res) => {
     const rows = await ReturnRefund.find(filter)
       .sort({ createdAt: -1 })
       .populate("order")
+      .populate("items.product", "name slug")
       .populate("user", "name email phone")
       .lean();
     res.json(rows);

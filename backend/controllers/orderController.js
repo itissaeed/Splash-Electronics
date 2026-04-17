@@ -5,6 +5,8 @@ const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const InventoryLedger = require("../models/InventoryLedger");
 const ReturnRefund = require("../models/ReturnRefund");
+const cloudinary = require("../config/cloudinary");
+const streamifier = require("streamifier");
 const {
   createOrderFromCartForUser,
   getShippingQuote,
@@ -33,6 +35,22 @@ const canRequestRefund = (status, paymentStatus) => {
   return (st === "cancelled" || st === "delivered") && pay === "paid";
 };
 const REFUND_TIME_OPTIONS = ["WITHIN_24_HOURS", "WITHIN_3_DAYS", "WITHIN_7_DAYS"];
+const REFUND_ISSUE_TYPES = [
+  "DAMAGED_PRODUCT",
+  "DEFECTIVE_PRODUCT",
+  "WRONG_ITEM",
+  "MISSING_PARTS",
+  "DIFFERENT_FROM_DESCRIPTION",
+  "CHANGED_MIND",
+  "OTHER",
+];
+const EVIDENCE_REQUIRED_ISSUE_TYPES = new Set([
+  "DAMAGED_PRODUCT",
+  "DEFECTIVE_PRODUCT",
+  "WRONG_ITEM",
+  "MISSING_PARTS",
+  "DIFFERENT_FROM_DESCRIPTION",
+]);
 const REVENUE_RECOGNIZED_STATUSES = ["confirmed", "processing", "shipped", "delivered"];
 const STOCK_DEDUCTION_STATUSES = ["shipped", "delivered"];
 const COURIER_STATUSES = [
@@ -65,6 +83,34 @@ const addDays = (dateLike, days) => {
   const out = new Date(base);
   out.setDate(out.getDate() + Number(days || 0));
   return out;
+};
+
+const uploadRefundEvidenceFromBuffer = (buffer) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "refund-evidence" },
+      (error, result) => (result ? resolve(result) : reject(error))
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+
+const normalizeRefundIssueType = (value, fallback = "OTHER") => {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+  return REFUND_ISSUE_TYPES.includes(normalized) ? normalized : fallback;
+};
+
+const uploadRefundEvidenceFiles = async (files = []) => {
+  const uploaded = [];
+  for (const file of Array.isArray(files) ? files : []) {
+    const result = await uploadRefundEvidenceFromBuffer(file.buffer);
+    uploaded.push({
+      url: result.secure_url,
+      public_id: result.public_id,
+    });
+  }
+  return uploaded;
 };
 
 const validateCourierStatusForWorkflow = (orderStatus, courierStatus) => {
@@ -439,6 +485,7 @@ const ensureRefundRequestForCancelledPaidOrder = async (order, note) => {
     items: buildReturnItemsFromOrder(order, "order_cancelled_refund"),
     status: "requested",
     customerRefundPreference: {
+      issueType: "OTHER",
       reason: "Order cancelled after online/prepaid payment",
       refundTimeOption: "WITHIN_7_DAYS",
     },
@@ -822,6 +869,7 @@ exports.adminUpdateOrderStatus = async (req, res) => {
           items: buildReturnItemsFromOrder(order, returnReason),
           status: "requested",
           customerRefundPreference: {
+            issueType: "OTHER",
             reason: "Marked returned by admin from orders section",
             refundTimeOption: "WITHIN_7_DAYS",
           },
@@ -1035,7 +1083,7 @@ exports.confirmMyDelivery = async (req, res) => {
 };
 
 // User: POST /api/orders/:orderNo/refund
-// body: { reason?, notes? }
+// body/form-data: { issueType, reason, refundTimeOption, notes?, evidenceImages[]? }
 exports.requestMyRefund = async (req, res) => {
   try {
     const order = await Order.findOne({ orderNo: req.params.orderNo });
@@ -1058,6 +1106,11 @@ exports.requestMyRefund = async (req, res) => {
       return res.status(400).json({ message: "A refund request already exists for this order" });
     }
 
+    const issueType = normalizeRefundIssueType(req.body?.issueType, "");
+    if (!issueType) {
+      return res.status(400).json({ message: "Please choose a valid refund issue type" });
+    }
+
     const reason = String(req.body?.reason || "").trim();
     const refundTimeOption = String(req.body?.refundTimeOption || "")
       .trim()
@@ -1070,7 +1123,16 @@ exports.requestMyRefund = async (req, res) => {
         message: "Please choose a valid refund time option",
       });
     }
+    if (
+      EVIDENCE_REQUIRED_ISSUE_TYPES.has(issueType) &&
+      (!Array.isArray(req.files) || req.files.length === 0)
+    ) {
+      return res.status(400).json({
+        message: "Photo evidence is required for this refund issue type",
+      });
+    }
     const notes = String(req.body?.notes || "").trim();
+    const evidenceImages = await uploadRefundEvidenceFiles(req.files);
     const items = (order.items || []).map((it) => ({
       product: it.product,
       variantId: it.variantId,
@@ -1083,7 +1145,9 @@ exports.requestMyRefund = async (req, res) => {
       user: req.user._id,
       items,
       status: "requested",
+      evidenceImages,
       customerRefundPreference: {
+        issueType,
         reason,
         refundTimeOption,
       },
