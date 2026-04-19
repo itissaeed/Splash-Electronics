@@ -184,7 +184,7 @@ const createReservationLedgerEntries = async ({ order, reason, type, note, sessi
     }));
 
   if (!docs.length) return;
-  await InventoryLedger.create(docs, session ? { session } : undefined);
+  await InventoryLedger.create(docs, session ? { session, ordered: true } : undefined);
 };
 
 const releaseReservationForOrder = async ({
