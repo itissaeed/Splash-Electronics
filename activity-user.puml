@@ -1,0 +1,45 @@
+@startuml
+skinparam shadowing false
+scale 1.05
+
+|Account & Discovery|
+start
+:Open Website;
+if (Has account?) then (No)
+  :Register;
+  :Verify Email / OTP;
+endif
+:Login;
+:Browse Products;
+:Search / Filter Products;
+:View Product Details;
+if (Need suggestion?) then (Yes)
+  :Use Smart Advisor;
+endif
+
+|Cart & Checkout|
+:Add Item to Cart;
+:Review / Update Cart;
+:Proceed to Checkout;
+:Enter Shipping Info;
+if (Have coupon?) then (Yes)
+  :Apply Coupon;
+endif
+:Choose Payment Method;
+if (Online payment?) then (Yes)
+  :Pay with SSLCommerz;
+else (No)
+  :Confirm COD Order;
+endif
+:Order Created;
+
+|Post Order|
+:Track Order / Shipment;
+if (Delivered?) then (Yes)
+  :Submit Review;
+  if (Any issue?) then (Yes)
+    :Request Return / Refund;
+  endif
+endif
+stop
+@enduml

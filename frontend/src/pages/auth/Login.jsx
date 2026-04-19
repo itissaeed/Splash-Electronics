@@ -129,7 +129,7 @@ export default function Login() {
                 Sign in to Splash Electronics
               </h1>
               <p className="mt-3 text-white/90">
-                Track orders, manage your profile, and enjoy a faster checkout experience.
+                Manage your profile and enjoy a faster checkout experience.
               </p>
 
               <div className="mt-8 grid grid-cols-1 gap-3">
