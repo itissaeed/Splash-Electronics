@@ -1,0 +1,29 @@
+@startuml
+skinparam shadowing false
+scale 1.05
+
+|Catalog Management|
+start
+:Admin Login;
+:Open Dashboard;
+:Manage Products;
+:Manage Categories / Brands;
+:Upload Product Images;
+
+|Order Operations|
+:Review Orders;
+:Update Order Status;
+:Check Payment Status;
+:Update Shipment Status;
+
+|Commerce & Support|
+:Manage Inventory;
+:Manage Coupons / Offers;
+:Review Return / Refund Requests;
+:Approve / Reject / Refund;
+
+|Monitoring & Settings|
+:View Analytics / Forecasting;
+:Update Store / Commerce Settings;
+stop
+@enduml

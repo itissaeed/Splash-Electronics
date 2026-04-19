@@ -162,7 +162,7 @@ export default function SignUp() {
               <p className="mt-3 text-white/90">
                 {stage === "otp"
                   ? "Enter the code from your inbox to activate your account and sign in instantly."
-                  : "Faster checkout, order tracking, and exclusive deals made for Bangladesh."}
+                  : "Faster checkout and exclusive deals made for Bangladesh."}
               </p>
 
               <div className="mt-8 space-y-3">
