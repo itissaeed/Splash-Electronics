@@ -489,7 +489,7 @@ const createOrderFromCartForUser = async ({
     analytics: {
       visitorKey: String(visitorKey || "").trim(),
     },
-  }], { session });
+  }], { session, ordered: true });
 
   const createdOrder = order[0];
 
