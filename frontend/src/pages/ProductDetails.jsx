@@ -363,6 +363,7 @@ export default function ProductDetails() {
   const [reviewSuccess, setReviewSuccess] = useState("");
   const [reviewEligibility, setReviewEligibility] = useState(null);
   const [reviewEligibilityLoading, setReviewEligibilityLoading] = useState(false);
+  const [cartSuccess, setCartSuccess] = useState("");
   const compareItems = useCompareItems();
 
   const compareKeys = useMemo(
@@ -400,6 +401,12 @@ export default function ProductDetails() {
       }
     })();
   }, [slug]);
+
+  useEffect(() => {
+    if (!cartSuccess) return undefined;
+    const timer = setTimeout(() => setCartSuccess(""), 2500);
+    return () => clearTimeout(timer);
+  }, [cartSuccess]);
 
   const variants = useMemo(() => product?.variants || [], [product]);
 
@@ -641,7 +648,7 @@ export default function ProductDetails() {
         variantId: selectedVariant._id,
         qty: Number(qty) || 1,
       });
-      navigate("/cart");
+      setCartSuccess(`${Number(qty) || 1} item added to cart.`);
     } catch (e) {
       console.error("Failed to add to cart:", e);
       alert(e?.response?.data?.message || "Failed to add to cart");
@@ -729,6 +736,42 @@ export default function ProductDetails() {
 
   return (
     <div className="page-ambient min-h-screen">
+      {cartSuccess ? (
+        <div className="fixed right-4 top-4 z-50 w-[min(92vw,24rem)] rounded-2xl border border-emerald-200 bg-white/95 p-4 shadow-2xl backdrop-blur dark:border-emerald-800 dark:bg-slate-900/95">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                Added to cart
+              </p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{cartSuccess}</p>
+              <div className="mt-3 flex items-center gap-2">
+                <Link
+                  to="/cart"
+                  className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                >
+                  View Cart
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setCartSuccess("")}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                  Keep Shopping
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCartSuccess("")}
+              className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              aria-label="Dismiss cart confirmation"
+            >
+              x
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {/* Breadcrumb */}
         <div className="text-sm text-gray-600 mb-6">
