@@ -5,10 +5,31 @@ const COMPARE_LIMIT = 4;
 const getKeyFromItem = (item) =>
   item?.key || item?.slug || item?.id || item?._id || "";
 
+const normalizeCategory = (product) => {
+  const category = product?.category;
+  const id =
+    product?.categoryId ||
+    category?._id ||
+    category?.id ||
+    "";
+  const slug =
+    product?.categorySlug ||
+    category?.slug ||
+    "";
+  const name =
+    product?.categoryName ||
+    category?.name ||
+    (typeof category === "string" ? category : "");
+  const normalizedName = String(name || "").trim();
+  const key = id || slug || normalizedName.toLowerCase();
+  return { id, slug, name: normalizedName, key };
+};
+
 const normalizeItem = (product) => {
   const id = product?._id || product?.id || "";
   const slug = product?.slug || "";
   const key = slug || id;
+  const category = normalizeCategory(product);
   return {
     id,
     slug,
@@ -20,6 +41,17 @@ const normalizeItem = (product) => {
       "",
     price: product?.basePrice ?? product?.variants?.[0]?.price ?? product?.price ?? 0,
     brand: product?.brand?.name || product?.brand || "",
+    category: category.name
+      ? {
+          _id: category.id,
+          slug: category.slug,
+          name: category.name,
+        }
+      : null,
+    categoryId: category.id,
+    categorySlug: category.slug,
+    categoryName: category.name,
+    categoryKey: category.key,
   };
 };
 
@@ -27,10 +59,17 @@ const sanitizeItems = (items) => {
   if (!Array.isArray(items)) return [];
   const seen = new Set();
   return items
-    .map((item) => ({
-      ...item,
-      key: getKeyFromItem(item),
-    }))
+    .map((item) => {
+      const category = normalizeCategory(item);
+      return {
+        ...item,
+        key: getKeyFromItem(item),
+        categoryId: item?.categoryId || category.id,
+        categorySlug: item?.categorySlug || category.slug,
+        categoryName: item?.categoryName || category.name,
+        categoryKey: item?.categoryKey || category.key,
+      };
+    })
     .filter((item) => {
       if (!item.key || seen.has(item.key)) return false;
       seen.add(item.key);
@@ -60,18 +99,59 @@ const getCompareItems = () => {
   }
 };
 
-const addCompareItem = (product) => {
+const isSameCategory = (left, right) => {
+  const leftCategory = normalizeCategory(left);
+  const rightCategory = normalizeCategory(right);
+  if (!leftCategory.key || !rightCategory.key) {
+    return leftCategory.key === rightCategory.key;
+  }
+  return leftCategory.key === rightCategory.key;
+};
+
+const getCompareEligibility = (product, items = null) => {
   const item = normalizeItem(product);
+  const list = items || getCompareItems();
+
   if (!item.key) {
-    return { ok: false, reason: "invalid", items: getCompareItems() };
+    return { ok: false, reason: "invalid", items: list };
   }
 
-  const items = getCompareItems();
+  const exists = list.find((i) => i.key === item.key);
+  if (exists) {
+    return { ok: true, reason: "exists", items: list };
+  }
+
+  if (list.length >= COMPARE_LIMIT) {
+    return { ok: false, reason: "limit", items: list };
+  }
+
+  if (list.length && !isSameCategory(list[0], item)) {
+    return {
+      ok: false,
+      reason: "category",
+      items: list,
+      activeCategory: normalizeCategory(list[0]),
+      nextCategory: normalizeCategory(item),
+    };
+  }
+
+  return {
+    ok: true,
+    reason: "ready",
+    items: list,
+    activeCategory: list.length ? normalizeCategory(list[0]) : normalizeCategory(item),
+    nextCategory: normalizeCategory(item),
+  };
+};
+
+const addCompareItem = (product) => {
+  const item = normalizeItem(product);
+  const eligibility = getCompareEligibility(item);
+  if (!eligibility.ok) return eligibility;
+
+  const items = eligibility.items;
   if (items.find((i) => i.key === item.key)) {
     return { ok: true, reason: "exists", items };
-  }
-  if (items.length >= COMPARE_LIMIT) {
-    return { ok: false, reason: "limit", items };
   }
   const next = [...items, item];
   saveItems(next);
@@ -104,9 +184,8 @@ const toggleCompareItem = (product) => {
     return { ok: true, reason: "removed", items: next };
   }
 
-  if (items.length >= COMPARE_LIMIT) {
-    return { ok: false, reason: "limit", items };
-  }
+  const eligibility = getCompareEligibility(item, items);
+  if (!eligibility.ok) return eligibility;
 
   const next = [...items, item];
   saveItems(next);
@@ -136,4 +215,6 @@ export {
   isInCompare,
   normalizeItem as normalizeCompareItem,
   getKeyFromItem as getCompareKey,
+  getCompareEligibility,
+  normalizeCategory as getCompareCategory,
 };

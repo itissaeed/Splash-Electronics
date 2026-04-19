@@ -7,6 +7,7 @@ import { UserContext } from "./context/UserContext";
 import {
   COMPARE_LIMIT,
   getCompareKey,
+  getCompareEligibility,
   toggleCompareItem,
 } from "../utils/compare";
 
@@ -497,7 +498,10 @@ export default function ProductDetails() {
   const catSlug = product?.category?.slug || "";
   const compareKey = getCompareKey(product);
   const isCompared = compareKeys.has(compareKey);
+  const compareState = getCompareEligibility(product, compareItems);
   const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
+  const compareBlockedByCategory = !isCompared && compareState.reason === "category";
+  const compareDisabled = compareFull || compareBlockedByCategory;
 
   const rating = Number(product?.rating || 0);
   const reviews = Number(product?.numReviews || 0);
@@ -1045,23 +1049,34 @@ export default function ProductDetails() {
                   </Link>
                 </div>
                 {!isAdmin ? (
-                  <button
-                    type="button"
-                    disabled={compareFull}
-                    onClick={() => {
-                      const res = toggleCompareItem(product);
-                      if (!res.ok && res.reason === "limit") {
-                        alert(`You can compare up to ${COMPARE_LIMIT} products.`);
-                      }
-                    }}
-                    className={`mt-3 w-full rounded-2xl border px-5 py-3 text-center text-sm font-extrabold transition ${
-                      isCompared
-                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                        : "bg-white text-gray-900 hover:bg-gray-50"
-                    } ${compareFull ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    {isCompared ? "Remove from Compare" : "Add to Compare"}
-                  </button>
+	                  <button
+	                    type="button"
+	                    disabled={compareDisabled}
+	                    onClick={() => {
+	                      const res = toggleCompareItem(product);
+	                      if (!res.ok && res.reason === "limit") {
+	                        alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+	                      } else if (!res.ok && res.reason === "category") {
+	                        alert(
+	                          `Compare products from the same category only. Current shortlist: ${
+	                            res.activeCategory?.name || "selected category"
+	                          }.`
+	                        );
+	                      }
+	                    }}
+	                    title={
+	                      compareBlockedByCategory
+	                        ? `Only ${compareState.activeCategory?.name || "matching"} products can be compared right now.`
+	                        : undefined
+	                    }
+	                    className={`mt-3 w-full rounded-2xl border px-5 py-3 text-center text-sm font-extrabold transition ${
+	                      isCompared
+	                        ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+	                        : "bg-white text-gray-900 hover:bg-gray-50"
+	                    } ${compareDisabled ? "opacity-60 cursor-not-allowed" : ""}`}
+	                  >
+	                    {isCompared ? "Remove from Compare" : "Add to Compare"}
+	                  </button>
                 ) : null}
 
                 <p className="mt-4 text-xs text-gray-500">

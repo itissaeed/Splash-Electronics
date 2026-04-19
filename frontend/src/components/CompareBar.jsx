@@ -1,7 +1,12 @@
 import React, { useContext, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import useCompareItems from "../utils/useCompare";
-import { clearCompareItems, removeCompareItem, COMPARE_LIMIT } from "../utils/compare";
+import {
+  clearCompareItems,
+  removeCompareItem,
+  COMPARE_LIMIT,
+  getCompareCategory,
+} from "../utils/compare";
 import { UserContext } from "../pages/context/UserContext";
 
 const fallbackImg =
@@ -11,6 +16,7 @@ export default function CompareBar() {
   const location = useLocation();
   const items = useCompareItems();
   const { user } = useContext(UserContext);
+  const activeCategory = items[0] ? getCompareCategory(items[0]) : null;
 
   const hidden = useMemo(() => {
     return user?.isAdmin || location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
@@ -22,7 +28,7 @@ export default function CompareBar() {
     <div className="fixed bottom-5 right-4 z-50 w-[360px] max-w-[92vw]">
       <div className="relative overflow-hidden rounded-3xl border border-white/60 bg-white/85 shadow-2xl backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/85">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.12),transparent_14rem),radial-gradient(circle_at_left,rgba(251,191,36,0.14),transparent_12rem)]" />
-        <div className="relative flex items-center justify-between px-4 py-4 border-b border-white/60 dark:border-slate-800/60">
+        <div className="relative flex items-center justify-between border-b border-white/60 px-4 py-4 dark:border-slate-800/60">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">
               Compare
@@ -33,6 +39,11 @@ export default function CompareBar() {
             <p className="text-xs text-gray-500 dark:text-slate-400">
               {items.length}/{COMPARE_LIMIT} selected
             </p>
+            {activeCategory?.name ? (
+              <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                Category: {activeCategory.name}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -43,7 +54,7 @@ export default function CompareBar() {
           </button>
         </div>
 
-        <div className="relative px-4 pt-3 pb-4">
+        <div className="relative px-4 pb-4 pt-3">
           <div className="flex flex-wrap gap-2">
             {items.map((item) => (
               <div
@@ -54,7 +65,9 @@ export default function CompareBar() {
                   src={item.image || fallbackImg}
                   alt={item.name}
                   className="h-9 w-9 rounded-xl object-cover"
-                  onError={(e) => (e.currentTarget.src = fallbackImg)}
+                  onError={(e) => {
+                    e.currentTarget.src = fallbackImg;
+                  }}
                 />
                 <span className="max-w-[140px] truncate font-semibold text-gray-800 dark:text-slate-200">
                   {item.name}
@@ -65,7 +78,7 @@ export default function CompareBar() {
                   className="ml-1 rounded-full border border-white/70 bg-white/80 px-2 py-0.5 text-[10px] font-bold text-gray-600 hover:bg-gray-100 dark:border-slate-800/60 dark:bg-slate-900/80 dark:text-slate-300 dark:hover:bg-slate-800"
                   aria-label={`Remove ${item.name}`}
                 >
-                  ×
+                  x
                 </button>
               </div>
             ))}
@@ -82,4 +95,3 @@ export default function CompareBar() {
     </div>
   );
 }
-
