@@ -15,6 +15,7 @@ import useCompareItems from "../utils/useCompare";
 import {
   COMPARE_LIMIT,
   getCompareKey,
+  getCompareEligibility,
   toggleCompareItem,
 } from "../utils/compare";
 import { UserContext } from "./context/UserContext";
@@ -896,10 +897,14 @@ export default function ProductListPage() {
               const inStock = stockCount > 0;
 
               // ✅ slug first, fallback to id
-              const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
-              const compareKey = getCompareKey(p);
-              const isCompared = compareKeys.has(compareKey);
-              const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
+	              const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
+	              const compareKey = getCompareKey(p);
+	              const isCompared = compareKeys.has(compareKey);
+	              const compareState = getCompareEligibility(p, compareItems);
+	              const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
+	              const compareBlockedByCategory =
+	                !isCompared && compareState.reason === "category";
+	              const compareDisabled = compareFull || compareBlockedByCategory;
 
               return (
                 <div key={p.slug || p._id} className="relative h-full">
@@ -963,23 +968,34 @@ export default function ProductListPage() {
                   </Link>
 
 		                  {!isAdmin ? (
-		                    <button
-		                      type="button"
-		                      disabled={compareFull}
-                      onClick={() => {
-                        const res = toggleCompareItem(p);
-                        if (!res.ok && res.reason === "limit") {
-                          alert(`You can compare up to ${COMPARE_LIMIT} products.`);
-                        }
-                      }}
-		                      className={`absolute right-3 top-3 z-20 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ring-1 ${
-		                        isCompared
-		                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
-		                          : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
-	                      } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
-	                    >
-	                      {isCompared ? "Compared" : "Compare"}
-	                    </button>
+			                    <button
+			                      type="button"
+			                      disabled={compareDisabled}
+	                      onClick={() => {
+	                        const res = toggleCompareItem(p);
+	                        if (!res.ok && res.reason === "limit") {
+	                          alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+	                        } else if (!res.ok && res.reason === "category") {
+	                          alert(
+	                            `Compare products from the same category only. Current shortlist: ${
+	                              res.activeCategory?.name || "selected category"
+	                            }.`
+	                          );
+	                        }
+	                      }}
+			                      title={
+			                        compareBlockedByCategory
+			                          ? `Only ${compareState.activeCategory?.name || "matching"} products can be compared right now.`
+			                          : undefined
+			                      }
+			                      className={`absolute right-3 top-3 z-20 rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.18em] ring-1 ${
+			                        isCompared
+			                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
+			                          : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
+		                      } ${compareDisabled ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
+		                    >
+		                      {isCompared ? "Compared" : "Compare"}
+		                    </button>
 	                  ) : null}
                 </div>
               );

@@ -19,6 +19,7 @@ import useCompareItems from "../utils/useCompare";
 import {
   COMPARE_LIMIT,
   getCompareKey,
+  getCompareEligibility,
   toggleCompareItem,
 } from "../utils/compare";
 
@@ -145,6 +146,9 @@ export default function Home() {
   const addressText = [settings?.addressLine1, settings?.district, settings?.country]
     .filter(Boolean)
     .join(", ") || "Ambottola, Jashore";
+  const supportPhoneHref = `tel:${supportPhone.replace(/[^\d+]/g, "")}`;
+  const supportEmailHref = `mailto:${supportEmail}`;
+  const mapQuery = encodeURIComponent(addressText);
 
   // Optional maintenance mode
   if (settings?.maintenanceEnabled) {
@@ -529,7 +533,11 @@ export default function Home() {
                   const url = p?.slug ? `/product/${p.slug}` : `/product/${p._id}`;
                   const compareKey = getCompareKey(p);
                   const isCompared = compareKeys.has(compareKey);
+                  const compareState = getCompareEligibility(p, compareItems);
                   const compareFull = compareItems.length >= COMPARE_LIMIT && !isCompared;
+                  const compareBlockedByCategory =
+                    !isCompared && compareState.reason === "category";
+                  const compareDisabled = compareFull || compareBlockedByCategory;
 
                   return (
                     <div key={productKey} className="relative">
@@ -581,18 +589,29 @@ export default function Home() {
                         {!isAdmin ? (
                           <button
                             type="button"
-                            disabled={compareFull}
+                            disabled={compareDisabled}
                             onClick={() => {
                               const res = toggleCompareItem(p);
                               if (!res.ok && res.reason === "limit") {
                                 alert(`You can compare up to ${COMPARE_LIMIT} products.`);
+                              } else if (!res.ok && res.reason === "category") {
+                                alert(
+                                  `Compare products from the same category only. Current shortlist: ${
+                                    res.activeCategory?.name || "selected category"
+                                  }.`
+                                );
                               }
                             }}
+                            title={
+                              compareBlockedByCategory
+                                ? `Only ${compareState.activeCategory?.name || "matching"} products can be compared right now.`
+                                : undefined
+                            }
                           className={`absolute right-5 top-5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] ring-1 ${
                             isCompared
                               ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white ring-amber-300"
                               : "bg-gradient-to-r from-slate-900/90 to-slate-700/90 text-white ring-white/40 shadow-lg shadow-slate-900/20"
-                          } ${compareFull ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
+                          } ${compareDisabled ? "opacity-60 cursor-not-allowed" : "hover:brightness-110"}`}
                           >
                             {isCompared ? "Compared" : "Compare"}
                           </button>
@@ -615,37 +634,89 @@ export default function Home() {
               <FaPhone className="mr-3" />
               <div>
                 <p className="text-xs">{supportHours}</p>
-                <p className="text-cyan-300 font-bold text-lg">{supportPhone}</p>
+                <a
+                  href={supportPhoneHref}
+                  className="text-cyan-300 font-bold text-lg hover:text-cyan-200 transition"
+                >
+                  {supportPhone}
+                </a>
               </div>
             </div>
             <div className="flex items-center">
               <FaMapMarkerAlt className="mr-3" />
               <div>
                 <p className="text-xs">Store Address</p>
-                <p className="text-cyan-300 font-semibold">{addressText}</p>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${mapQuery}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-cyan-300 font-semibold hover:text-cyan-200 transition"
+                >
+                  {addressText}
+                </a>
               </div>
             </div>
           </div>
 
           <div>
-            <h3 className="text-white text-sm font-semibold mb-4">ABOUT US</h3>
+            <h3 className="text-white text-sm font-semibold mb-4">CUSTOMER SERVICES</h3>
             <ul className="space-y-2 text-sm">
-              <li className="hover:text-white cursor-pointer">Online Delivery</li>
-              <li className="hover:text-white cursor-pointer">Refund & Return Policy</li>
-              <li className="hover:text-white cursor-pointer">Blog</li>
-              <li className="hover:text-white cursor-pointer">Privacy Policy</li>
-              <li className="hover:text-white cursor-pointer">Star Point Policy</li>
-              <li className="hover:text-white cursor-pointer">Contact Us</li>
+              <li>
+                <Link to="/products" className="hover:text-white transition">
+                  Shop Products
+                </Link>
+              </li>
+              <li>
+                <Link to="/advisor" className="hover:text-white transition">
+                  Smart Advisor
+                </Link>
+              </li>
+              <li>
+                <Link to="/compare" className="hover:text-white transition">
+                  Compare Products
+                </Link>
+              </li>
+              <li>
+                <Link to={user ? "/orders" : "/login"} className="hover:text-white transition">
+                  Order Tracking
+                </Link>
+              </li>
+              <li>
+                <Link to={user ? "/profile" : "/login"} className="hover:text-white transition">
+                  My Account
+                </Link>
+              </li>
+              <li>
+                <Link to={user ? "/orders" : "/login"} className="hover:text-white transition">
+                  Returns and Refunds
+                </Link>
+              </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="text-white text-sm font-semibold mb-4">COMPANY</h3>
+            <h3 className="text-white text-sm font-semibold mb-4">EXPLORE</h3>
             <ul className="space-y-2 text-sm">
-              <li className="hover:text-white cursor-pointer">About Us</li>
-              <li className="hover:text-white cursor-pointer">Terms & Conditions</li>
-              <li className="hover:text-white cursor-pointer">Career</li>
-              <li className="hover:text-white cursor-pointer">Brands</li>
+              <li>
+                <Link to="/" className="hover:text-white transition">
+                  Home
+                </Link>
+              </li>
+              <li>
+                <Link to="/products?featured=true" className="hover:text-white transition">
+                  Featured Products
+                </Link>
+              </li>
+              <li>
+                <Link to="/products" className="hover:text-white transition">
+                  Categories and Brands
+                </Link>
+              </li>
+              <li>
+                <Link to="/login" className="hover:text-white transition">
+                  Login / Sign Up
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -653,7 +724,15 @@ export default function Home() {
             <h3 className="text-white text-sm font-semibold mb-4">STAY CONNECTED</h3>
             <p className="text-sm font-bold">{storeName}</p>
             <p className="text-xs text-gray-400">{addressText}</p>
-            <p className="mt-2 text-cyan-300 font-semibold">{supportEmail}</p>
+            <a
+              href={supportEmailHref}
+              className="mt-2 inline-block text-cyan-300 font-semibold hover:text-cyan-200 transition"
+            >
+              {supportEmail}
+            </a>
+            <p className="mt-3 text-xs text-gray-400">
+              Explore electronics, compare products, get smart recommendations, and manage orders in one place.
+            </p>
           </div>
         </div>
       </footer>
