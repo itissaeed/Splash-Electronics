@@ -15,6 +15,55 @@ const getStatus = (offer) => {
   return "Active";
 };
 
+const dedupeItems = (items = []) => {
+  const seen = new Set();
+  return (items || []).filter((item) => {
+    const id = String(item?._id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
+const getUserLabel = (user) =>
+  [user?.name, user?.email].filter(Boolean).join(" - ") || "Unnamed customer";
+
+const loadOfferFallbackItems = async (searchPath, query) => {
+  const keyword = String(query || "").trim().toLowerCase();
+
+  if (searchPath.endsWith("/products")) {
+    const { data } = await api.get("/products/admin");
+    const items = Array.isArray(data?.products) ? data.products : [];
+    return items
+      .filter((item) => {
+        if (!keyword) return true;
+        return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
+      })
+      .slice(0, 8);
+  }
+
+  if (searchPath.endsWith("/categories")) {
+    const { data } = await api.get("/categories");
+    const items = Array.isArray(data) ? data : [];
+    return items
+      .filter((item) => {
+        if (!keyword) return true;
+        return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
+      })
+      .slice(0, 8);
+  }
+
+  if (searchPath.endsWith("/users")) {
+    const { data } = await api.get("/admin/customers", {
+      headers: tokenHeader(),
+      params: { page: 1, limit: 8, keyword: query.trim() },
+    });
+    return Array.isArray(data?.users) ? data.users : [];
+  }
+
+  return [];
+};
+
 function MetricCard({ label, value, subtitle }) {
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -25,24 +74,90 @@ function MetricCard({ label, value, subtitle }) {
   );
 }
 
-function SearchableScopePicker({ title, items, selectedIds, onChange, getItemLabel, placeholder, helpText }) {
+function AsyncScopePicker({
+  title,
+  searchPath,
+  selectedItems,
+  onChange,
+  getItemLabel,
+  placeholder,
+  helpText,
+  disabled = false,
+  disabledMessage = "",
+}) {
   const [query, setQuery] = useState("");
-  const selectedSet = new Set((selectedIds || []).map(String));
-  const selectedItems = items.filter((item) => selectedSet.has(String(item?._id)));
-  const filteredItems = items
-    .filter((item) => !selectedSet.has(String(item?._id)))
-    .filter((item) => getItemLabel(item).toLowerCase().includes(query.trim().toLowerCase()))
-    .slice(0, 8);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (disabled) {
+      setResults([]);
+      setLoading(false);
+      setError("");
+      return undefined;
+    }
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const { data } = await api.get(searchPath, {
+          headers: tokenHeader(),
+          params: { keyword: query.trim(), limit: 8 },
+        });
+        if (!active) return;
+        setResults(Array.isArray(data?.items) ? data.items : []);
+      } catch (fetchError) {
+        if (fetchError?.response?.status === 404) {
+          try {
+            const fallbackItems = await loadOfferFallbackItems(searchPath, query);
+            if (!active) return;
+            setResults(fallbackItems);
+            setError("");
+            return;
+          } catch (fallbackError) {
+            if (!active) return;
+            console.error(`Fallback lookup failed for ${title.toLowerCase()}:`, fallbackError);
+          }
+        }
+        if (!active) return;
+        console.error(`Failed to load ${title.toLowerCase()}:`, fetchError);
+        setError(fetchError?.response?.data?.message || "Failed to search.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [disabled, query, searchPath, title]);
+
+  const selectedSet = new Set((selectedItems || []).map((item) => String(item?._id)));
+  const visibleResults = results.filter((item) => !selectedSet.has(String(item?._id)));
+
+  const addItem = (item) => {
+    if (!item?._id) return;
+    onChange(dedupeItems([...(selectedItems || []), item]));
+    setQuery("");
+  };
+
+  const removeItem = (id) => {
+    onChange((selectedItems || []).filter((item) => String(item?._id) !== String(id)));
+  };
 
   return (
-    <div className="rounded-2xl border bg-white p-4">
+    <div className={`rounded-2xl border p-4 ${disabled ? "bg-gray-50" : "bg-white"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <label className="text-sm font-semibold text-gray-700">{title}</label>
-          <p className="mt-1 text-xs text-gray-500">{helpText}</p>
+          <p className="mt-1 text-xs text-gray-500">{disabled ? disabledMessage || helpText : helpText}</p>
         </div>
         <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-          {selectedItems.length} selected
+          {(selectedItems || []).length} selected
         </div>
       </div>
 
@@ -50,18 +165,25 @@ function SearchableScopePicker({ title, items, selectedIds, onChange, getItemLab
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={placeholder}
-        className="mt-3 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300"
+        disabled={disabled}
+        className="mt-3 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:bg-gray-100"
       />
 
       <div className="mt-3 rounded-2xl border bg-gray-50 p-2">
-        {filteredItems.length ? (
+        {disabled ? (
+          <div className="px-2 py-6 text-center text-sm text-gray-500">{disabledMessage || "This picker is disabled right now."}</div>
+        ) : loading ? (
+          <div className="px-2 py-6 text-center text-sm text-gray-500">Searching...</div>
+        ) : error ? (
+          <div className="px-2 py-6 text-center text-sm text-red-600">{error}</div>
+        ) : visibleResults.length ? (
           <div className="space-y-2">
-            {filteredItems.map((item) => (
+            {visibleResults.map((item) => (
               <div key={item._id} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
                 <div className="min-w-0 truncate text-sm font-medium text-gray-700">{getItemLabel(item)}</div>
                 <button
                   type="button"
-                  onClick={() => onChange([...(selectedIds || []), String(item._id)])}
+                  onClick={() => addItem(item)}
                   className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
                 >
                   Add
@@ -71,18 +193,18 @@ function SearchableScopePicker({ title, items, selectedIds, onChange, getItemLab
           </div>
         ) : (
           <div className="px-2 py-6 text-center text-sm text-gray-500">
-            {query.trim() ? "No matches found." : "Start typing to search and add items."}
+            {query.trim() ? "No matches found." : "Start typing to search live data."}
           </div>
         )}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {selectedItems.length ? (
+        {(selectedItems || []).length ? (
           selectedItems.map((item) => (
             <button
               key={item._id}
               type="button"
-              onClick={() => onChange((selectedIds || []).filter((id) => String(id) !== String(item._id)))}
+              onClick={() => removeItem(item._id)}
               className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700"
             >
               {getItemLabel(item)} x
@@ -96,10 +218,19 @@ function SearchableScopePicker({ title, items, selectedIds, onChange, getItemLab
   );
 }
 
+const getScopeSummary = (offer) => {
+  if (offer?.scopeType === "PRODUCTS") return `${offer?.applicableProducts?.length || 0} products`;
+  if (offer?.scopeType === "CATEGORIES") return `${offer?.applicableCategories?.length || 0} categories`;
+  return "All products";
+};
+
+const getAudienceSummary = (offer) => {
+  if (offer?.audienceType === "SPECIFIC_USERS") return `${offer?.applicableUsers?.length || 0} customers`;
+  return "All customers";
+};
+
 export default function AdminOffers() {
   const [offers, setOffers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -109,6 +240,9 @@ export default function AdminOffers() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [errMsg, setErrMsg] = useState("");
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -117,15 +251,17 @@ export default function AdminOffers() {
     value: "",
     priority: 0,
     scopeType: "ALL",
+    audienceType: "ALL",
     validFrom: "",
     validTo: "",
     isActive: true,
-    applicableProducts: [],
-    applicableCategories: [],
   });
 
   const resetForm = () => {
     setEditingId(null);
+    setSelectedProducts([]);
+    setSelectedCategories([]);
+    setSelectedUsers([]);
     setForm({
       name: "",
       description: "",
@@ -134,25 +270,11 @@ export default function AdminOffers() {
       value: "",
       priority: 0,
       scopeType: "ALL",
+      audienceType: "ALL",
       validFrom: "",
       validTo: "",
       isActive: true,
-      applicableProducts: [],
-      applicableCategories: [],
     });
-  };
-
-  const fetchDependencies = async () => {
-    try {
-      const [productRes, categoryRes] = await Promise.all([
-        api.get("/products/admin", { headers: tokenHeader() }),
-        api.get("/categories"),
-      ]);
-      setProducts(productRes.data?.products || []);
-      setCategories(Array.isArray(categoryRes.data) ? categoryRes.data : []);
-    } catch (error) {
-      console.error("Failed to load offer dependencies:", error);
-    }
   };
 
   const fetchOffers = async (opts = {}) => {
@@ -185,8 +307,7 @@ export default function AdminOffers() {
 
   useEffect(() => {
     fetchOffers();
-    fetchDependencies();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFormChange = (e) => {
@@ -197,15 +318,11 @@ export default function AdminOffers() {
     }));
   };
 
-  const updateFormList = (name, values) => {
-    setForm((prev) => ({
-      ...prev,
-      [name]: values,
-    }));
-  };
-
   const handleEdit = (offer) => {
     setEditingId(offer._id);
+    setSelectedProducts(dedupeItems(offer?.applicableProducts || []));
+    setSelectedCategories(dedupeItems(offer?.applicableCategories || []));
+    setSelectedUsers(dedupeItems(offer?.applicableUsers || []));
     setForm({
       name: offer?.name || "",
       description: offer?.description || "",
@@ -214,11 +331,10 @@ export default function AdminOffers() {
       value: offer?.value ?? "",
       priority: offer?.priority ?? 0,
       scopeType: offer?.scopeType || "ALL",
+      audienceType: offer?.audienceType || "ALL",
       validFrom: offer?.validFrom ? offer.validFrom.slice(0, 10) : "",
       validTo: offer?.validTo ? offer.validTo.slice(0, 10) : "",
       isActive: offer?.isActive !== false,
-      applicableProducts: (offer?.applicableProducts || []).map((item) => item?._id || item),
-      applicableCategories: (offer?.applicableCategories || []).map((item) => item?._id || item),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -247,15 +363,28 @@ export default function AdminOffers() {
         value: Number(form.value || 0),
         priority: Number(form.priority || 0),
         scopeType: form.scopeType,
+        audienceType: form.audienceType,
         validFrom: form.validFrom || null,
         validTo: form.validTo || null,
         isActive: !!form.isActive,
-        applicableProducts: form.applicableProducts,
-        applicableCategories: form.applicableCategories,
+        applicableProducts: selectedProducts.map((item) => item._id),
+        applicableCategories: selectedCategories.map((item) => item._id),
+        applicableUsers: selectedUsers.map((item) => item._id),
       };
+
       if (!payload.name || !Number.isFinite(payload.value)) {
         throw new Error("Name and value are required.");
       }
+      if (payload.scopeType === "PRODUCTS" && payload.applicableProducts.length === 0) {
+        throw new Error("Select at least one product for a product-scoped offer.");
+      }
+      if (payload.scopeType === "CATEGORIES" && payload.applicableCategories.length === 0) {
+        throw new Error("Select at least one category for a category-scoped offer.");
+      }
+      if (payload.audienceType === "SPECIFIC_USERS" && payload.applicableUsers.length === 0) {
+        throw new Error("Select at least one customer for a specific-user offer.");
+      }
+
       if (editingId) {
         await api.put(`/admin/offers/${editingId}`, payload, { headers: tokenHeader() });
       } else {
@@ -355,19 +484,24 @@ export default function AdminOffers() {
             <div>
               <label className="text-sm font-semibold text-gray-700">Value</label>
               <input type="number" name="value" value={form.value} onChange={handleFormChange} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm" required />
-              <p className="mt-1 text-xs text-gray-500">
-                Example: enter `10` for 10% off, or `500` for Tk 500 off.
-              </p>
+              <p className="mt-1 text-xs text-gray-500">Example: enter `10` for 10% off, or `500` for Tk 500 off.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
             <div>
               <label className="text-sm font-semibold text-gray-700">Scope</label>
               <select name="scopeType" value={form.scopeType} onChange={handleFormChange} className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm">
                 <option value="ALL">All products</option>
                 <option value="PRODUCTS">Specific products</option>
                 <option value="CATEGORIES">Specific categories</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-gray-700">Audience</label>
+              <select name="audienceType" value={form.audienceType} onChange={handleFormChange} className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm">
+                <option value="ALL">All customers</option>
+                <option value="SPECIFIC_USERS">Specific customers</option>
               </select>
             </div>
             <div>
@@ -395,24 +529,41 @@ export default function AdminOffers() {
             <textarea name="description" value={form.description} onChange={handleFormChange} className="mt-1 min-h-[80px] w-full rounded-xl border px-3 py-2 text-sm" />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <SearchableScopePicker
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <AsyncScopePicker
               title="Offer products"
-              placeholder="Search products"
-              helpText="Use this when the offer applies only to selected products."
-              items={products}
-              selectedIds={form.applicableProducts}
-              onChange={(values) => updateFormList("applicableProducts", values)}
+              searchPath="/admin/offers/lookups/products"
+              placeholder="Search products by name or slug"
+              helpText="Search and add only the products this offer should affect."
+              selectedItems={selectedProducts}
+              onChange={setSelectedProducts}
               getItemLabel={(product) => product?.name || "Unnamed product"}
+              disabled={form.scopeType !== "PRODUCTS"}
+              disabledMessage="Switch scope to Specific products to search and add products here."
             />
-            <SearchableScopePicker
+
+            <AsyncScopePicker
               title="Offer categories"
-              placeholder="Search categories"
-              helpText="Use this when the offer applies to whole categories."
-              items={categories}
-              selectedIds={form.applicableCategories}
-              onChange={(values) => updateFormList("applicableCategories", values)}
+              searchPath="/admin/offers/lookups/categories"
+              placeholder="Search categories by name or slug"
+              helpText="Search and add category-level scope for this offer."
+              selectedItems={selectedCategories}
+              onChange={setSelectedCategories}
               getItemLabel={(category) => category?.name || "Unnamed category"}
+              disabled={form.scopeType !== "CATEGORIES"}
+              disabledMessage="Switch scope to Specific categories to search and add categories here."
+            />
+
+            <AsyncScopePicker
+              title="Specific users"
+              searchPath="/admin/offers/lookups/users"
+              placeholder="Search customers by name, email, or phone"
+              helpText="Use this when the offer should be visible only to selected customers."
+              selectedItems={selectedUsers}
+              onChange={setSelectedUsers}
+              getItemLabel={getUserLabel}
+              disabled={form.audienceType !== "SPECIFIC_USERS"}
+              disabledMessage="Switch audience to Specific customers to search and add users here."
             />
           </div>
 
@@ -440,6 +591,7 @@ export default function AdminOffers() {
                 <th className="px-4 py-3 text-left font-semibold">Offer</th>
                 <th className="px-4 py-3 text-left font-semibold">Discount</th>
                 <th className="px-4 py-3 text-left font-semibold">Scope</th>
+                <th className="px-4 py-3 text-left font-semibold">Audience</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 py-3 text-left font-semibold">Validity</th>
                 <th className="px-4 py-3 text-right font-semibold">Actions</th>
@@ -447,9 +599,9 @@ export default function AdminOffers() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-6 text-gray-500">Loading offers...</td></tr>
+                <tr><td colSpan={7} className="px-4 py-6 text-gray-500">Loading offers...</td></tr>
               ) : offers.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-6 text-gray-500">No offers found.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-6 text-gray-500">No offers found.</td></tr>
               ) : (
                 offers.map((offer) => (
                   <tr key={offer._id} className="border-t">
@@ -462,9 +614,8 @@ export default function AdminOffers() {
                       {offer.type === "PERCENT" ? `${offer.value}% off` : `Tk ${offer.value} off`}
                       <div className="mt-1 text-gray-500">Priority: {offer.priority || 0}</div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-700">
-                      {offer.scopeType === "ALL" ? "All products" : offer.scopeType === "PRODUCTS" ? `${offer.applicableProducts?.length || 0} products` : `${offer.applicableCategories?.length || 0} categories`}
-                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700">{getScopeSummary(offer)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-700">{getAudienceSummary(offer)}</td>
                     <td className="px-4 py-3 text-xs font-semibold text-gray-700">{getStatus(offer)}</td>
                     <td className="px-4 py-3 text-xs text-gray-600">
                       {(offer.validFrom ? offer.validFrom.slice(0, 10) : "-")} to {(offer.validTo ? offer.validTo.slice(0, 10) : "-")}

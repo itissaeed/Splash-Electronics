@@ -8,6 +8,7 @@ const {
   getProductBySlug,
   getProductById,
   getAllProductsAdmin,
+  getAdminProductById,
   createProduct,
   bulkImportProducts,
   updateProduct,
@@ -27,6 +28,7 @@ const upload = multer({ storage });
 
 // -------------------- ADMIN ROUTES --------------------
 router.get("/admin", protect, admin, getAllProductsAdmin);
+router.get("/admin/:id", protect, admin, getAdminProductById);
 router.post("/", protect, admin, createProduct);
 router.post("/bulk-import", protect, admin, bulkImportProducts);
 router.post("/:id/duplicate", protect, admin, duplicateProduct);

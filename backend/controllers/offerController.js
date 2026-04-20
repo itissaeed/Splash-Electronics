@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 const Offer = require("../models/Offer");
+const Product = require("../models/Product");
+const Category = require("../models/Category");
+const User = require("../models/UserModel");
 
 const toNum = (v, def) => {
   const n = Number(v);
@@ -22,6 +25,18 @@ const normalizeScopeType = (value) => {
   const normalized = String(value || "").toUpperCase().trim();
   return ["ALL", "PRODUCTS", "CATEGORIES"].includes(normalized) ? normalized : "ALL";
 };
+
+const normalizeAudienceType = (value) => {
+  const normalized = String(value || "").toUpperCase().trim();
+  return ["ALL", "SPECIFIC_USERS"].includes(normalized) ? normalized : "ALL";
+};
+
+const clampLimit = (value, fallback = 8, max = 25) => {
+  const num = toNum(value, fallback);
+  return Math.max(1, Math.min(max, num));
+};
+
+const buildRegex = (value) => new RegExp(String(value || "").trim(), "i");
 
 exports.adminListOffers = async (req, res) => {
   try {
@@ -60,6 +75,7 @@ exports.adminListOffers = async (req, res) => {
     const offers = await Offer.find(filter)
       .populate("applicableProducts", "name slug")
       .populate("applicableCategories", "name slug")
+      .populate("applicableUsers", "name email number")
       .sort({ priority: -1, createdAt: -1 })
       .skip(pageSize * (page - 1))
       .limit(pageSize)
@@ -93,8 +109,10 @@ exports.adminCreateOffer = async (req, res) => {
       value,
       priority,
       scopeType,
+      audienceType,
       applicableProducts,
       applicableCategories,
+      applicableUsers,
       validFrom,
       validTo,
       isActive,
@@ -112,10 +130,15 @@ exports.adminCreateOffer = async (req, res) => {
       value: Math.max(0, toNum(value, 0)),
       priority: toNum(priority, 0),
       scopeType: normalizeScopeType(scopeType),
+      audienceType: normalizeAudienceType(audienceType),
       applicableProducts: normalizeIdArray(applicableProducts),
       applicableCategories: normalizeIdArray(applicableCategories),
+      applicableUsers: normalizeIdArray(applicableUsers),
       isActive: !!isActive,
     };
+    if (payload.scopeType !== "PRODUCTS") payload.applicableProducts = [];
+    if (payload.scopeType !== "CATEGORIES") payload.applicableCategories = [];
+    if (payload.audienceType !== "SPECIFIC_USERS") payload.applicableUsers = [];
     if (validFrom) payload.validFrom = new Date(validFrom);
     if (validTo) payload.validTo = new Date(validTo);
 
@@ -140,8 +163,10 @@ exports.adminUpdateOffer = async (req, res) => {
       value,
       priority,
       scopeType,
+      audienceType,
       applicableProducts,
       applicableCategories,
+      applicableUsers,
       validFrom,
       validTo,
       isActive,
@@ -154,8 +179,13 @@ exports.adminUpdateOffer = async (req, res) => {
     if (value !== undefined) offer.value = Math.max(0, toNum(value, offer.value));
     if (priority !== undefined) offer.priority = toNum(priority, offer.priority);
     if (scopeType !== undefined) offer.scopeType = normalizeScopeType(scopeType);
+    if (audienceType !== undefined) offer.audienceType = normalizeAudienceType(audienceType);
     if (applicableProducts !== undefined) offer.applicableProducts = normalizeIdArray(applicableProducts);
     if (applicableCategories !== undefined) offer.applicableCategories = normalizeIdArray(applicableCategories);
+    if (applicableUsers !== undefined) offer.applicableUsers = normalizeIdArray(applicableUsers);
+    if (offer.scopeType !== "PRODUCTS") offer.applicableProducts = [];
+    if (offer.scopeType !== "CATEGORIES") offer.applicableCategories = [];
+    if (offer.audienceType !== "SPECIFIC_USERS") offer.applicableUsers = [];
     if (validFrom !== undefined) offer.validFrom = validFrom ? new Date(validFrom) : undefined;
     if (validTo !== undefined) offer.validTo = validTo ? new Date(validTo) : undefined;
     if (isActive !== undefined) offer.isActive = !!isActive;
@@ -178,5 +208,77 @@ exports.adminDeleteOffer = async (req, res) => {
   } catch (error) {
     console.error("adminDeleteOffer error:", error);
     res.status(500).json({ message: "Failed to deactivate offer" });
+  }
+};
+
+exports.adminLookupOfferProducts = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limit = clampLimit(req.query.limit, 8, 20);
+    const filter = {};
+
+    if (keyword) {
+      const rx = buildRegex(keyword);
+      filter.$or = [{ name: rx }, { slug: rx }];
+    }
+
+    const products = await Product.find(filter)
+      .sort(keyword ? { name: 1 } : { createdAt: -1 })
+      .limit(limit)
+      .select("_id name slug publicationStatus")
+      .lean();
+
+    res.json({ items: products });
+  } catch (error) {
+    console.error("adminLookupOfferProducts error:", error);
+    res.status(500).json({ message: "Failed to search products" });
+  }
+};
+
+exports.adminLookupOfferCategories = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limit = clampLimit(req.query.limit, 8, 20);
+    const filter = {};
+
+    if (keyword) {
+      const rx = buildRegex(keyword);
+      filter.$or = [{ name: rx }, { slug: rx }];
+    }
+
+    const categories = await Category.find(filter)
+      .sort({ name: 1 })
+      .limit(limit)
+      .select("_id name slug")
+      .lean();
+
+    res.json({ items: categories });
+  } catch (error) {
+    console.error("adminLookupOfferCategories error:", error);
+    res.status(500).json({ message: "Failed to search categories" });
+  }
+};
+
+exports.adminLookupOfferUsers = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limit = clampLimit(req.query.limit, 8, 20);
+    const filter = { isAdmin: false };
+
+    if (keyword) {
+      const rx = buildRegex(keyword);
+      filter.$or = [{ name: rx }, { email: rx }, { number: rx }];
+    }
+
+    const users = await User.find(filter)
+      .sort(keyword ? { name: 1 } : { createdAt: -1 })
+      .limit(limit)
+      .select("_id name email number createdAt")
+      .lean();
+
+    res.json({ items: users });
+  } catch (error) {
+    console.error("adminLookupOfferUsers error:", error);
+    res.status(500).json({ message: "Failed to search customers" });
   }
 };

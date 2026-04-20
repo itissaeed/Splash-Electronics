@@ -37,6 +37,7 @@ const buildOfferSummary = (offer) => ({
   type: offer?.type || "PERCENT",
   value: toNum(offer?.value, 0),
   scopeType: offer?.scopeType || "ALL",
+  audienceType: offer?.audienceType || "ALL",
   priority: toNum(offer?.priority, 0),
   validFrom: offer?.validFrom || null,
   validTo: offer?.validTo || null,
@@ -102,10 +103,17 @@ const pickBestOffer = ({ offers, price }) => {
   return bestPricing;
 };
 
-const getApplicableOffersForProduct = ({ product, offers }) => {
+const getApplicableOffersForProduct = ({ product, offers, userId = null }) => {
   const productId = String(product?._id || "");
   const categoryId = String(product?.category?._id || product?.category || "");
   return (offers || []).filter((offer) => {
+    const audienceType = String(offer?.audienceType || "ALL").toUpperCase();
+    if (audienceType === "SPECIFIC_USERS") {
+      if (!userId) return false;
+      const hasMatchingUser = (offer?.applicableUsers || []).some((id) => String(id) === String(userId));
+      if (!hasMatchingUser) return false;
+    }
+
     const scopeType = String(offer?.scopeType || "ALL").toUpperCase();
     if (scopeType === "ALL") return true;
     if (scopeType === "PRODUCTS") {
@@ -123,11 +131,12 @@ const applyOfferPricingToProducts = async (products, opts = {}) => {
   if (!list.length) return list;
 
   const now = opts.now instanceof Date ? opts.now : new Date();
+  const userId = opts.userId || null;
   const activeOffers = (opts.offers || (await Offer.find({ isActive: true }).lean()))
     .filter((offer) => isOfferActive(offer, now));
 
   for (const product of list) {
-    const applicableOffers = getApplicableOffersForProduct({ product, offers: activeOffers });
+    const applicableOffers = getApplicableOffersForProduct({ product, offers: activeOffers, userId });
     const basePricing = pickBestOffer({
       offers: applicableOffers,
       price: product?.basePrice ?? 0,

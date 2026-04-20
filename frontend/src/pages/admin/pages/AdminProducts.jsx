@@ -26,6 +26,9 @@ const PRODUCT_STATUS_OPTIONS = [
   { value: "published", label: "Published" },
   { value: "archived", label: "Archived" },
 ];
+const tokenHeader = () => ({
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
 const BULK_IMPORT_TEMPLATE = [
   "name,slug,brand,category,description,sku,price,stock,publicationStatus,defaultVariant,imageUrls,highlights,color,ram,storage,spec_display_size,spec_chipset",
   '"Galaxy A55","galaxy-a55","Samsung","Smartphones","Balanced midrange phone","GALAXY-A55-128-BLK",45999,14,published,yes,"https://example.com/a55-blue-front.jpg|https://example.com/a55-blue-back.jpg","AMOLED display|Long battery life","Awesome Iceblue","8GB","128GB","6.6 inch","Exynos 1480"',
@@ -644,6 +647,303 @@ function Modal({ open, title, subtitle, children, onClose }) {
   );
 }
 
+function AsyncEntitySelect({
+  label,
+  value,
+  searchPath,
+  getItemLabel,
+  onSelect,
+  placeholder,
+  emptyLabel,
+  createAction,
+  selectedItem = null,
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadFallbackItems = async () => {
+    const keyword = String(query || "").trim().toLowerCase();
+
+    if (searchPath === "/brands/admin/lookups") {
+      const { data } = await api.get("/brands");
+      const items = Array.isArray(data) ? data : [];
+      return items
+        .filter((item) => {
+          if (!keyword) return true;
+          return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
+        })
+        .slice(0, 8);
+    }
+
+    if (searchPath === "/categories/admin/lookups") {
+      const { data } = await api.get("/categories");
+      const items = Array.isArray(data) ? data : [];
+      return items
+        .filter((item) => {
+          if (!keyword) return true;
+          return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
+        })
+        .slice(0, 8);
+    }
+
+    return [];
+  };
+
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const { data } = await api.get(searchPath, {
+          headers: tokenHeader(),
+          params: { keyword: query.trim(), limit: 8 },
+        });
+        if (!active) return;
+        setResults(Array.isArray(data?.items) ? data.items : []);
+      } catch (error) {
+        if (error?.response?.status === 404) {
+          try {
+            const fallbackItems = await loadFallbackItems();
+            if (!active) return;
+            setResults(fallbackItems);
+            return;
+          } catch (fallbackError) {
+            if (!active) return;
+            console.error(`Fallback lookup failed for ${label.toLowerCase()} options`, fallbackError);
+          }
+        }
+        if (!active) return;
+        console.error(`Failed to load ${label.toLowerCase()} options`, error);
+        setResults([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [label, query, searchPath]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-gray-600">{label}</label>
+        {createAction}
+      </div>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
+      />
+      <div className="mt-2 rounded-2xl border border-gray-200 bg-white p-2">
+        {selectedItem ? (
+          <button
+            type="button"
+            onClick={() => onSelect("", null)}
+            className="mb-2 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700"
+          >
+            <span className="truncate max-w-[220px]">{getItemLabel(selectedItem)}</span>
+            <span aria-hidden="true">x</span>
+          </button>
+        ) : null}
+
+        {loading ? (
+          <div className="px-2 py-4 text-sm text-gray-500">Searching...</div>
+        ) : results.length ? (
+          <div className="space-y-2">
+            {results.map((item) => {
+              const active = String(item?._id) === String(value);
+              return (
+                <button
+                  key={item._id}
+                  type="button"
+                  onClick={() => onSelect(String(item._id), item)}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
+                    active ? "bg-indigo-50 text-indigo-700" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  <span className="truncate font-medium">{getItemLabel(item)}</span>
+                  {active ? <Check size={16} /> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="px-2 py-4 text-sm text-gray-500">
+            {query.trim() ? "No matches found." : emptyLabel}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CompactAsyncFilterSelect({
+  value,
+  searchPath,
+  selectedItem = null,
+  getItemLabel,
+  onSelect,
+  placeholder,
+  allLabel,
+  dropdownKey,
+  openKey,
+  setOpenKey,
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const open = openKey === dropdownKey;
+
+  const loadFallbackItems = async () => {
+    const keyword = String(query || "").trim().toLowerCase();
+
+    if (searchPath === "/brands/admin/lookups") {
+      const { data } = await api.get("/brands");
+      const items = Array.isArray(data) ? data : [];
+      return items
+        .filter((item) => {
+          if (!keyword) return true;
+          return [item?.name, item?.slug].some((entry) => String(entry || "").toLowerCase().includes(keyword));
+        })
+        .slice(0, 6);
+    }
+
+    if (searchPath === "/categories/admin/lookups") {
+      const { data } = await api.get("/categories");
+      const items = Array.isArray(data) ? data : [];
+      return items
+        .filter((item) => {
+          if (!keyword) return true;
+          return [item?.name, item?.slug].some((entry) => String(entry || "").toLowerCase().includes(keyword));
+        })
+        .slice(0, 6);
+    }
+
+    return [];
+  };
+
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const { data } = await api.get(searchPath, {
+          headers: tokenHeader(),
+          params: { keyword: query.trim(), limit: 6 },
+        });
+        if (!active) return;
+        setResults(Array.isArray(data?.items) ? data.items : []);
+      } catch (error) {
+        if (error?.response?.status === 404) {
+          try {
+            const fallbackItems = await loadFallbackItems();
+            if (!active) return;
+            setResults(fallbackItems);
+            return;
+          } catch (fallbackError) {
+            if (!active) return;
+            console.error("Compact filter fallback failed", fallbackError);
+          }
+        }
+        if (!active) return;
+        console.error("Failed to load compact filter options", error);
+        setResults([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 220);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, searchPath]);
+
+  return (
+    <div className="relative rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
+        {allLabel}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setOpenKey(open ? null : dropdownKey)}
+        className={`flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2.5 text-left text-sm outline-none transition ${
+          open ? "border-indigo-300 bg-white ring-2 ring-indigo-200" : "bg-slate-50"
+        }`}
+      >
+        <span className={`truncate ${selectedItem ? "text-slate-900" : "text-slate-400"}`}>
+          {selectedItem ? getItemLabel(selectedItem) : `All ${allLabel.toLowerCase()}s`}
+        </span>
+        <span className="ml-3 shrink-0 text-slate-400">v</span>
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)]">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={placeholder}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-200"
+          />
+
+          <div className="mt-2 max-h-56 space-y-2 overflow-auto">
+            <button
+              type="button"
+              onClick={() => {
+                onSelect("", null);
+                setOpenKey(null);
+                setQuery("");
+              }}
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
+                !value ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <span>{`All ${allLabel.toLowerCase()}s`}</span>
+              {!value ? <Check size={15} /> : null}
+            </button>
+
+            {loading ? (
+              <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-500">Searching...</div>
+            ) : (
+              results.slice(0, 6).map((item) => {
+                const active = String(item?._id) === String(value);
+                return (
+                  <button
+                    key={item._id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(String(item._id), item);
+                      setOpenKey(null);
+                      setQuery("");
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
+                      active
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="truncate">{getItemLabel(item)}</span>
+                    {active ? <Check size={15} /> : null}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 export default function AdminProducts() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -654,9 +954,20 @@ export default function AdminProducts() {
 
   // data
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [brands, setBrands] = useState([]);
+  const [productRefs, setProductRefs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [brandCount, setBrandCount] = useState(0);
+  const [categoryCount, setCategoryCount] = useState(0);
+  const [importBrands, setImportBrands] = useState([]);
+  const [importCategories, setImportCategories] = useState([]);
+  const [selectedBrandOption, setSelectedBrandOption] = useState(null);
+  const [selectedCategoryOption, setSelectedCategoryOption] = useState(null);
+  const [filterBrandOption, setFilterBrandOption] = useState(null);
+  const [filterCategoryOption, setFilterCategoryOption] = useState(null);
+  const [activeFilterDropdown, setActiveFilterDropdown] = useState(null);
 
   // UI state
   const [saving, setSaving] = useState(false);
@@ -723,6 +1034,8 @@ export default function AdminProducts() {
 
   const resetForm = () => {
     setEditingId(null);
+    setSelectedBrandOption(null);
+    setSelectedCategoryOption(null);
     applySnapshotToForm(createEmptyProductSnapshot());
     markCurrentStateAsClean(JSON.stringify(createEmptyProductSnapshot()));
     setSaving(false);
@@ -743,39 +1056,141 @@ export default function AdminProducts() {
     setBulkImportFeedback(null);
   };
 
-  const openImportModal = () => {
+  const openImportModal = async () => {
     setBulkImportFeedback(null);
     setBulkImportRows([]);
     setBulkImportFileName("");
     setBulkImportSourceText("");
+    if (!productRefs.length) {
+      await fetchProductRefs();
+    }
+    if (!importBrands.length || !importCategories.length) {
+      await fetchImportDependencies();
+    }
     setIsImportModalOpen(true);
   };
 
-  const fetchAll = async () => {
+  const fetchDependencies = async () => {
     try {
-      setLoading(true);
-
-      // IMPORTANT:
-      // If your api baseURL already includes /api, keep "/products/admin"
-      // If not, change to "/api/products/admin"
-      const [pRes, cRes, bRes] = await Promise.all([
-        api.get("/products/admin"),
-        api.get("/categories"),
-        api.get("/brands"),
+      const [cRes, bRes] = await Promise.all([
+        api.get("/categories/admin/lookups", { headers: tokenHeader(), params: { limit: 1 } }),
+        api.get("/brands/admin/lookups", { headers: tokenHeader(), params: { limit: 1 } }),
       ]);
-
-      setProducts(pRes.data?.products || []);
-      setCategories(Array.isArray(cRes.data) ? cRes.data : []);
-      setBrands(Array.isArray(bRes.data) ? bRes.data : []);
+      setCategoryCount(Number(cRes.data?.total || 0));
+      setBrandCount(Number(bRes.data?.total || 0));
     } catch (e) {
       console.error(e);
       alert(
         e?.response?.data?.message ||
-        "Failed to load admin data. Ensure GET /products/admin, /categories, /brands exist."
+        "Failed to load admin data. Ensure brand/category lookup routes exist."
+      );
+    }
+  };
+
+  const fetchProductList = async (opts = {}) => {
+    try {
+      setLoading(true);
+      const params = {
+        page: opts.page ?? page,
+        limit: 20,
+      };
+      const keyword = String(opts.keyword ?? q).trim();
+      if (keyword) params.keyword = keyword;
+      const brand = opts.brand ?? filterBrand;
+      if (brand) params.brand = brand;
+      const category = opts.category ?? filterCategory;
+      if (category) params.category = category;
+      const status = opts.status ?? filterStatus;
+      if (status) params.status = status;
+      if (opts.featured ?? onlyFeatured) params.featured = "true";
+      if (opts.publishedOnly ?? onlyActive) params.publishedOnly = "true";
+
+      const pRes = await api.get("/products/admin", { params });
+      setProducts(pRes.data?.products || []);
+      setPage(pRes.data?.page || 1);
+      setPages(pRes.data?.pages || 1);
+      setTotalProducts(pRes.data?.totalProducts || 0);
+    } catch (e) {
+      console.error(e);
+      alert(
+        e?.response?.data?.message ||
+        "Failed to load products. Ensure GET /products/admin exists."
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchProductRefs = async () => {
+    try {
+      const pRes = await api.get("/products/admin", {
+        params: { mode: "refs" },
+      });
+      setProductRefs(pRes.data?.products || []);
+      return pRes.data?.products || [];
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Failed to load product references.");
+      return [];
+    }
+  };
+
+  const fetchImportDependencies = async () => {
+    try {
+      const [brandsRes, categoriesRes] = await Promise.all([
+        api.get("/brands"),
+        api.get("/categories"),
+      ]);
+      setImportBrands(Array.isArray(brandsRes.data) ? brandsRes.data : []);
+      setImportCategories(Array.isArray(categoriesRes.data) ? categoriesRes.data : []);
+      return {
+        brandsList: Array.isArray(brandsRes.data) ? brandsRes.data : [],
+        categoriesList: Array.isArray(categoriesRes.data) ? categoriesRes.data : [],
+      };
+    } catch (error) {
+      console.error(error);
+      alert(error?.response?.data?.message || "Failed to load import dependencies.");
+      return { brandsList: [], categoriesList: [] };
+    }
+  };
+
+  const hydrateSelectedEntities = async ({ brandId = "", categoryId = "" } = {}) => {
+    try {
+      const calls = [];
+      if (brandId) {
+        calls.push(
+          api.get("/brands/admin/lookups", {
+            headers: tokenHeader(),
+            params: { ids: brandId, limit: 1 },
+          })
+        );
+      } else {
+        calls.push(Promise.resolve(null));
+      }
+
+      if (categoryId) {
+        calls.push(
+          api.get("/categories/admin/lookups", {
+            headers: tokenHeader(),
+            params: { ids: categoryId, limit: 1 },
+          })
+        );
+      } else {
+        calls.push(Promise.resolve(null));
+      }
+
+      const [brandRes, categoryRes] = await Promise.all(calls);
+      const brandItem = brandRes?.data?.items?.[0] || null;
+      const categoryItem = categoryRes?.data?.items?.[0] || null;
+      setSelectedBrandOption(brandItem);
+      setSelectedCategoryOption(categoryItem);
+    } catch (error) {
+      console.error("Failed to hydrate selected brand/category", error);
+    }
+  };
+
+  const fetchAll = async (opts = {}) => {
+    await Promise.all([fetchProductList(opts), fetchDependencies()]);
   };
 
   const findEntityIdByCsvValue = (items, rawValue) => {
@@ -795,15 +1210,15 @@ export default function AdminProducts() {
   const buildBulkImportPreviewRows = (
     csvText,
     {
-      brandsList = brands,
-      categoriesList = categories,
+      brandsList = importBrands,
+      categoriesList = importCategories,
       allowMissingDependencies = autoCreateImportDependencies,
     } = {}
   ) => {
     const parsed = parseCsvText(csvText);
-    const existingSlugSet = new Set(products.map((product) => String(product?.slug || "").trim().toLowerCase()).filter(Boolean));
+    const existingSlugSet = new Set(productRefs.map((product) => String(product?.slug || "").trim().toLowerCase()).filter(Boolean));
     const existingSkuSet = new Set(
-      products
+      productRefs
         .flatMap((product) => product?.variants || [])
         .map((variant) => String(variant?.sku || "").trim().toLowerCase())
         .filter(Boolean)
@@ -989,14 +1404,20 @@ export default function AdminProducts() {
   };
 
   useEffect(() => {
-    fetchAll();
+    fetchDependencies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    fetchProductList({ page: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, filterBrand, filterCategory, filterStatus, onlyFeatured, onlyActive]);
 
   useEffect(() => {
     if (!bulkImportSourceText) return;
     setBulkImportRows(buildBulkImportPreviewRows(bulkImportSourceText));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bulkImportSourceText, autoCreateImportDependencies, brands, categories, products]);
+  }, [bulkImportSourceText, autoCreateImportDependencies, importBrands, importCategories, productRefs]);
 
   const downloadBulkImportTemplate = () => {
     const blob = new Blob([BULK_IMPORT_TEMPLATE], { type: "text/csv;charset=utf-8;" });
@@ -1083,11 +1504,11 @@ export default function AdminProducts() {
     }
 
     if (!missingBrands.length && !missingCategories.length) {
-      return { brandsList: brands, categoriesList: categories };
+      return { brandsList: importBrands, categoriesList: importCategories };
     }
 
-    const brandsList = [...brands, ...createdBrands];
-    const categoriesList = [...categories, ...createdCategories];
+    const brandsList = [...importBrands, ...createdBrands];
+    const categoriesList = [...importCategories, ...createdCategories];
 
     const [freshBrandsRes, freshCategoriesRes] = await Promise.all([
       api.get("/brands"),
@@ -1096,8 +1517,8 @@ export default function AdminProducts() {
 
     const nextBrands = Array.isArray(freshBrandsRes.data) ? freshBrandsRes.data : brandsList;
     const nextCategories = Array.isArray(freshCategoriesRes.data) ? freshCategoriesRes.data : categoriesList;
-    setBrands(nextBrands);
-    setCategories(nextCategories);
+    setImportBrands(nextBrands);
+    setImportCategories(nextCategories);
 
     return {
       brandsList: nextBrands,
@@ -1115,7 +1536,7 @@ export default function AdminProducts() {
       setImportingProducts(true);
 
       let previewRows = bulkImportRows;
-      let dependencyLists = { brandsList: brands, categoriesList: categories };
+      let dependencyLists = { brandsList: importBrands, categoriesList: importCategories };
 
       if (autoCreateImportDependencies) {
         dependencyLists = await ensureBulkImportDependencies();
@@ -1142,6 +1563,7 @@ export default function AdminProducts() {
         created: Array.isArray(data?.created) ? data.created : [],
         errors: Array.isArray(data?.errors) ? data.errors : [],
       });
+      setProductRefs([]);
       await fetchAll();
     } catch (error) {
       console.error(error);
@@ -1209,6 +1631,10 @@ export default function AdminProducts() {
         try {
           const parsedDraft = JSON.parse(savedDraft);
           applySnapshotToForm(parsedDraft);
+          hydrateSelectedEntities({
+            brandId: parsedDraft?.formData?.brand || "",
+            categoryId: parsedDraft?.formData?.category || "",
+          });
           markCurrentStateAsClean(JSON.stringify(parsedDraft));
         } catch (error) {
           console.error("Failed to restore product draft", error);
@@ -1224,17 +1650,30 @@ export default function AdminProducts() {
       return;
     }
 
-    if (isEditPage && productId && products.length > 0) {
-      const product = products.find((item) => String(item._id) === String(productId));
-      if (!product) return;
-      const snapshot = buildSnapshotFromProduct(product);
-      setEditingId(product._id);
-      applySnapshotToForm(snapshot);
-      markCurrentStateAsClean(JSON.stringify(snapshot));
-      hasHydratedEditorRef.current = true;
+    if (isEditPage && productId) {
+      let active = true;
+      (async () => {
+        try {
+          const { data } = await api.get(`/products/admin/${productId}`);
+          if (!active || !data?._id) return;
+          setSelectedBrandOption(data?.brand || null);
+          setSelectedCategoryOption(data?.category || null);
+          const snapshot = buildSnapshotFromProduct(data);
+          setEditingId(data._id);
+          applySnapshotToForm(snapshot);
+          markCurrentStateAsClean(JSON.stringify(snapshot));
+          hasHydratedEditorRef.current = true;
+        } catch (error) {
+          console.error("Failed to load product for editing", error);
+          alert(error?.response?.data?.message || "Failed to load product for editing.");
+        }
+      })();
+      return () => {
+        active = false;
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditorPage, isCreatePage, isEditPage, productId, products]);
+  }, [isEditorPage, isCreatePage, isEditPage, productId]);
 
   useEffect(() => {
     const nextSnapshot = JSON.stringify({ formData, variants });
@@ -1271,10 +1710,7 @@ export default function AdminProducts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.name]);
 
-  const selectedCategory = useMemo(
-    () => categories.find((c) => c._id === formData.category) || null,
-    [categories, formData.category]
-  );
+  const selectedCategory = selectedCategoryOption;
 
   const applyCategoryInfoPreset = (force = false) => {
     const preset = getPresetInfoTemplate(selectedCategory);
@@ -1312,6 +1748,7 @@ export default function AdminProducts() {
         highlightsTemplate: parseHighlightsText(formData.highlightsText),
         specsTemplate: parseSpecsText(formData.specsText),
       });
+      setProductRefs([]);
       await fetchAll();
       alert("Category template saved.");
     } catch (e) {
@@ -1398,38 +1835,6 @@ export default function AdminProducts() {
     applySpecsToDefaultVariant(formData.specsText);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.specsText, variantAttributeKeys]);
-
-  const filteredProducts = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return products.filter((p) => {
-      const matchesText =
-        !term ||
-        p?.name?.toLowerCase().includes(term) ||
-        p?.slug?.toLowerCase().includes(term) ||
-        p?.brand?.name?.toLowerCase?.().includes(term) ||
-        p?.category?.name?.toLowerCase?.().includes(term);
-
-      const matchesBrand =
-        !filterBrand || (p?.brand?._id || p?.brand) === filterBrand;
-
-      const matchesCategory =
-        !filterCategory || (p?.category?._id || p?.category) === filterCategory;
-
-      const publicationStatus = getPublicationStatus(p);
-      const matchesFeatured = !onlyFeatured || !!p.isFeatured;
-      const matchesActive = !onlyActive || publicationStatus === "published";
-      const matchesStatus = !filterStatus || publicationStatus === filterStatus;
-
-      return (
-        matchesText &&
-        matchesBrand &&
-        matchesCategory &&
-        matchesFeatured &&
-        matchesStatus &&
-        matchesActive
-      );
-    });
-  }, [products, q, filterBrand, filterCategory, filterStatus, onlyFeatured, onlyActive]);
 
   const bulkImportSummary = useMemo(() => {
     const totalRows = bulkImportRows.length;
@@ -1572,6 +1977,7 @@ export default function AdminProducts() {
 
     try {
       const { data } = await api.post(`/products/${product._id}/duplicate`);
+      setProductRefs([]);
       await fetchAll();
       hasHydratedEditorRef.current = false;
       navigate(`/admin/products/${data?._id}/edit`);
@@ -1600,6 +2006,7 @@ export default function AdminProducts() {
     if (!window.confirm("Delete this product from the storefront? It will stay in the database for order history and revenue analytics.")) return;
     try {
       await api.delete(`/products/${id}`);
+      setProductRefs([]);
       await fetchAll();
     } catch (e) {
       console.error(e);
@@ -1666,7 +2073,7 @@ export default function AdminProducts() {
   const saveProduct = async (e, statusOverride = null) => {
     e?.preventDefault?.();
 
-    if (brands.length === 0 || categories.length === 0) {
+    if (brandCount === 0 || categoryCount === 0) {
       alert("Please create at least one Brand and one Category first.");
       return;
     }
@@ -1779,7 +2186,7 @@ export default function AdminProducts() {
         }
       }
 
-
+      setProductRefs([]);
       await fetchAll();
       if (!editingId) {
         localStorage.removeItem(PRODUCT_CREATE_DRAFT_KEY);
@@ -1823,7 +2230,8 @@ export default function AdminProducts() {
 
       if (createType === "brand") {
         const { data } = await api.post("/brands", { name, slug });
-        await fetchAll();
+        await fetchDependencies();
+        setSelectedBrandOption(data || null);
         setFormData((p) => ({ ...p, brand: data?._id || p.brand }));
       } else {
         const manualAttributes = Array.from(
@@ -1845,7 +2253,8 @@ export default function AdminProducts() {
           highlightsTemplate: infoTemplate?.highlights || [],
           specsTemplate: infoTemplate?.specs || {},
         });
-        await fetchAll();
+        await fetchDependencies();
+        setSelectedCategoryOption(data || null);
         setFormData((p) => ({ ...p, category: data?._id || p.category }));
       }
 
@@ -1875,39 +2284,67 @@ export default function AdminProducts() {
     );
   const imageFromProduct = (p) => p?.variants?.[0]?.images?.[0]?.url || fallbackImg;
   const saveProductWithStatus = (status) => saveProduct(null, status);
+  const publishedOnPage = products.filter((product) => getPublicationStatus(product) === "published").length;
+  const featuredOnPage = products.filter((product) => product?.isFeatured).length;
+  const lowStockOnPage = products.filter((product) => stockFromProduct(product) <= 5).length;
 
   return (
     <div className="space-y-6">
       {!isEditorPage ? (
         <>
-          {/* Header row */}
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-extrabold text-gray-900">Products</h1>
-              <p className="text-sm text-gray-500">
-                Create products one by one, duplicate similar products, and manage draft versus published items.
-              </p>
-            </div>
+	          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_45%,#334155_100%)] p-6 text-white shadow-[0_18px_60px_-30px_rgba(15,23,42,0.65)]">
+	            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+	              <div className="max-w-2xl">
+	                <div className="text-[11px] font-bold uppercase tracking-[0.32em] text-cyan-200/80">Product Studio</div>
+	                <h1 className="mt-3 text-3xl font-black tracking-tight">Products</h1>
+	                <p className="mt-3 max-w-xl text-sm text-slate-200">
+	                  Manage catalog quality, inventory readiness, and publishing status from one workspace.
+	                </p>
+	              </div>
+	
+	              <div className="flex flex-wrap gap-2">
+	                <button
+	                  type="button"
+	                  onClick={openImportModal}
+	                  className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur hover:bg-white/15"
+	                >
+	                  <Upload size={18} /> Bulk Import CSV
+	                </button>
+	                <button
+	                  onClick={openCreate}
+	                  className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+	                >
+	                  <Plus size={18} /> Add Product
+	                </button>
+	              </div>
+	            </div>
 
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={openImportModal}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <Upload size={18} /> Bulk Import CSV
-              </button>
-              <button
-                onClick={openCreate}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 text-sm font-semibold hover:bg-indigo-500"
-              >
-                <Plus size={18} /> Add Product
-              </button>
-            </div>
-          </div>
+	            <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+	              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+	                <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Catalog</div>
+	                <div className="mt-2 text-2xl font-black">{totalProducts}</div>
+	                <div className="text-xs text-slate-300">total products</div>
+	              </div>
+	              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+	                <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Live Now</div>
+	                <div className="mt-2 text-2xl font-black">{publishedOnPage}</div>
+	                <div className="text-xs text-slate-300">published on this page</div>
+	              </div>
+	              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+	                <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Featured</div>
+	                <div className="mt-2 text-2xl font-black">{featuredOnPage}</div>
+	                <div className="text-xs text-slate-300">featured on this page</div>
+	              </div>
+	              <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+	                <div className="text-[11px] uppercase tracking-[0.24em] text-slate-300">Low Stock</div>
+	                <div className="mt-2 text-2xl font-black">{lowStockOnPage}</div>
+	                <div className="text-xs text-slate-300">need attention</div>
+	              </div>
+	            </div>
+	          </div>
 
           {/* Helpful warning if missing base data */}
-          {(brands.length === 0 || categories.length === 0) && (
+          {(brandCount === 0 || categoryCount === 0) && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm">
               <div className="font-extrabold text-amber-900">Setup required</div>
               <div className="text-amber-800 mt-1">
@@ -1915,7 +2352,7 @@ export default function AdminProducts() {
                 <span className="font-semibold">1 Category</span> before adding products.
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {brands.length === 0 && (
+                {brandCount === 0 && (
                   <button
                     onClick={() => {
                       openCreate();
@@ -1926,7 +2363,7 @@ export default function AdminProducts() {
                     <Tag size={14} /> Create Brand
                   </button>
                 )}
-                {categories.length === 0 && (
+                {categoryCount === 0 && (
                   <button
                     onClick={() => {
                       openCreate();
@@ -1941,227 +2378,284 @@ export default function AdminProducts() {
             </div>
           )}
 
-          {/* Filters */}
-          <div className="premium-card rounded-2xl p-4">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center">
-          <div className="md:col-span-2 relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <Search size={16} />
-            </span>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name, slug, brand, category…"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 pl-9 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-            />
-          </div>
+          <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-[0_18px_55px_-35px_rgba(15,23,42,0.45)]">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Filter Shelf</div>
+                <div className="mt-1 text-lg font-extrabold text-slate-900">Find products fast</div>
+              </div>
+              <div className="text-xs text-slate-500">Search updates the table automatically.</div>
+            </div>
 
-          <select
-            value={filterBrand}
-            onChange={(e) => setFilterBrand(e.target.value)}
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
-          >
-            <option value="">All brands</option>
-            {brands.map((b) => (
-              <option key={b._id} value={b._id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.35fr_1fr_1fr_190px_220px]">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Search</div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Search size={16} />
+                  </span>
+                  <input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Search name, slug, brand, category..."
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 pl-9 text-sm outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                </div>
+              </div>
 
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
-          >
-            <option value="">All categories</option>
-            {categories.map((c) => (
-              <option key={c._id} value={c._id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
-          >
-            <option value="">All statuses</option>
-            {PRODUCT_STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <div className="flex items-center gap-3 justify-between md:justify-end">
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-              <input
-                type="checkbox"
-                checked={onlyFeatured}
-                onChange={(e) => setOnlyFeatured(e.target.checked)}
+              <CompactAsyncFilterSelect
+                value={filterBrand}
+                searchPath="/brands/admin/lookups"
+                selectedItem={filterBrandOption}
+                getItemLabel={(brand) => brand?.name || "Unnamed brand"}
+                onSelect={(nextValue, item = null) => {
+                  setFilterBrand(nextValue);
+                  setFilterBrandOption(item);
+                }}
+                placeholder="Search brands"
+                allLabel="Brand"
+                dropdownKey="brand"
+                openKey={activeFilterDropdown}
+                setOpenKey={setActiveFilterDropdown}
               />
-              Featured
-            </label>
 
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-              <input
-                type="checkbox"
-                checked={onlyActive}
-                onChange={(e) => setOnlyActive(e.target.checked)}
+              <CompactAsyncFilterSelect
+                value={filterCategory}
+                searchPath="/categories/admin/lookups"
+                selectedItem={filterCategoryOption}
+                getItemLabel={(category) => category?.name || "Unnamed category"}
+                onSelect={(nextValue, item = null) => {
+                  setFilterCategory(nextValue);
+                  setFilterCategoryOption(item);
+                }}
+                placeholder="Search categories"
+                allLabel="Category"
+                dropdownKey="category"
+                openKey={activeFilterDropdown}
+                setOpenKey={setActiveFilterDropdown}
               />
-              Published only
-            </label>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Status</div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                >
+                  <option value="">All statuses</option>
+                  {PRODUCT_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Focus</div>
+                <div className="grid grid-cols-1 gap-2">
+                  <label className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold ${onlyFeatured ? "bg-indigo-50 text-indigo-700" : "bg-slate-50 text-slate-700"}`}>
+                    <span>Featured</span>
+                    <input
+                      type="checkbox"
+                      checked={onlyFeatured}
+                      onChange={(e) => setOnlyFeatured(e.target.checked)}
+                    />
+                  </label>
+
+                  <label className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold ${onlyActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-700"}`}>
+                    <span>Published only</span>
+                    <input
+                      type="checkbox"
+                      checked={onlyActive}
+                      onChange={(e) => setOnlyActive(e.target.checked)}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-          </div>
 
-          {/* Table */}
-          <div className="premium-card rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <div className="text-sm text-gray-600">
-            Showing <span className="font-semibold">{filteredProducts.length}</span> of{" "}
-            <span className="font-semibold">{products.length}</span>
-          </div>
-        </div>
+          <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_18px_55px_-35px_rgba(15,23,42,0.45)]">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">Catalog Table</div>
+                <div className="mt-1 text-sm text-slate-600">
+                  Showing <span className="font-semibold">{products.length}</span> of{" "}
+                  <span className="font-semibold">{totalProducts}</span>
+                </div>
+              </div>
+              <div className="text-xs text-slate-500">
+                Page {page} of {pages}
+              </div>
+            </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold">Product</th>
-                <th className="text-left px-4 py-3 font-semibold">Brand</th>
-                <th className="text-left px-4 py-3 font-semibold">Category</th>
-                <th className="text-left px-4 py-3 font-semibold">Price</th>
-                <th className="text-left px-4 py-3 font-semibold">Available</th>
-                <th className="text-left px-4 py-3 font-semibold">Status</th>
-                <th className="text-right px-4 py-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-white text-gray-500">
+                  <tr>
+                    <th className="text-left px-5 py-3 font-semibold uppercase tracking-wide text-[11px]">Product</th>
+                    <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide text-[11px]">Brand</th>
+                    <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide text-[11px]">Category</th>
+                    <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide text-[11px]">Price</th>
+                    <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide text-[11px]">Available</th>
+                    <th className="text-left px-4 py-3 font-semibold uppercase tracking-wide text-[11px]">Status</th>
+                    <th className="text-right px-5 py-3 font-semibold uppercase tracking-wide text-[11px]">Actions</th>
+                  </tr>
+                </thead>
 
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td className="px-4 py-6 text-gray-500" colSpan={7}>
-                    Loading…
-                  </td>
-                </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-6 text-gray-500" colSpan={7}>
-                    No products found.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((p) => {
-                  const img = imageFromProduct(p);
-                  const price = priceFromProduct(p);
-                  const stock = stockFromProduct(p);
-                  const publicationStatus = getPublicationStatus(p);
-
-                  return (
-                    <tr key={p._id} className="border-t">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3 min-w-[260px]">
-                          <img
-                            src={img}
-                            alt={p.name}
-                            className="h-10 w-10 rounded-lg object-cover border"
-                            onError={(e) => (e.currentTarget.src = fallbackImg)}
-                          />
-                          <div>
-                            <div className="font-semibold text-gray-900 line-clamp-1">
-                              {p.name}
-                            </div>
-                            <div className="text-xs text-gray-500">{p.slug}</div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3 text-gray-700">{p.brand?.name || "—"}</td>
-                      <td className="px-4 py-3 text-gray-700">{p.category?.name || "—"}</td>
-
-                      <td className="px-4 py-3 font-semibold text-gray-900">
-                        {moneyBDT(price)}
-                      </td>
-
-                      <td className="px-4 py-3">
-                          <span
-                            className={`font-semibold ${stock <= 5 ? "text-red-600" : "text-gray-900"
-                              }`}
-                          >
-                            {stock}
-                          </span>
-                          <div className="text-[11px] text-gray-500">
-                            On hand {p?.inventorySummary?.onHand ?? stock} / Reserved {p?.inventorySummary?.reserved ?? 0}
-                          </div>
-                        </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-xs font-semibold px-2 py-1 rounded-full ${getStatusBadgeClassName(
-                              publicationStatus
-                            )}`}
-                          >
-                            {publicationStatus === "published"
-                              ? "Published"
-                              : publicationStatus === "archived"
-                              ? "Archived"
-                              : "Draft"}
-                          </span>
-
-                          {p.isDeleted && (
-                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-50 text-red-700">
-                              Deleted
-                            </span>
-                          )}
-
-                          {p.isFeatured && (
-                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-indigo-50 text-indigo-700">
-                              Featured
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => openEdit(p)}
-                            className="p-2 rounded-lg border hover:bg-gray-50"
-                            title="Edit"
-                          >
-                            <Pencil size={16} />
-                          </button>
-
-                          <button
-                            onClick={() => duplicateProduct(p)}
-                            className="p-2 rounded-lg border hover:bg-gray-50"
-                            title="Duplicate"
-                          >
-                            <Copy size={16} />
-                          </button>
-
-                          <button
-                            onClick={() => deleteProduct(p._id)}
-                            className="p-2 rounded-lg border hover:bg-red-50 text-red-600"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td className="px-5 py-10 text-center text-gray-500" colSpan={7}>
+                        Loading products...
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : products.length === 0 ? (
+                    <tr>
+                      <td className="px-5 py-12 text-center text-gray-500" colSpan={7}>
+                        <div className="font-semibold text-slate-700">No products found.</div>
+                        <div className="mt-1 text-sm text-slate-500">Try a different keyword or loosen one of the filters.</div>
+                      </td>
+                    </tr>
+                  ) : (
+                    products.map((p) => {
+                      const img = imageFromProduct(p);
+                      const price = priceFromProduct(p);
+                      const stock = stockFromProduct(p);
+                      const publicationStatus = getPublicationStatus(p);
+
+                      return (
+                        <tr key={p._id} className="border-t border-slate-100 transition-colors hover:bg-slate-50/70">
+                          <td className="px-5 py-4">
+                            <div className="flex min-w-[280px] items-center gap-3">
+                              <img
+                                src={img}
+                                alt={p.name}
+                                className="h-14 w-14 rounded-2xl border border-slate-200 object-cover shadow-sm"
+                                onError={(e) => (e.currentTarget.src = fallbackImg)}
+                              />
+                              <div className="min-w-0">
+                                <div className="line-clamp-1 font-semibold text-gray-900">
+                                  {p.name}
+                                </div>
+                                <div className="mt-1 text-xs text-gray-500">{p.slug}</div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {p.isFeatured ? (
+                                    <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700">
+                                      Featured
+                                    </span>
+                                  ) : null}
+                                  {p.isDeleted ? (
+                                    <span className="rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700">
+                                      Deleted
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4 text-gray-700">{p.brand?.name || "—"}</td>
+                          <td className="px-4 py-4 text-gray-700">{p.category?.name || "—"}</td>
+
+                          <td className="px-4 py-4 font-semibold text-gray-900">
+                            {moneyBDT(price)}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${stock <= 5 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
+                              {stock} available
+                            </div>
+                            <div className="mt-2 text-[11px] text-gray-500">
+                              On hand {p?.inventorySummary?.onHand ?? stock} / Reserved {p?.inventorySummary?.reserved ?? 0}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClassName(
+                                  publicationStatus
+                                )}`}
+                              >
+                                {publicationStatus === "published"
+                                  ? "Published"
+                                  : publicationStatus === "archived"
+                                  ? "Archived"
+                                  : "Draft"}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => openEdit(p)}
+                                className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 hover:bg-slate-50"
+                                title="Edit"
+                              >
+                                <Pencil size={16} />
+                              </button>
+
+                              <button
+                                onClick={() => duplicateProduct(p)}
+                                className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-700 hover:bg-slate-50"
+                                title="Duplicate"
+                              >
+                                <Copy size={16} />
+                              </button>
+
+                              <button
+                                onClick={() => deleteProduct(p._id)}
+                                className="rounded-xl border border-red-200 bg-white p-2.5 text-red-600 hover:bg-red-50"
+                                title="Delete"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {pages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-200 px-5 py-4 text-sm text-gray-600">
+                <button
+                  type="button"
+                  onClick={() => fetchProductList({ page: page - 1 })}
+                  disabled={page <= 1}
+                  className={`rounded-xl px-3 py-1.5 border ${
+                    page <= 1
+                      ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                      : "bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  Prev
+                </button>
+                <div>
+                  Page <span className="font-semibold">{page}</span> of{" "}
+                  <span className="font-semibold">{pages}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchProductList({ page: page + 1 })}
+                  disabled={page >= pages}
+                  className={`rounded-xl px-3 py-1.5 border ${
+                    page >= pages
+                      ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                      : "bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
-        </>
+	        </>
       ) : (
         <div className="mx-auto w-full max-w-6xl space-y-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2277,63 +2771,53 @@ export default function AdminProducts() {
                   />
                 </div>
 
-                {/* Brand row with Quick Add */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-600">Brand</label>
-                    <button
-                      type="button"
-                      onClick={() => openQuickAdd("brand")}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-                    >
-                      + Create
-                    </button>
-                  </div>
-                  <select
-                    name="brand"
-                    value={formData.brand}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
-                    required
-                  >
-                    <option value="">{brands.length ? "Select brand" : "No brands yet"}</option>
-                    {brands.map((b) => (
-                      <option key={b._id} value={b._id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+	                {/* Brand row with Quick Add */}
+	                <AsyncEntitySelect
+	                  label="Brand"
+	                  value={formData.brand}
+	                  searchPath="/brands/admin/lookups"
+	                  selectedItem={selectedBrandOption}
+	                  getItemLabel={(brand) => brand?.name || "Unnamed brand"}
+	                  onSelect={(nextValue, item = null) => {
+	                    setSelectedBrandOption(item);
+	                    setFormData((prev) => ({ ...prev, brand: nextValue }));
+	                  }}
+	                  placeholder="Search brands"
+	                  emptyLabel={brandCount > 0 ? "Start typing to search brands." : "No brands yet"}
+	                  createAction={
+	                    <button
+	                      type="button"
+	                      onClick={() => openQuickAdd("brand")}
+	                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+	                    >
+	                      + Create
+	                    </button>
+	                  }
+	                />
 
-                {/* Category row with Quick Add */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-600">Category</label>
-                    <button
-                      type="button"
-                      onClick={() => openQuickAdd("category")}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
-                    >
-                      + Create
-                    </button>
-                  </div>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleChange}
-                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none"
-                    required
-                  >
-                    <option value="">
-                      {categories.length ? "Select category" : "No categories yet"}
-                    </option>
-                    {categories.map((c) => (
-                      <option key={c._id} value={c._id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+	                {/* Category row with Quick Add */}
+	                <AsyncEntitySelect
+	                  label="Category"
+	                  value={formData.category}
+	                  searchPath="/categories/admin/lookups"
+	                  selectedItem={selectedCategoryOption}
+	                  getItemLabel={(category) => category?.name || "Unnamed category"}
+	                  onSelect={(nextValue, item = null) => {
+	                    setSelectedCategoryOption(item);
+	                    setFormData((prev) => ({ ...prev, category: nextValue }));
+	                  }}
+	                  placeholder="Search categories"
+	                  emptyLabel={categoryCount > 0 ? "Start typing to search categories." : "No categories yet"}
+	                  createAction={
+	                    <button
+	                      type="button"
+	                      onClick={() => openQuickAdd("category")}
+	                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+	                    >
+	                      + Create
+	                    </button>
+	                  }
+	                />
 
                 <div>
                   <label className="text-xs font-semibold text-gray-600">Base Price (৳)</label>
@@ -2945,6 +3429,9 @@ export default function AdminProducts() {
     </div>
   );
 }
+
+
+
 
 
 

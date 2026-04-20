@@ -4,6 +4,7 @@ const { protect, admin } = require("../middleware/authMiddleware");
 
 const {
   getBrands,
+  adminLookupBrands,
   createBrand,
   updateBrand,
   deleteBrand,
@@ -11,6 +12,7 @@ const {
 
 // public
 router.get("/", getBrands);
+router.get("/admin/lookups", protect, admin, adminLookupBrands);
 
 // admin
 router.post("/", protect, admin, createBrand);

@@ -362,7 +362,6 @@ export default function ProductDetails() {
   const [reviewError, setReviewError] = useState("");
   const [reviewSuccess, setReviewSuccess] = useState("");
   const [reviewEligibility, setReviewEligibility] = useState(null);
-  const [reviewEligibilityLoading, setReviewEligibilityLoading] = useState(false);
   const [cartSuccess, setCartSuccess] = useState("");
   const compareItems = useCompareItems();
 
@@ -515,6 +514,7 @@ export default function ProductDetails() {
   const currentUser = user || null;
   const isAdmin = Boolean(user?.isAdmin);
   const canReviewProduct = Boolean(currentUser && !isAdmin && reviewEligibility?.canReview);
+  const showReviewComposer = canReviewProduct;
 
   const sortedReviews = useMemo(() => {
     return [...(product?.reviews || [])].sort(
@@ -558,11 +558,8 @@ export default function ProductDetails() {
 
     if (!product?._id || !currentUser?._id) {
       setReviewEligibility(null);
-      setReviewEligibilityLoading(false);
       return undefined;
     }
-
-    setReviewEligibilityLoading(true);
 
     (async () => {
       try {
@@ -573,10 +570,6 @@ export default function ProductDetails() {
       } catch (e) {
         if (!cancelled) {
           setReviewEligibility(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setReviewEligibilityLoading(false);
         }
       }
     })();
@@ -1138,7 +1131,11 @@ export default function ProductDetails() {
         </div>
 
         <section className="premium-card mt-10 rounded-3xl p-6">
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
+          <div
+            className={`flex flex-col gap-8 ${
+              showReviewComposer ? "lg:flex-row lg:items-start lg:justify-between" : ""
+            }`}
+          >
             <div className="lg:w-[340px]">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-gray-500">
                 Ratings & Reviews
@@ -1169,87 +1166,68 @@ export default function ProductDetails() {
               </div>
             </div>
 
-            <div className="flex-1 rounded-3xl border bg-gray-50 p-5 dark:bg-slate-950">
-              <div className="flex items-center justify-between gap-3">
+            {showReviewComposer ? (
+              <div className="flex-1 rounded-3xl border bg-gray-50 p-5 dark:bg-slate-950">
                 <div>
                   <h2 className="text-xl font-extrabold text-gray-900">
-                    {isAdmin ? "Customer review actions" : existingUserReview ? "Edit your review" : "Write a review"}
+                    {existingUserReview ? "Edit your review" : "Write a review"}
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    {isAdmin
-                      ? "Admins can read customer feedback here, but review submission is reserved for shopper accounts."
-                      : "Share your experience with build quality, performance, and delivery after your order arrives."}
+                    Share your experience with build quality, performance, and delivery after your order arrives.
                   </p>
                 </div>
-                {!currentUser ? (
-                  <Link
-                    to="/login"
-                    className="rounded-xl border bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-                  >
-                    Login to review
-                  </Link>
-                ) : null}
-              </div>
 
-              {currentUser && !isAdmin ? (
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-200">
-                  {reviewEligibilityLoading
-                    ? "Checking whether this purchase is eligible for review..."
-                    : reviewEligibility?.message ||
-                      "Only customers with a delivered order for this product can submit a review."}
-                </div>
-              ) : null}
-
-              <form onSubmit={submitReview} className="mt-5 space-y-4">
-                <div>
-                  <p className="text-sm font-semibold text-gray-700">Your rating</p>
-                  <div className="mt-2 flex items-center gap-3">
-                    <StarRating
-                      value={reviewRating}
-                      sizeClass="h-7 w-7"
-                      interactive={canReviewProduct}
-                      onChange={setReviewRating}
-                    />
-                    <span className="text-sm font-semibold text-gray-600">{reviewRating}/5</span>
+                <form onSubmit={submitReview} className="mt-5 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700">Your rating</p>
+                    <div className="mt-2 flex items-center gap-3">
+                      <StarRating
+                        value={reviewRating}
+                        sizeClass="h-7 w-7"
+                        interactive={canReviewProduct}
+                        onChange={setReviewRating}
+                      />
+                      <span className="text-sm font-semibold text-gray-600">{reviewRating}/5</span>
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">Review title</label>
-                  <input
-                    value={reviewTitle}
-                    onChange={(e) => setReviewTitle(e.target.value)}
-                    maxLength={120}
-                    placeholder="Summarize your experience"
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Review title</label>
+                    <input
+                      value={reviewTitle}
+                      onChange={(e) => setReviewTitle(e.target.value)}
+                      maxLength={120}
+                      placeholder="Summarize your experience"
+                      disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
+                      className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-semibold text-gray-700">Your review</label>
+                    <textarea
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      rows={5}
+                      placeholder="How is the product in real use?"
+                      disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
+                      className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
+                    />
+                  </div>
+
+                  {reviewError ? <p className="text-sm font-semibold text-red-600">{reviewError}</p> : null}
+                  {reviewSuccess ? <p className="text-sm font-semibold text-green-700">{reviewSuccess}</p> : null}
+
+                  <button
+                    type="submit"
                     disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
-                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-semibold text-gray-700">Your review</label>
-                  <textarea
-                    value={reviewComment}
-                    onChange={(e) => setReviewComment(e.target.value)}
-                    rows={5}
-                    placeholder="How is the product in real use?"
-                    disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
-                    className="mt-2 w-full rounded-2xl border bg-white px-4 py-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-cyan-400"
-                  />
-                </div>
-
-                {reviewError ? <p className="text-sm font-semibold text-red-600">{reviewError}</p> : null}
-                {reviewSuccess ? <p className="text-sm font-semibold text-green-700">{reviewSuccess}</p> : null}
-
-                <button
-                  type="submit"
-                  disabled={!currentUser || isAdmin || !canReviewProduct || reviewSubmitting}
-                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
-                >
-                  {reviewSubmitting ? "Submitting..." : existingUserReview ? "Update Review" : "Post Review"}
-                </button>
-              </form>
-            </div>
+                    className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400"
+                  >
+                    {reviewSubmitting ? "Submitting..." : existingUserReview ? "Update Review" : "Post Review"}
+                  </button>
+                </form>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-8 border-t pt-8">

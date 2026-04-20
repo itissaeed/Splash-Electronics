@@ -7,6 +7,55 @@ const tokenHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
 });
 
+const dedupeItems = (items = []) => {
+  const seen = new Set();
+  return (items || []).filter((item) => {
+    const id = String(item?._id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
+const getCustomerLabel = (customer) =>
+  [customer?.name, customer?.email].filter(Boolean).join(" - ") || "Unnamed customer";
+
+const loadCouponFallbackItems = async (searchPath, query) => {
+  const keyword = String(query || "").trim().toLowerCase();
+
+  if (searchPath.endsWith("/products")) {
+    const { data } = await api.get("/products/admin");
+    const items = Array.isArray(data?.products) ? data.products : [];
+    return items
+      .filter((item) => {
+        if (!keyword) return true;
+        return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
+      })
+      .slice(0, 8);
+  }
+
+  if (searchPath.endsWith("/categories")) {
+    const { data } = await api.get("/categories");
+    const items = Array.isArray(data) ? data : [];
+    return items
+      .filter((item) => {
+        if (!keyword) return true;
+        return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
+      })
+      .slice(0, 8);
+  }
+
+  if (searchPath.endsWith("/users")) {
+    const { data } = await api.get("/admin/customers", {
+      headers: tokenHeader(),
+      params: { page: 1, limit: 8, keyword: query.trim() },
+    });
+    return Array.isArray(data?.users) ? data.users : [];
+  }
+
+  return [];
+};
+
 const badgeClass = (status) => {
   const base =
     "inline-flex items-center rounded-full px-3 py-1 text-xs font-bold border";
@@ -51,38 +100,79 @@ function MetricCard({ label, value, subtitle }) {
   );
 }
 
-function SearchableScopePicker({
+function AsyncScopePicker({
   title,
-  placeholder,
-  helpText,
-  items,
-  selectedIds,
+  searchPath,
+  selectedItems,
   onChange,
   getItemLabel,
+  placeholder,
+  helpText,
   disabled = false,
   disabledMessage = "",
 }) {
   const [query, setQuery] = useState("");
-  const normalizedQuery = query.trim().toLowerCase();
-  const selectedSet = new Set((selectedIds || []).map(String));
-  const selectedItems = items.filter((item) => selectedSet.has(String(item?._id)));
-  const filteredItems = items
-    .filter((item) => !selectedSet.has(String(item?._id)))
-    .filter((item) => {
-      if (!normalizedQuery) return true;
-      return getItemLabel(item).toLowerCase().includes(normalizedQuery);
-    })
-    .slice(0, 8);
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const addItem = (id) => {
-    if (disabled) return;
-    if (selectedSet.has(String(id))) return;
-    onChange([...(selectedIds || []), String(id)]);
+  useEffect(() => {
+    if (disabled) {
+      setResults([]);
+      setLoading(false);
+      setError("");
+      return undefined;
+    }
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const { data } = await api.get(searchPath, {
+          headers: tokenHeader(),
+          params: { keyword: query.trim(), limit: 8 },
+        });
+        if (!active) return;
+        setResults(Array.isArray(data?.items) ? data.items : []);
+      } catch (fetchError) {
+        if (fetchError?.response?.status === 404) {
+          try {
+            const fallbackItems = await loadCouponFallbackItems(searchPath, query);
+            if (!active) return;
+            setResults(fallbackItems);
+            setError("");
+            return;
+          } catch (fallbackError) {
+            if (!active) return;
+            console.error(`Fallback lookup failed for ${title.toLowerCase()}:`, fallbackError);
+          }
+        }
+        if (!active) return;
+        console.error(`Failed to load ${title.toLowerCase()}:`, fetchError);
+        setError(fetchError?.response?.data?.message || "Failed to search.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [disabled, query, searchPath, title]);
+
+  const selectedSet = new Set((selectedItems || []).map((item) => String(item?._id)));
+  const visibleResults = results.filter((item) => !selectedSet.has(String(item?._id)));
+
+  const addItem = (item) => {
+    if (!item?._id) return;
+    onChange(dedupeItems([...(selectedItems || []), item]));
     setQuery("");
   };
 
   const removeItem = (id) => {
-    onChange((selectedIds || []).filter((entry) => String(entry) !== String(id)));
+    onChange((selectedItems || []).filter((item) => String(item?._id) !== String(id)));
   };
 
   return (
@@ -95,7 +185,7 @@ function SearchableScopePicker({
           </p>
         </div>
         <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
-          {selectedItems.length} selected
+          {(selectedItems || []).length} selected
         </div>
       </div>
 
@@ -113,9 +203,13 @@ function SearchableScopePicker({
           <div className="px-2 py-6 text-center text-sm text-gray-500">
             {disabledMessage || "This selector is currently disabled."}
           </div>
-        ) : filteredItems.length ? (
+        ) : loading ? (
+          <div className="px-2 py-6 text-center text-sm text-gray-500">Searching...</div>
+        ) : error ? (
+          <div className="px-2 py-6 text-center text-sm text-red-600">{error}</div>
+        ) : visibleResults.length ? (
           <div className="space-y-2">
-            {filteredItems.map((item) => (
+            {visibleResults.map((item) => (
               <div
                 key={item._id}
                 className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 shadow-sm"
@@ -125,7 +219,7 @@ function SearchableScopePicker({
                 </div>
                 <button
                   type="button"
-                  onClick={() => addItem(item._id)}
+                  onClick={() => addItem(item)}
                   className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
                 >
                   Add
@@ -135,13 +229,13 @@ function SearchableScopePicker({
           </div>
         ) : (
           <div className="px-2 py-6 text-center text-sm text-gray-500">
-            {normalizedQuery ? "No matches found." : "Start typing to search and add items."}
+            {query.trim() ? "No matches found." : "Start typing to search live data."}
           </div>
         )}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        {selectedItems.length ? (
+        {(selectedItems || []).length ? (
           selectedItems.map((item) => (
             <button
               key={item._id}
@@ -163,9 +257,6 @@ function SearchableScopePicker({
 
 export default function AdminCoupons() {
   const [coupons, setCoupons] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [customers, setCustomers] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -178,9 +269,11 @@ export default function AdminCoupons() {
   const [draftRestored, setDraftRestored] = useState(false);
   const hasHydratedDraftRef = useRef(false);
 
-  // form
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
   const [form, setForm] = useState({
     code: "",
     description: "",
@@ -195,13 +288,13 @@ export default function AdminCoupons() {
     isActive: true,
     customerEligibility: "ALL",
     discountAppliesTo: "ELIGIBLE_ITEMS",
-    applicableProducts: [],
-    applicableCategories: [],
-    applicableUsers: [],
   });
 
   const resetForm = () => {
     setEditingId(null);
+    setSelectedProducts([]);
+    setSelectedCategories([]);
+    setSelectedUsers([]);
     setForm({
       code: "",
       description: "",
@@ -216,9 +309,6 @@ export default function AdminCoupons() {
       isActive: true,
       customerEligibility: "ALL",
       discountAppliesTo: "ELIGIBLE_ITEMS",
-      applicableProducts: [],
-      applicableCategories: [],
-      applicableUsers: [],
     });
     localStorage.removeItem(COUPON_DRAFT_KEY);
     setDraftRestored(false);
@@ -230,32 +320,6 @@ export default function AdminCoupons() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-  };
-
-  const updateFormList = (name, values) => {
-    setForm((prev) => ({
-      ...prev,
-      [name]: values,
-    }));
-  };
-
-  const fetchDependencies = async () => {
-    try {
-      const [productRes, categoryRes, customerRes] = await Promise.all([
-        api.get("/products/admin", { headers: tokenHeader() }),
-        api.get("/categories"),
-        api.get("/admin/customers", {
-          headers: tokenHeader(),
-          params: { page: 1, limit: 1000 },
-        }),
-      ]);
-
-      setProducts(productRes.data?.products || []);
-      setCategories(Array.isArray(categoryRes.data) ? categoryRes.data : []);
-      setCustomers(customerRes.data?.users || []);
-    } catch (e) {
-      console.error("Failed to load coupon dependencies:", e);
-    }
   };
 
   const fetchCoupons = async (opts = {}) => {
@@ -295,7 +359,6 @@ export default function AdminCoupons() {
 
   useEffect(() => {
     fetchCoupons();
-    fetchDependencies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -313,16 +376,10 @@ export default function AdminCoupons() {
       setForm((prev) => ({
         ...prev,
         ...parsed.form,
-        applicableProducts: Array.isArray(parsed.form.applicableProducts)
-          ? parsed.form.applicableProducts
-          : [],
-        applicableCategories: Array.isArray(parsed.form.applicableCategories)
-          ? parsed.form.applicableCategories
-          : [],
-        applicableUsers: Array.isArray(parsed.form.applicableUsers)
-          ? parsed.form.applicableUsers
-          : [],
       }));
+      setSelectedProducts(dedupeItems(parsed.selectedProducts || []));
+      setSelectedCategories(dedupeItems(parsed.selectedCategories || []));
+      setSelectedUsers(dedupeItems(parsed.selectedUsers || []));
       setDraftRestored(true);
     } catch (error) {
       console.error("Failed to restore coupon draft:", error);
@@ -338,13 +395,16 @@ export default function AdminCoupons() {
         JSON.stringify({
           editingId,
           form,
+          selectedProducts,
+          selectedCategories,
+          selectedUsers,
           savedAt: new Date().toISOString(),
         })
       );
     } catch (error) {
       console.error("Failed to save coupon draft:", error);
     }
-  }, [editingId, form]);
+  }, [editingId, form, selectedProducts, selectedCategories, selectedUsers]);
 
   const onSearchSubmit = (e) => {
     e.preventDefault();
@@ -364,6 +424,9 @@ export default function AdminCoupons() {
 
   const handleEdit = (c) => {
     setEditingId(c._id);
+    setSelectedProducts(dedupeItems(c.applicableProducts || []));
+    setSelectedCategories(dedupeItems(c.applicableCategories || []));
+    setSelectedUsers(dedupeItems(c.applicableUsers || []));
     setForm({
       code: c.code || "",
       description: c.description || "",
@@ -378,9 +441,6 @@ export default function AdminCoupons() {
       isActive: c.isActive !== false,
       customerEligibility: c.customerEligibility || "ALL",
       discountAppliesTo: c.discountAppliesTo || "ELIGIBLE_ITEMS",
-      applicableProducts: (c.applicableProducts || []).map((item) => item?._id || item),
-      applicableCategories: (c.applicableCategories || []).map((item) => item?._id || item),
-      applicableUsers: (c.applicableUsers || []).map((item) => item?._id || item),
     });
     setDraftRestored(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -454,10 +514,14 @@ export default function AdminCoupons() {
         isActive: !!form.isActive,
         customerEligibility: form.customerEligibility,
         discountAppliesTo: form.discountAppliesTo,
-        applicableProducts: form.applicableProducts,
-        applicableCategories: form.applicableCategories,
-        applicableUsers: form.applicableUsers,
+        applicableProducts: selectedProducts.map((item) => item._id),
+        applicableCategories: selectedCategories.map((item) => item._id),
+        applicableUsers: selectedUsers.map((item) => item._id),
       };
+
+      if (form.customerEligibility === "SPECIFIC_USERS" && payload.applicableUsers.length === 0) {
+        throw new Error("Select at least one customer for a specific-customer coupon.");
+      }
 
       if (editingId) {
         await api.put(`/admin/coupons/${editingId}`, payload, {
@@ -473,7 +537,7 @@ export default function AdminCoupons() {
     } catch (e) {
       console.error(e);
       setErrMsg(
-        e?.response?.data?.message || "Failed to save coupon. Check server."
+        e?.response?.data?.message || e?.message || "Failed to save coupon. Check server."
       );
     } finally {
       setSaving(false);
@@ -482,7 +546,6 @@ export default function AdminCoupons() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
@@ -538,7 +601,6 @@ export default function AdminCoupons() {
         </div>
       )}
 
-      {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <MetricCard
           label="Total coupons"
@@ -560,7 +622,6 @@ export default function AdminCoupons() {
         />
       </div>
 
-      {/* Form */}
       <div className="bg-white border rounded-3xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="font-extrabold text-gray-900">
@@ -578,7 +639,6 @@ export default function AdminCoupons() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Row 1 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-semibold text-gray-700">
@@ -643,7 +703,6 @@ export default function AdminCoupons() {
             </div>
           </div>
 
-          {/* Row 2 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-semibold text-gray-700">
@@ -705,7 +764,6 @@ export default function AdminCoupons() {
             </div>
           </div>
 
-          {/* Row 3 */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="text-sm font-semibold text-gray-700">
@@ -782,7 +840,6 @@ export default function AdminCoupons() {
             </div>
           </div>
 
-          {/* Description */}
           <div>
             <label className="text-sm font-semibold text-gray-700">
               Internal description (optional)
@@ -801,49 +858,43 @@ export default function AdminCoupons() {
               <div className="text-sm font-semibold text-gray-800">
                 Scope and Audience
               </div>
-              <p className="mt-1 text-xs text-gray-500">
-                Real-world admin panels usually make this searchable: add matching products, categories, and customers, then remove them from the selected list if needed.
-              </p>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <SearchableScopePicker
+              <AsyncScopePicker
                 title="Specific products"
-                placeholder="Search products by name"
+                searchPath="/admin/coupons/lookups/products"
+                placeholder="Search products by name or slug"
                 helpText="Leave empty to allow all products. Matching products qualify for the coupon."
-                items={products}
-                selectedIds={form.applicableProducts}
-                onChange={(values) => updateFormList("applicableProducts", values)}
+                selectedItems={selectedProducts}
+                onChange={setSelectedProducts}
                 getItemLabel={(product) => product?.name || "Unnamed product"}
               />
 
-              <SearchableScopePicker
+              <AsyncScopePicker
                 title="Specific categories"
-                placeholder="Search categories"
+                searchPath="/admin/coupons/lookups/categories"
+                placeholder="Search categories by name or slug"
                 helpText="Category scope works with product scope. A match on either can qualify."
-                items={categories}
-                selectedIds={form.applicableCategories}
-                onChange={(values) => updateFormList("applicableCategories", values)}
+                selectedItems={selectedCategories}
+                onChange={setSelectedCategories}
                 getItemLabel={(category) => category?.name || "Unnamed category"}
               />
 
-              <SearchableScopePicker
+              <AsyncScopePicker
                 title="Specific users"
-                placeholder="Search customers by name or email"
+                searchPath="/admin/coupons/lookups/users"
+                placeholder="Search customers by name, email, or phone"
                 helpText="Used when customer eligibility is set to specific customers."
-                items={customers}
-                selectedIds={form.applicableUsers}
-                onChange={(values) => updateFormList("applicableUsers", values)}
-                getItemLabel={(customer) =>
-                  [customer?.name, customer?.email].filter(Boolean).join(" • ") || "Unnamed customer"
-                }
+                selectedItems={selectedUsers}
+                onChange={setSelectedUsers}
+                getItemLabel={getCustomerLabel}
                 disabled={form.customerEligibility !== "SPECIFIC_USERS"}
                 disabledMessage="Switch customer eligibility to Specific customers to search and add users here."
               />
             </div>
           </div>
 
-          {/* Buttons */}
           <div className="flex flex-wrap gap-3 mt-4">
             <button
               type="submit"
@@ -855,7 +906,7 @@ export default function AdminCoupons() {
               }`}
             >
               {saving
-                ? "Saving…"
+                ? "Saving..."
                 : editingId
                 ? "Update coupon"
                 : "Create coupon"}
@@ -872,7 +923,6 @@ export default function AdminCoupons() {
         </form>
       </div>
 
-      {/* Table */}
       <div className="bg-white border rounded-3xl shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <div className="font-extrabold text-gray-900">
@@ -904,7 +954,7 @@ export default function AdminCoupons() {
               {loading ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-6 text-gray-500">
-                    Loading coupons…
+                    Loading coupons...
                   </td>
                 </tr>
               ) : coupons.length === 0 ? (
@@ -935,70 +985,50 @@ export default function AdminCoupons() {
                           {c.code}
                         </div>
                         {c.description && (
-                          <div className="mt-1 text-xs text-gray-500 line-clamp-1">
+                          <div className="text-xs text-gray-500 mt-1 line-clamp-1">
                             {c.description}
                           </div>
                         )}
-                        <div className="mt-1 text-xs text-gray-500">
-                          Scope: {(c.applicableProducts?.length || 0) + (c.applicableCategories?.length || 0) + (c.applicableUsers?.length || 0) > 0
-                            ? [
-                                c.applicableProducts?.length ? `${c.applicableProducts.length} product` : null,
-                                c.applicableCategories?.length ? `${c.applicableCategories.length} category` : null,
-                                c.applicableUsers?.length ? `${c.applicableUsers.length} user` : null,
-                              ]
-                                .filter(Boolean)
-                                .join(", ")
-                            : "All shoppers and products"}
-                        </div>
-                        <div className="mt-1 text-xs text-gray-500">
-                          Eligibility: {c.customerEligibility === "SPECIFIC_USERS"
-                            ? "Specific customers"
-                            : c.customerEligibility === "NEW_CUSTOMERS"
-                            ? "New customers"
-                            : c.customerEligibility === "RETURNING_CUSTOMERS"
-                            ? "Returning customers"
-                            : "All customers"}
-                          {" • "}
-                          Applies to: {c.discountAppliesTo === "ENTIRE_CART" ? "Whole cart" : "Eligible items"}
-                          {c.perCustomerUsageLimit > 0 ? ` • Per customer: ${c.perCustomerUsageLimit}` : ""}
-                        </div>
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        {c.type === "PERCENT"
-                          ? "Percentage"
-                          : "Flat amount"}
+
+                      <td className="px-4 py-3 text-gray-700">
+                        {c.type === "PERCENT" ? "Percentage" : "Flat"}
                       </td>
-                      <td className="px-4 py-3 text-xs">
+
+                      <td className="px-4 py-3 text-gray-900 font-semibold">
                         {c.type === "PERCENT"
                           ? `${c.value}%`
-                          : `৳${c.value}`}
-                        {c.maxDiscount ? (
-                          <span className="text-gray-500">
-                            {" "}
-                            (max ৳{c.maxDiscount})
-                          </span>
-                        ) : null}
+                          : `৳${Number(c.value || 0).toLocaleString("en-BD")}`}
                       </td>
+
                       <td className="px-4 py-3">
-                        <span className={badgeClass(status)}>
-                          {status}
-                        </span>
+                        <span className={badgeClass(status)}>{status}</span>
                       </td>
+
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {validity}
                       </td>
-                      <td className="px-4 py-3 text-right text-xs font-semibold text-gray-800">
+
+                      <td className="px-4 py-3 text-right text-xs text-gray-700">
                         {usage}
+                        {c.perCustomerUsageLimit > 0 && (
+                          <div className="text-gray-500 mt-1">
+                            Per customer: {c.perCustomerUsageLimit}
+                          </div>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
+
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
                           <button
+                            type="button"
                             onClick={() => handleEdit(c)}
                             className="rounded-xl border bg-white px-3 py-1 text-xs font-semibold hover:bg-gray-50"
                           >
                             Edit
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDelete(c._id)}
                             className="rounded-xl border bg-white px-3 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
                           >
@@ -1014,7 +1044,6 @@ export default function AdminCoupons() {
           </table>
         </div>
 
-        {/* Pagination */}
         {pages > 1 && (
           <div className="px-4 py-3 flex items-center justify-between border-t text-sm text-gray-600">
             <button
@@ -1026,11 +1055,14 @@ export default function AdminCoupons() {
                   : "bg-white hover:bg-gray-50"
               }`}
             >
-              Previous
+              Prev
             </button>
-            <span>
-              Page {page} of {pages}
-            </span>
+
+            <div>
+              Page <span className="font-semibold">{page}</span> of{" "}
+              <span className="font-semibold">{pages}</span>
+            </div>
+
             <button
               onClick={() => goPage(page + 1)}
               disabled={page >= pages}
