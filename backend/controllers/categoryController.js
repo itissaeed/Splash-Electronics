@@ -39,6 +39,41 @@ exports.getCategories = async (req, res) => {
   }
 };
 
+exports.adminLookupCategories = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const pageSize = Math.max(1, Math.min(25, Number(req.query.limit) || 8));
+    const ids = String(req.query.ids || "")
+      .split(",")
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const filter = {};
+
+    if (ids.length) {
+      filter._id = { $in: ids };
+    }
+
+    if (keyword && !ids.length) {
+      filter.$or = [
+        { name: { $regex: keyword, $options: "i" } },
+        { slug: { $regex: keyword, $options: "i" } },
+      ];
+    }
+
+    const total = await Category.countDocuments(filter);
+    const items = await Category.find(filter)
+      .sort({ name: 1 })
+      .limit(pageSize)
+      .select("_id name slug attributes highlightsTemplate specsTemplate")
+      .lean();
+
+    res.json({ items, total });
+  } catch (e) {
+    console.error("adminLookupCategories Error:", e);
+    res.status(500).json({ message: "Failed to search categories" });
+  }
+};
+
 exports.createCategory = async (req, res) => {
   try {
     const { name, slug, parent, attributes, highlightsTemplate, specsTemplate } = req.body;

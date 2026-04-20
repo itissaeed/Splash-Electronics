@@ -719,17 +719,88 @@ exports.getProductBySlug = async (req, res) => {
 // --- Admin: GET /api/admin/products ---
 exports.getAllProductsAdmin = async (req, res) => {
   try {
-    const products = await Product.find({})
+    const mode = String(req.query.mode || "").trim().toLowerCase();
+    if (mode === "refs") {
+      const products = await Product.find({})
+        .select("_id slug variants.sku")
+        .lean();
+      return res.json({ products });
+    }
+
+    const pageSize = toNum(req.query.limit, 20);
+    const page = toNum(req.query.page, 1);
+    const keyword = String(req.query.keyword || "").trim();
+    const brand = String(req.query.brand || "").trim();
+    const category = String(req.query.category || "").trim();
+    const status = String(req.query.status || "").trim().toLowerCase();
+    const featured = String(req.query.featured || "").trim().toLowerCase();
+    const publishedOnly = String(req.query.publishedOnly || "").trim().toLowerCase();
+
+    const filter = {};
+
+    if (keyword) {
+      filter.$or = [
+        { name: { $regex: keyword, $options: "i" } },
+        { slug: { $regex: keyword, $options: "i" } },
+      ];
+    }
+
+    if (brand) filter.brand = brand;
+    if (category) filter.category = category;
+    if (featured === "true") filter.isFeatured = true;
+
+    if (publishedOnly === "true") {
+      filter.$or = [
+        { publicationStatus: "published" },
+        {
+          publicationStatus: { $exists: false },
+          isActive: true,
+        },
+      ];
+    }
+
+    if (status) {
+      if (status === "draft" || status === "published" || status === "archived") {
+        filter.publicationStatus = status;
+      }
+    }
+
+    const totalProducts = await Product.countDocuments(filter);
+    const products = await Product.find(filter)
       .populate("category", "name slug")
       .populate("brand", "name slug")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(pageSize * (page - 1))
+      .limit(pageSize);
 
     await enrichProductsWithInventory(products);
     await applyOfferPricingToProducts(products);
-    res.json({ products });
+    res.json({
+      products,
+      page,
+      pages: Math.max(1, Math.ceil(totalProducts / pageSize)),
+      totalProducts,
+    });
   } catch (error) {
     console.error("getAllProductsAdmin Error:", error);
     res.status(500).json({ message: "Failed to fetch products" });
+  }
+};
+
+exports.getAdminProductById = async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate("category", "name slug parent")
+      .populate("brand", "name slug");
+
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    await enrichProductsWithInventory([product]);
+    await applyOfferPricingToProducts([product]);
+    res.json(product);
+  } catch (error) {
+    console.error("getAdminProductById Error:", error);
+    res.status(500).json({ message: "Failed to fetch product" });
   }
 };
 

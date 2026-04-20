@@ -1,6 +1,9 @@
 // controllers/couponController.js
 const Coupon = require("../models/Coupon");
 const mongoose = require("mongoose");
+const Product = require("../models/Product");
+const Category = require("../models/Category");
+const User = require("../models/UserModel");
 
 const toNum = (v, def) => {
   const n = Number(v);
@@ -32,6 +35,13 @@ const normalizeIdArray = (value) => {
     .map((entry) => String(entry || "").trim())
     .filter((entry) => mongoose.Types.ObjectId.isValid(entry));
 };
+
+const clampLimit = (value, fallback = 8, max = 25) => {
+  const num = toNum(value, fallback);
+  return Math.max(1, Math.min(max, num));
+};
+
+const buildRegex = (value) => new RegExp(String(value || "").trim(), "i");
 
 const toCodeSlug = (value) =>
   String(value || "")
@@ -66,6 +76,78 @@ exports.adminGenerateCouponCode = async (req, res) => {
   } catch (err) {
     console.error("adminGenerateCouponCode error:", err);
     return res.status(500).json({ message: "Failed to generate coupon code" });
+  }
+};
+
+exports.adminLookupCouponProducts = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limit = clampLimit(req.query.limit, 8, 20);
+    const filter = {};
+
+    if (keyword) {
+      const rx = buildRegex(keyword);
+      filter.$or = [{ name: rx }, { slug: rx }];
+    }
+
+    const products = await Product.find(filter)
+      .sort(keyword ? { name: 1 } : { createdAt: -1 })
+      .limit(limit)
+      .select("_id name slug publicationStatus")
+      .lean();
+
+    res.json({ items: products });
+  } catch (err) {
+    console.error("adminLookupCouponProducts error:", err);
+    res.status(500).json({ message: "Failed to search products" });
+  }
+};
+
+exports.adminLookupCouponCategories = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limit = clampLimit(req.query.limit, 8, 20);
+    const filter = {};
+
+    if (keyword) {
+      const rx = buildRegex(keyword);
+      filter.$or = [{ name: rx }, { slug: rx }];
+    }
+
+    const categories = await Category.find(filter)
+      .sort({ name: 1 })
+      .limit(limit)
+      .select("_id name slug")
+      .lean();
+
+    res.json({ items: categories });
+  } catch (err) {
+    console.error("adminLookupCouponCategories error:", err);
+    res.status(500).json({ message: "Failed to search categories" });
+  }
+};
+
+exports.adminLookupCouponUsers = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || "").trim();
+    const limit = clampLimit(req.query.limit, 8, 20);
+    const filter = { isAdmin: false };
+
+    if (keyword) {
+      const rx = buildRegex(keyword);
+      filter.$or = [{ name: rx }, { email: rx }, { number: rx }];
+    }
+
+    const users = await User.find(filter)
+      .sort(keyword ? { name: 1 } : { createdAt: -1 })
+      .limit(limit)
+      .select("_id name email number createdAt")
+      .lean();
+
+    res.json({ items: users });
+  } catch (err) {
+    console.error("adminLookupCouponUsers error:", err);
+    res.status(500).json({ message: "Failed to search customers" });
   }
 };
 

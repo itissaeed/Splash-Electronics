@@ -4,6 +4,9 @@ const router = express.Router();
 const { protect, admin } = require("../middleware/authMiddleware");
 const {
   adminGenerateCouponCode,
+  adminLookupCouponProducts,
+  adminLookupCouponCategories,
+  adminLookupCouponUsers,
   adminListCoupons,
   adminCreateCoupon,
   adminUpdateCoupon,
@@ -12,6 +15,9 @@ const {
 
 // GET /api/admin/coupons/generate-code
 router.get("/generate-code", protect, admin, adminGenerateCouponCode);
+router.get("/lookups/products", protect, admin, adminLookupCouponProducts);
+router.get("/lookups/categories", protect, admin, adminLookupCouponCategories);
+router.get("/lookups/users", protect, admin, adminLookupCouponUsers);
 
 // GET /api/admin/coupons
 router.get("/", protect, admin, adminListCoupons);

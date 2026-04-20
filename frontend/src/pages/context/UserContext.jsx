@@ -13,8 +13,17 @@ export const UserProvider = ({ children }) => {
     const storedToken = localStorage.getItem("token");
 
     if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
-      setToken(storedToken);
+      try {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+      } catch (error) {
+        console.error("Failed to restore auth state from localStorage", error);
+        localStorage.removeItem("userInfo");
+        localStorage.removeItem("token");
+      }
+    } else if (storedUser || storedToken) {
+      localStorage.removeItem("userInfo");
+      localStorage.removeItem("token");
     }
 
     setAuthLoading(false);

@@ -155,10 +155,10 @@ export default function AdminLayout() {
       <div className="flex">
         {/* Sidebar */}
         <aside
-          className={`sticky top-0 h-screen border-r border-white/10 bg-gradient-to-b from-[#08111f] via-[#0c1d33] to-[#102a43] text-white transition-all
+          className={`sticky top-0 flex h-screen flex-col overflow-hidden border-r border-white/10 bg-gradient-to-b from-[#08111f] via-[#0c1d33] to-[#102a43] text-white transition-all
           ${collapsed ? "w-20" : "w-64"}`}
         >
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <div className="flex items-center justify-between border-b border-white/10 p-4">
             <div
               className={`font-extrabold tracking-tight text-white ${
                 collapsed ? "text-xs" : "text-lg"
@@ -176,7 +176,7 @@ export default function AdminLayout() {
             </button>
           </div>
 
-          <div className="px-4 pt-4">
+          <div className="shrink-0 px-4 pt-4">
             <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
                 Control Room
@@ -189,7 +189,11 @@ export default function AdminLayout() {
             </div>
           </div>
 
-          <nav className="p-3 space-y-1.5">
+          <nav
+            className={`admin-sidebar-scroll min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 pb-6 ${
+              collapsed ? "px-2" : ""
+            }`}
+          >
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
