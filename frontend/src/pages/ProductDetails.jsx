@@ -1053,11 +1053,7 @@ export default function ProductDetails() {
                     </button>
                   </div>
                 </div>
-                ) : (
-                  <div className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-semibold text-indigo-900">
-                    Admin preview mode: purchase actions are hidden for admin accounts.
-                  </div>
-                )}
+                ) : null}
 
                 {/* Actions */}
                 <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
