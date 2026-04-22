@@ -3,11 +3,12 @@ const InventoryLedger = require("../models/InventoryLedger");
 const Product = require("../models/Product");
 
 const PREPAID_METHODS = ["BKASH", "NAGAD", "CARD", "BANK", "SSLCOMMERZ"];
+const ACTIVE_RESERVATION_STATUSES = ["pending", "confirmed", "processing"];
 
 const toKey = (productId, variantId) => `${String(productId)}|${String(variantId)}`;
 
 const buildActiveReservationMatch = (now = new Date()) => ({
-  status: "pending",
+  status: { $in: ACTIVE_RESERVATION_STATUSES },
   "inventory.deducted": { $ne: true },
   "inventory.reservationActive": true,
   $or: [
@@ -251,6 +252,7 @@ const releaseReservationForOrder = async ({
 };
 
 module.exports = {
+  ACTIVE_RESERVATION_STATUSES,
   PREPAID_METHODS,
   buildActiveReservationMatch,
   releaseExpiredReservations,

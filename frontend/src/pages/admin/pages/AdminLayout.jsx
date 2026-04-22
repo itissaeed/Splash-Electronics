@@ -49,7 +49,7 @@ import { UserContext } from "../../context/UserContext";
 import api from "../../../utils/api";
 
 const navItems = [
-  { to: "/admin/overview", label: "Overview", icon: LayoutDashboard },
+  { to: "/admin/overview", label: "Dashboard", icon: LayoutDashboard },
   { to: "/admin/products", label: "Products", icon: Package },
   { to: "/admin/categories", label: "Categories", icon: Shapes },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },

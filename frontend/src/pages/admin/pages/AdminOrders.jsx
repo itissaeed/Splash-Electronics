@@ -557,8 +557,14 @@ export default function AdminOrders() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="premium-card max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="premium-card max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b p-4">
               <div>
                 <div className="font-extrabold text-gray-900">{selected.orderNo}</div>
