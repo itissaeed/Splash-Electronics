@@ -647,143 +647,6 @@ function Modal({ open, title, subtitle, children, onClose }) {
   );
 }
 
-function AsyncEntitySelect({
-  label,
-  value,
-  searchPath,
-  getItemLabel,
-  onSelect,
-  placeholder,
-  emptyLabel,
-  createAction,
-  selectedItem = null,
-}) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const loadFallbackItems = async () => {
-    const keyword = String(query || "").trim().toLowerCase();
-
-    if (searchPath === "/brands/admin/lookups") {
-      const { data } = await api.get("/brands");
-      const items = Array.isArray(data) ? data : [];
-      return items
-        .filter((item) => {
-          if (!keyword) return true;
-          return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
-        })
-        .slice(0, 8);
-    }
-
-    if (searchPath === "/categories/admin/lookups") {
-      const { data } = await api.get("/categories");
-      const items = Array.isArray(data) ? data : [];
-      return items
-        .filter((item) => {
-          if (!keyword) return true;
-          return [item?.name, item?.slug].some((value) => String(value || "").toLowerCase().includes(keyword));
-        })
-        .slice(0, 8);
-    }
-
-    return [];
-  };
-
-  useEffect(() => {
-    let active = true;
-    const timer = setTimeout(async () => {
-      try {
-        setLoading(true);
-        const { data } = await api.get(searchPath, {
-          headers: tokenHeader(),
-          params: { keyword: query.trim(), limit: 8 },
-        });
-        if (!active) return;
-        setResults(Array.isArray(data?.items) ? data.items : []);
-      } catch (error) {
-        if (error?.response?.status === 404) {
-          try {
-            const fallbackItems = await loadFallbackItems();
-            if (!active) return;
-            setResults(fallbackItems);
-            return;
-          } catch (fallbackError) {
-            if (!active) return;
-            console.error(`Fallback lookup failed for ${label.toLowerCase()} options`, fallbackError);
-          }
-        }
-        if (!active) return;
-        console.error(`Failed to load ${label.toLowerCase()} options`, error);
-        setResults([]);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }, 250);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [label, query, searchPath]);
-
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <label className="text-xs font-semibold text-gray-600">{label}</label>
-        {createAction}
-      </div>
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={placeholder}
-        className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400"
-      />
-      <div className="mt-2 rounded-2xl border border-gray-200 bg-white p-2">
-        {selectedItem ? (
-          <button
-            type="button"
-            onClick={() => onSelect("", null)}
-            className="mb-2 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700"
-          >
-            <span className="truncate max-w-[220px]">{getItemLabel(selectedItem)}</span>
-            <span aria-hidden="true">x</span>
-          </button>
-        ) : null}
-
-        {loading ? (
-          <div className="px-2 py-4 text-sm text-gray-500">Searching...</div>
-        ) : results.length ? (
-          <div className="space-y-2">
-            {results.map((item) => {
-              const active = String(item?._id) === String(value);
-              return (
-                <button
-                  key={item._id}
-                  type="button"
-                  onClick={() => onSelect(String(item._id), item)}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm ${
-                    active ? "bg-indigo-50 text-indigo-700" : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  <span className="truncate font-medium">{getItemLabel(item)}</span>
-                  {active ? <Check size={16} /> : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="px-2 py-4 text-sm text-gray-500">
-            {query.trim() ? "No matches found." : emptyLabel}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function CompactAsyncFilterSelect({
   value,
   searchPath,
@@ -963,7 +826,6 @@ export default function AdminProducts() {
   const [categoryCount, setCategoryCount] = useState(0);
   const [importBrands, setImportBrands] = useState([]);
   const [importCategories, setImportCategories] = useState([]);
-  const [selectedBrandOption, setSelectedBrandOption] = useState(null);
   const [selectedCategoryOption, setSelectedCategoryOption] = useState(null);
   const [filterBrandOption, setFilterBrandOption] = useState(null);
   const [filterCategoryOption, setFilterCategoryOption] = useState(null);
@@ -1034,7 +896,6 @@ export default function AdminProducts() {
 
   const resetForm = () => {
     setEditingId(null);
-    setSelectedBrandOption(null);
     setSelectedCategoryOption(null);
     applySnapshotToForm(createEmptyProductSnapshot());
     markCurrentStateAsClean(JSON.stringify(createEmptyProductSnapshot()));
@@ -1155,41 +1016,6 @@ export default function AdminProducts() {
       console.error(error);
       alert(error?.response?.data?.message || "Failed to load import dependencies.");
       return { brandsList: [], categoriesList: [] };
-    }
-  };
-
-  const hydrateSelectedEntities = async ({ brandId = "", categoryId = "" } = {}) => {
-    try {
-      const calls = [];
-      if (brandId) {
-        calls.push(
-          api.get("/brands/admin/lookups", {
-            headers: tokenHeader(),
-            params: { ids: brandId, limit: 1 },
-          })
-        );
-      } else {
-        calls.push(Promise.resolve(null));
-      }
-
-      if (categoryId) {
-        calls.push(
-          api.get("/categories/admin/lookups", {
-            headers: tokenHeader(),
-            params: { ids: categoryId, limit: 1 },
-          })
-        );
-      } else {
-        calls.push(Promise.resolve(null));
-      }
-
-      const [brandRes, categoryRes] = await Promise.all(calls);
-      const brandItem = brandRes?.data?.items?.[0] || null;
-      const categoryItem = categoryRes?.data?.items?.[0] || null;
-      setSelectedBrandOption(brandItem);
-      setSelectedCategoryOption(categoryItem);
-    } catch (error) {
-      console.error("Failed to hydrate selected brand/category", error);
     }
   };
 
@@ -1635,10 +1461,6 @@ export default function AdminProducts() {
         try {
           const parsedDraft = JSON.parse(savedDraft);
           applySnapshotToForm(parsedDraft);
-          hydrateSelectedEntities({
-            brandId: parsedDraft?.formData?.brand || "",
-            categoryId: parsedDraft?.formData?.category || "",
-          });
           markCurrentStateAsClean(JSON.stringify(parsedDraft));
         } catch (error) {
           console.error("Failed to restore product draft", error);
@@ -1660,7 +1482,6 @@ export default function AdminProducts() {
         try {
           const { data } = await api.get(`/products/admin/${productId}`);
           if (!active || !data?._id) return;
-          setSelectedBrandOption(data?.brand || null);
           setSelectedCategoryOption(data?.category || null);
           const snapshot = buildSnapshotFromProduct(data);
           setEditingId(data._id);
@@ -1689,6 +1510,17 @@ export default function AdminProducts() {
     const snapshot = JSON.stringify({ formData, variants });
     localStorage.setItem(PRODUCT_CREATE_DRAFT_KEY, snapshot);
   }, [formData, variants, isCreatePage]);
+
+  useEffect(() => {
+    if (!formData.category) {
+      setSelectedCategoryOption(null);
+      return;
+    }
+
+    const matchedCategory =
+      importCategories.find((category) => String(category?._id) === String(formData.category)) || null;
+    setSelectedCategoryOption(matchedCategory);
+  }, [formData.category, importCategories]);
 
   useEffect(() => {
     if (!isEditorPage) return undefined;
@@ -2235,7 +2067,6 @@ export default function AdminProducts() {
       if (createType === "brand") {
         const { data } = await api.post("/brands", { name, slug });
         await fetchDependencies();
-        setSelectedBrandOption(data || null);
         setFormData((p) => ({ ...p, brand: data?._id || p.brand }));
       } else {
         const manualAttributes = Array.from(
@@ -2788,9 +2619,6 @@ export default function AdminProducts() {
 	                    value={formData.brand}
 	                    onChange={(e) => {
 	                      const nextValue = e.target.value;
-	                      setSelectedBrandOption(
-	                        importBrands.find((brand) => String(brand?._id) === String(nextValue)) || null
-	                      );
 	                      setFormData((prev) => ({ ...prev, brand: nextValue }));
 	                    }}
 	                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-400"
