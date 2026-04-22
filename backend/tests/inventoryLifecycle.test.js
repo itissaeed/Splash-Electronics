@@ -654,6 +654,29 @@ test("adminUpdateShipment rejects in-transit courier progress before order is sh
   }
 });
 
+test("buildActiveReservationMatch keeps confirmed and processing orders reserved before deduction", async () => {
+  const { loaded: stockReservationService, restore } = withFreshModule({
+    target: "services/stockReservationService.js",
+    mocks: {
+      "models/Order.js": {},
+      "models/InventoryLedger.js": {},
+      "models/Product.js": {},
+    },
+  });
+
+  try {
+    const match = stockReservationService.buildActiveReservationMatch(
+      new Date("2026-04-22T12:00:00.000Z")
+    );
+
+    assert.deepEqual(match.status, { $in: ["pending", "confirmed", "processing"] });
+    assert.equal(match["inventory.deducted"].$ne, true);
+    assert.equal(match["inventory.reservationActive"], true);
+  } finally {
+    restore();
+  }
+});
+
 const run = async () => {
   let failed = 0;
 

@@ -2567,9 +2567,6 @@ export default function AdminProducts() {
                             <div className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${stock <= 5 ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"}`}>
                               {stock} available
                             </div>
-                            <div className="mt-2 text-[11px] text-gray-500">
-                              On hand {p?.inventorySummary?.onHand ?? stock} / Reserved {p?.inventorySummary?.reserved ?? 0}
-                            </div>
                           </td>
 
                           <td className="px-4 py-4">
