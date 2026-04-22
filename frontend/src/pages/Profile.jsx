@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../utils/api";
 import { UserContext } from "./context/UserContext";
+import { isAdminUser } from "../utils/auth";
 
 const tokenHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -27,6 +28,10 @@ function StatCard({ label, value, hint }) {
 export default function Profile() {
   const { user, updateUser } = useContext(UserContext);
   const [orders, setOrders] = useState([]);
+  const [bootstrapStatus, setBootstrapStatus] = useState(null);
+  const [bootstrapSecret, setBootstrapSecret] = useState("");
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
+  const [bootstrapMsg, setBootstrapMsg] = useState("");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
@@ -55,6 +60,19 @@ export default function Profile() {
       }
     };
     loadOrders();
+  }, []);
+
+  useEffect(() => {
+    const loadBootstrapStatus = async () => {
+      try {
+        const { data } = await api.get("/auth/admin-bootstrap-status");
+        setBootstrapStatus(data);
+      } catch (e) {
+        setBootstrapStatus(null);
+      }
+    };
+
+    loadBootstrapStatus();
   }, []);
 
   const initials = useMemo(() => {
@@ -100,6 +118,38 @@ export default function Profile() {
     }
   };
 
+  const handleBootstrapAdmin = async (e) => {
+    e.preventDefault();
+    setBootstrapLoading(true);
+    setBootstrapMsg("");
+    setErrMsg("");
+
+    try {
+      const { data } = await api.post(
+        "/auth/bootstrap-admin",
+        { secret: bootstrapSecret.trim() },
+        { headers: tokenHeader() }
+      );
+
+      if (data?.user) {
+        updateUser(data.user);
+      }
+
+      setBootstrapSecret("");
+      setBootstrapMsg(data?.message || "Admin access granted.");
+      setBootstrapStatus((prev) => ({
+        ...(prev || {}),
+        hasAdmin: true,
+        adminCount: Math.max(1, Number(prev?.adminCount || 0)),
+        canBootstrap: false,
+      }));
+    } catch (e2) {
+      setErrMsg(e2?.response?.data?.message || "Failed to bootstrap admin access.");
+    } finally {
+      setBootstrapLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -117,13 +167,13 @@ export default function Profile() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard label="Total Orders" value={orderStats.total} />
           <StatCard label="Active Orders" value={orderStats.active} hint="Pending to shipped" />
           <StatCard label="Delivered" value={orderStats.delivered} />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-sm font-bold text-slate-900">Account Information</h2>
@@ -152,7 +202,7 @@ export default function Profile() {
                 <Row label="Name" value={user?.name} />
                 <Row label="Email" value={user?.email} />
                 <Row label="Phone" value={user?.number} />
-                <Row label="Role" value={user?.isAdmin ? "Admin" : "Customer"} />
+                <Row label="Role" value={isAdminUser(user) ? "Admin" : "Customer"} />
                 <Row label="Last Login" value={prettyDate(user?.lastLoginAt)} />
               </div>
             ) : (
@@ -245,7 +295,57 @@ export default function Profile() {
           </div>
         </div>
 
+        {!isAdminUser(user) && bootstrapStatus && !bootstrapStatus.hasAdmin && bootstrapStatus.bootstrapEnabled ? (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">First Admin Setup</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  No admin account exists yet. Enter the server bootstrap secret to claim the first admin seat for this account.
+                </p>
+              </div>
+              <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">
+                One-time setup
+              </span>
+            </div>
+
+            {bootstrapMsg ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                {bootstrapMsg}
+              </div>
+            ) : null}
+
+            <form onSubmit={handleBootstrapAdmin} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-slate-600">Bootstrap secret</label>
+                <input
+                  type="password"
+                  value={bootstrapSecret}
+                  onChange={(e) => setBootstrapSecret(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm"
+                  placeholder="Enter admin bootstrap secret"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={bootstrapLoading}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold text-white ${
+                  bootstrapLoading ? "bg-amber-300" : "bg-amber-600 hover:bg-amber-500"
+                }`}
+              >
+                {bootstrapLoading ? "Granting access..." : "Make Me Admin"}
+              </button>
+            </form>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-3">
+          {isAdminUser(user) ? (
+            <Link to="/admin" className="rounded-xl bg-cyan-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-cyan-600">
+              Open Admin Panel
+            </Link>
+          ) : null}
           <Link to="/orders" className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
             View My Orders
           </Link>

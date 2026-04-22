@@ -11,8 +11,10 @@ const {
   googleLogin,
   getMe,
   updateMe,
+  getAdminBootstrapStatus,
+  bootstrapAdmin,
 } = require('../controllers/authController');
-const { forgotPassword, resetPassword } = require('../controllers/passwordController');
+const { forgotPassword, resendPasswordResetOtp, resetPassword } = require('../controllers/passwordController');
 
 
 // Auth routes
@@ -22,8 +24,11 @@ router.post('/signup/resend-otp', resendSignupOtp);
 router.post('/login', login);
 router.post('/google', googleLogin);
 router.post('/forgot-password', forgotPassword);
+router.post('/forgot-password/resend-otp', resendPasswordResetOtp);
 router.post('/reset-password', resetPassword);
+router.get("/admin-bootstrap-status", getAdminBootstrapStatus);
 router.get("/me", protect, getMe);
 router.put("/me", protect, updateMe);
+router.post("/bootstrap-admin", protect, bootstrapAdmin);
 
 module.exports = router;

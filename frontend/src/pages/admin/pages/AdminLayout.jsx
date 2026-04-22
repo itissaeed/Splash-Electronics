@@ -54,7 +54,7 @@ const navItems = [
   { to: "/admin/categories", label: "Categories", icon: Shapes },
   { to: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
-  { to: "/admin/customers", label: "Customers", icon: Users },
+  { to: "/admin/customers", label: "Users", icon: Users },
   { to: "/admin/offers", label: "Offers", icon: Tag },
   { to: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { to: "/admin/sales", label: "Sales Analytics", icon: BarChart3 },

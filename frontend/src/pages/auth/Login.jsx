@@ -15,6 +15,7 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState("");
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState("");
   const [resendingOtp, setResendingOtp] = useState(false);
+  const [bootstrapStatus, setBootstrapStatus] = useState(null);
 
   const { login } = useContext(UserContext);
   const navigate = useNavigate();
@@ -26,6 +27,19 @@ export default function Login() {
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
+
+  useEffect(() => {
+    const loadBootstrapStatus = async () => {
+      try {
+        const { data } = await api.get("/auth/admin-bootstrap-status");
+        setBootstrapStatus(data);
+      } catch (error) {
+        setBootstrapStatus(null);
+      }
+    };
+
+    loadBootstrapStatus();
+  }, []);
 
   const canSubmit = useMemo(() => {
     return email.trim().length > 3 && password.trim().length >= 6 && !loading;
@@ -165,6 +179,12 @@ export default function Login() {
                   {errMsg}
                 </div>
               )}
+
+              {bootstrapStatus && !bootstrapStatus.hasAdmin && bootstrapStatus.bootstrapEnabled ? (
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  No admin account exists yet. Sign in, then open your profile to claim the first admin account with the server bootstrap secret.
+                </div>
+              ) : null}
 
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div>

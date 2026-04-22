@@ -1,6 +1,9 @@
 // controllers/passwordController.js
 const User = require("../models/UserModel");
-const { sendPasswordResetEmail } = require("../config/emailConfig");
+const crypto = require("crypto");
+const { sendPasswordResetOtpEmail } = require("../config/emailConfig");
+
+const hashOtp = (otp) => crypto.createHash("sha256").update(String(otp).trim()).digest("hex");
 
 exports.forgotPassword = async (req, res) => {
   try {
@@ -16,20 +19,23 @@ exports.forgotPassword = async (req, res) => {
     if (!user) {
       return res.status(200).json({
         status: "success",
-        message: "If that email exists, a password reset link has been sent.",
+        message: "If that email exists, a password reset code has been sent.",
       });
     }
 
-    // Use your model method (recommended)
-    const resetToken = user.createPasswordResetToken();
+    const resetOtp = user.createPasswordResetOtp();
     await user.save({ validateBeforeSave: false });
 
     try {
-      await sendPasswordResetEmail(user.email, resetToken);
-      return res.status(200).json({ status: "success", message: "Reset link sent to email" });
+      await sendPasswordResetOtpEmail(user.email, resetOtp);
+      return res.status(200).json({
+        status: "success",
+        requiresOtp: true,
+        email: cleanEmail,
+        message: "If that email exists, a password reset code has been sent.",
+      });
     } catch (err) {
-      user.resetPasswordToken = undefined;
-      user.resetPasswordExpires = undefined;
+      user.clearPasswordReset();
       await user.save({ validateBeforeSave: false });
 
       console.error("Email Error:", err);
@@ -44,33 +50,72 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
-exports.resetPassword = async (req, res) => {
+exports.resendPasswordResetOtp = async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ status: "fail", message: "Please provide an email address" });
+    }
 
-    if (!token || !password) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Please provide both token and new password",
+    const cleanEmail = String(email).toLowerCase().trim();
+    const user = await User.findOne({ email: cleanEmail });
+
+    if (!user) {
+      return res.status(200).json({
+        status: "success",
+        message: "If that email exists, a password reset code has been sent.",
       });
     }
 
-    // token is raw; DB stored hashed token
-    const crypto = require("crypto");
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const resetOtp = user.createPasswordResetOtp();
+    await user.save({ validateBeforeSave: false });
+    await sendPasswordResetOtpEmail(user.email, resetOtp);
 
-    const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() },
+    return res.status(200).json({
+      status: "success",
+      email: cleanEmail,
+      message: "A new password reset code has been sent.",
     });
+  } catch (error) {
+    console.error("Resend Password Reset OTP Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to resend password reset code." });
+  }
+};
 
-    if (!user) {
-      return res.status(400).json({ status: "fail", message: "Token is invalid or has expired" });
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, email, otp, password } = req.body;
+
+    if (!password || (!token && (!email || !otp))) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Please provide the required reset details and a new password",
+      });
     }
 
-    user.password = password; // pre-save hook hashes
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
+    let user = null;
+
+    if (token) {
+      const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+      user = await User.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+    } else {
+      const cleanEmail = String(email).toLowerCase().trim();
+      user = await User.findOne({
+        email: cleanEmail,
+        resetPasswordToken: hashOtp(otp),
+        resetPasswordExpires: { $gt: Date.now() },
+      });
+    }
+
+    if (!user) {
+      return res.status(400).json({ status: "fail", message: "Reset code is invalid or has expired" });
+    }
+
+    user.password = password;
+    user.clearPasswordReset();
 
     await user.save();
 

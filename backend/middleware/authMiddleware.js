@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const asyncHandler = require('express-async-handler');
 const User = require("../models/UserModel");
+const { isUserAdmin } = require("../utils/adminAccess");
 
 const protect = asyncHandler(async (req, res, next) => {
   let token;
@@ -27,6 +28,8 @@ const protect = asyncHandler(async (req, res, next) => {
         throw new Error('Your account is blocked');
       }
 
+      req.user.isAdmin = isUserAdmin(req.user);
+
       return next();
     } catch (error) {
       console.error(error);
@@ -40,14 +43,7 @@ const protect = asyncHandler(async (req, res, next) => {
 });
 
 const admin = (req, res, next) => {
-  const isAdmin = req.user?.isAdmin === true;
-  const normalizedRoles = Array.isArray(req.user?.roles)
-    ? req.user.roles.map((r) => String(r || "").toLowerCase().trim())
-    : [];
-  const roleField = String(req.user?.role || "").toLowerCase().trim();
-  const hasAdminRole = normalizedRoles.includes("admin") || roleField === "admin";
-
-  if (req.user && (isAdmin || hasAdminRole)) {
+  if (req.user && isUserAdmin(req.user)) {
     return next();
   }
 

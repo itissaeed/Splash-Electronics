@@ -4,6 +4,7 @@ const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/UserModel");
 const { sendSignupOtpEmail } = require("../config/emailConfig");
 const { normalizeBangladeshNumber } = require("../utils/numberNormalizer");
+const { buildRoleState, adminUserQuery } = require("../utils/adminAccess");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -394,5 +395,70 @@ exports.updateMe = async (req, res) => {
     }
     console.error("updateMe Error:", error);
     return res.status(500).json({ status: "error", message: "Failed to update profile." });
+  }
+};
+
+exports.getAdminBootstrapStatus = async (req, res) => {
+  try {
+    const adminCount = await User.countDocuments(adminUserQuery());
+    const bootstrapEnabled = Boolean(process.env.ADMIN_BOOTSTRAP_SECRET);
+
+    return res.status(200).json({
+      status: "success",
+      hasAdmin: adminCount > 0,
+      adminCount,
+      bootstrapEnabled,
+    });
+  } catch (error) {
+    console.error("getAdminBootstrapStatus Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to load bootstrap status." });
+  }
+};
+
+exports.bootstrapAdmin = async (req, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({ status: "fail", message: "Not authorized" });
+    }
+
+    if (!process.env.ADMIN_BOOTSTRAP_SECRET) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Admin bootstrap is disabled on this server.",
+      });
+    }
+
+    const { secret } = req.body || {};
+    if (!secret || String(secret) !== String(process.env.ADMIN_BOOTSTRAP_SECRET)) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Invalid admin bootstrap secret.",
+      });
+    }
+
+    const adminCount = await User.countDocuments(adminUserQuery());
+    if (adminCount > 0) {
+      return res.status(409).json({
+        status: "fail",
+        message: "An admin already exists. Use the admin users page to manage access.",
+      });
+    }
+
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) {
+      return res.status(404).json({ status: "fail", message: "User not found" });
+    }
+
+    Object.assign(currentUser, buildRoleState(true));
+    await currentUser.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Admin access granted to your account.",
+      user: sanitizeUser(currentUser),
+    });
+  } catch (error) {
+    console.error("bootstrapAdmin Error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to bootstrap admin access." });
   }
 };

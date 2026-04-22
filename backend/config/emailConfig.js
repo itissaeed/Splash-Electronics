@@ -100,6 +100,38 @@ const sendPasswordResetEmail = async (email, resetToken) => {
   return info;
 };
 
+const sendPasswordResetOtpEmail = async (email, otp) => {
+  const transporter = await getTransporter();
+  const expiryMinutes = Number(process.env.RESET_PASSWORD_EXPIRES_MINUTES || 30);
+
+  const info = await transporter.sendMail({
+    from: getFromAddress(),
+    to: email,
+    subject: "Reset your Splash Electronics password",
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h2 style="margin:0 0 12px;">Password reset code</h2>
+        <p>Use the code below to reset your password.</p>
+
+        <div style="margin:18px 0; font-size:28px; letter-spacing:8px; font-weight:700; color:#111827;">
+          ${otp}
+        </div>
+
+        <p style="color:#6b7280; font-size:12px;">
+          This code expires in ${expiryMinutes} minutes. If you did not request a password reset, you can ignore this email.
+        </p>
+      </div>
+    `,
+  });
+
+  logPreview("Password reset OTP", info, {
+    otp,
+    email,
+  });
+
+  return info;
+};
+
 const sendSignupOtpEmail = async (email, otp, name) => {
   const transporter = await getTransporter();
   const expiryMinutes = Number(process.env.SIGNUP_OTP_EXPIRES_MINUTES || 15);
@@ -133,4 +165,4 @@ const sendSignupOtpEmail = async (email, otp, name) => {
   return info;
 };
 
-module.exports = { sendPasswordResetEmail, sendSignupOtpEmail };
+module.exports = { sendPasswordResetEmail, sendPasswordResetOtpEmail, sendSignupOtpEmail };
