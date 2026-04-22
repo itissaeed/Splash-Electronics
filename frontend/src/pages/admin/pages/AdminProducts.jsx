@@ -1072,12 +1072,16 @@ export default function AdminProducts() {
 
   const fetchDependencies = async () => {
     try {
-      const [cRes, bRes] = await Promise.all([
+      const [cRes, bRes, brandsRes, categoriesRes] = await Promise.all([
         api.get("/categories/admin/lookups", { headers: tokenHeader(), params: { limit: 1 } }),
         api.get("/brands/admin/lookups", { headers: tokenHeader(), params: { limit: 1 } }),
+        api.get("/brands"),
+        api.get("/categories"),
       ]);
       setCategoryCount(Number(cRes.data?.total || 0));
       setBrandCount(Number(bRes.data?.total || 0));
+      setImportBrands(Array.isArray(brandsRes.data) ? brandsRes.data : []);
+      setImportCategories(Array.isArray(categoriesRes.data) ? categoriesRes.data : []);
     } catch (e) {
       console.error(e);
       alert(
@@ -2768,20 +2772,9 @@ export default function AdminProducts() {
                   />
                 </div>
 
-	                {/* Brand row with Quick Add */}
-	                <AsyncEntitySelect
-	                  label="Brand"
-	                  value={formData.brand}
-	                  searchPath="/brands/admin/lookups"
-	                  selectedItem={selectedBrandOption}
-	                  getItemLabel={(brand) => brand?.name || "Unnamed brand"}
-	                  onSelect={(nextValue, item = null) => {
-	                    setSelectedBrandOption(item);
-	                    setFormData((prev) => ({ ...prev, brand: nextValue }));
-	                  }}
-	                  placeholder="Search brands"
-	                  emptyLabel={brandCount > 0 ? "Start typing to search brands." : "No brands yet"}
-	                  createAction={
+	                <div>
+	                  <div className="flex items-center justify-between">
+	                    <label className="text-xs font-semibold text-gray-600">Brand</label>
 	                    <button
 	                      type="button"
 	                      onClick={() => openQuickAdd("brand")}
@@ -2789,23 +2782,32 @@ export default function AdminProducts() {
 	                    >
 	                      + Create
 	                    </button>
-	                  }
-	                />
+	                  </div>
+	                  <select
+	                    name="brand"
+	                    value={formData.brand}
+	                    onChange={(e) => {
+	                      const nextValue = e.target.value;
+	                      setSelectedBrandOption(
+	                        importBrands.find((brand) => String(brand?._id) === String(nextValue)) || null
+	                      );
+	                      setFormData((prev) => ({ ...prev, brand: nextValue }));
+	                    }}
+	                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-400"
+	                    required
+	                  >
+	                    <option value="">{brandCount > 0 ? "Select brand" : "No brands yet"}</option>
+	                    {importBrands.map((brand) => (
+	                      <option key={brand._id} value={brand._id}>
+	                        {brand?.name || "Unnamed brand"}
+	                      </option>
+	                    ))}
+	                  </select>
+	                </div>
 
-	                {/* Category row with Quick Add */}
-	                <AsyncEntitySelect
-	                  label="Category"
-	                  value={formData.category}
-	                  searchPath="/categories/admin/lookups"
-	                  selectedItem={selectedCategoryOption}
-	                  getItemLabel={(category) => category?.name || "Unnamed category"}
-	                  onSelect={(nextValue, item = null) => {
-	                    setSelectedCategoryOption(item);
-	                    setFormData((prev) => ({ ...prev, category: nextValue }));
-	                  }}
-	                  placeholder="Search categories"
-	                  emptyLabel={categoryCount > 0 ? "Start typing to search categories." : "No categories yet"}
-	                  createAction={
+	                <div>
+	                  <div className="flex items-center justify-between">
+	                    <label className="text-xs font-semibold text-gray-600">Category</label>
 	                    <button
 	                      type="button"
 	                      onClick={() => openQuickAdd("category")}
@@ -2813,8 +2815,28 @@ export default function AdminProducts() {
 	                    >
 	                      + Create
 	                    </button>
-	                  }
-	                />
+	                  </div>
+	                  <select
+	                    name="category"
+	                    value={formData.category}
+	                    onChange={(e) => {
+	                      const nextValue = e.target.value;
+	                      setSelectedCategoryOption(
+	                        importCategories.find((category) => String(category?._id) === String(nextValue)) || null
+	                      );
+	                      setFormData((prev) => ({ ...prev, category: nextValue }));
+	                    }}
+	                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-400"
+	                    required
+	                  >
+	                    <option value="">{categoryCount > 0 ? "Select category" : "No categories yet"}</option>
+	                    {importCategories.map((category) => (
+	                      <option key={category._id} value={category._id}>
+	                        {category?.name || "Unnamed category"}
+	                      </option>
+	                    ))}
+	                  </select>
+	                </div>
 
                 <div>
                   <label className="text-xs font-semibold text-gray-600">Base Price (৳)</label>
