@@ -78,6 +78,19 @@ userSchema.methods.createPasswordResetToken = function () {
   return resetToken;
 };
 
+userSchema.methods.createPasswordResetOtp = function () {
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  const expiryMinutes = Number(process.env.RESET_PASSWORD_EXPIRES_MINUTES || 30);
+  this.resetPasswordToken = crypto.createHash("sha256").update(otp).digest("hex");
+  this.resetPasswordExpires = Date.now() + expiryMinutes * 60 * 1000;
+  return otp;
+};
+
+userSchema.methods.clearPasswordReset = function () {
+  this.resetPasswordToken = undefined;
+  this.resetPasswordExpires = undefined;
+};
+
 userSchema.methods.createSignupOtp = function () {
   const otp = crypto.randomInt(100000, 1000000).toString();
   const expiryMinutes = Number(process.env.SIGNUP_OTP_EXPIRES_MINUTES || 15);

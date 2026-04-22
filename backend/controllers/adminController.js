@@ -1,6 +1,7 @@
 const Order = require("../models/Order");
 const User = require("../models/UserModel");
 const { buildRevenueMatch } = require("../utils/revenueRecognition");
+const { customerUserQuery } = require("../utils/adminAccess");
 
 exports.getAdminOverview = async (req, res) => {
   try {
@@ -8,7 +9,7 @@ exports.getAdminOverview = async (req, res) => {
 
     // totals
     const totalOrders = await Order.countDocuments();
-    const totalCustomers = await User.countDocuments({ isAdmin: false });
+    const totalCustomers = await User.countDocuments(customerUserQuery());
 
     // revenue (only admin-confirmed order pipeline)
     const revenueAgg = await Order.aggregate([

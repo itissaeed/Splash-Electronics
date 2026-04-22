@@ -1,6 +1,7 @@
 import { useContext } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { UserContext } from "../context/UserContext";
+import { isAdminUser } from "../../utils/auth";
 
 export default function AdminRoute({ children }) {
   const { user, authLoading } = useContext(UserContext);
@@ -18,7 +19,7 @@ export default function AdminRoute({ children }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (!user.isAdmin) {
+  if (!isAdminUser(user)) {
     return <Navigate to="/" replace />;
   }
 
