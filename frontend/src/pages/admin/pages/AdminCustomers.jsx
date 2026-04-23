@@ -76,6 +76,25 @@ export default function AdminCustomers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== "make-admin") return;
+
+    const trimmedKeyword = promoteKeyword.trim();
+    if (!trimmedKeyword) {
+      setPromoteCandidates([]);
+      setPromoteLoading(false);
+      setHasSearchedPromote(false);
+      return undefined;
+    }
+
+    const timerId = setTimeout(() => {
+      fetchPromoteCandidates(trimmedKeyword);
+    }, 250);
+
+    return () => clearTimeout(timerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promoteKeyword, activeTab]);
+
   const fetchPromoteCandidates = async (searchTerm = promoteKeyword) => {
     try {
       setPromoteLoading(true);
@@ -107,11 +126,6 @@ export default function AdminCustomers() {
   const onSearchSubmit = (e) => {
     e.preventDefault();
     fetchCustomers({ page: 1 });
-  };
-
-  const onPromoteSearchSubmit = (e) => {
-    e.preventDefault();
-    fetchPromoteCandidates(promoteKeyword);
   };
 
   const goPage = (newPage) => {
@@ -371,23 +385,17 @@ export default function AdminCustomers() {
               </p>
             </div>
 
-            <form
-              onSubmit={onPromoteSearchSubmit}
-              className="flex flex-wrap items-center gap-2"
-            >
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 value={promoteKeyword}
                 onChange={(e) => setPromoteKeyword(e.target.value)}
                 placeholder="Search customer by name, email or phone"
                 className="w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 sm:w-80"
               />
-              <button
-                type="submit"
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              >
-                Search Customer
-              </button>
-            </form>
+              <div className="text-xs text-slate-500">
+                Results appear automatically while typing
+              </div>
+            </div>
 
             <div className="overflow-hidden rounded-2xl border">
               <div className="hidden gap-3 bg-gray-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:grid sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_auto]">
