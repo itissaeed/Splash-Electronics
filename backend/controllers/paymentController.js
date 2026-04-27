@@ -456,13 +456,22 @@ const redirectWithStatus = async (req, res, statusHint) => {
   return res.redirect(url);
 };
 
+const redirectWithFallbackStatus = (req, res, statusHint) => {
+  const cfg = getGatewayConfig(req);
+  const orderNo = getRequestValue(req, "tran_id") || getRequestValue(req, "value_a") || "unknown";
+  const url = `${normalizeBaseUrl(cfg.frontendUrl)}/order-success/${encodeURIComponent(
+    orderNo
+  )}?payment=${encodeURIComponent(statusHint || "pending")}`;
+  return res.redirect(url);
+};
+
 // POST/GET /api/payments/sslcommerz/success
 exports.sslCommerzSuccess = async (req, res) => {
   try {
     return await redirectWithStatus(req, res, "success");
   } catch (e) {
     console.error("sslCommerzSuccess:", e);
-    return res.status(500).send("Payment success redirect failed");
+    return redirectWithFallbackStatus(req, res, "pending");
   }
 };
 
@@ -472,7 +481,7 @@ exports.sslCommerzFail = async (req, res) => {
     return await redirectWithStatus(req, res, "failed");
   } catch (e) {
     console.error("sslCommerzFail:", e);
-    return res.status(500).send("Payment fail redirect failed");
+    return redirectWithFallbackStatus(req, res, "failed");
   }
 };
 
@@ -482,6 +491,6 @@ exports.sslCommerzCancel = async (req, res) => {
     return await redirectWithStatus(req, res, "cancelled");
   } catch (e) {
     console.error("sslCommerzCancel:", e);
-    return res.status(500).send("Payment cancel redirect failed");
+    return redirectWithFallbackStatus(req, res, "cancelled");
   }
 };

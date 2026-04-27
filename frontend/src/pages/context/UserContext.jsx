@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from "react";
+import api from "../../utils/api";
 
 export const UserContext = createContext();
 
@@ -7,26 +8,58 @@ export const UserProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const clearAuthState = () => {
+    localStorage.removeItem("userInfo");
+    localStorage.removeItem("token");
+    setUser(null);
+    setToken(null);
+  };
+
   // Load auth state on app start
   useEffect(() => {
-    const storedUser = localStorage.getItem("userInfo");
     const storedToken = localStorage.getItem("token");
+    let cancelled = false;
 
-    if (storedUser && storedToken) {
-      try {
-        setUser(JSON.parse(storedUser));
-        setToken(storedToken);
-      } catch (error) {
-        console.error("Failed to restore auth state from localStorage", error);
-        localStorage.removeItem("userInfo");
-        localStorage.removeItem("token");
+    const loadAuthState = async () => {
+      if (!storedToken) {
+        if (localStorage.getItem("userInfo")) {
+          clearAuthState();
+        }
+        if (!cancelled) setAuthLoading(false);
+        return;
       }
-    } else if (storedUser || storedToken) {
-      localStorage.removeItem("userInfo");
-      localStorage.removeItem("token");
-    }
 
-    setAuthLoading(false);
+      setToken(storedToken);
+
+      try {
+        const { data } = await api.get("/auth/me", {
+          headers: { Authorization: `Bearer ${storedToken}` },
+        });
+
+        if (cancelled) return;
+
+        const nextUser = data?.user || null;
+        if (!nextUser) {
+          clearAuthState();
+        } else {
+          localStorage.setItem("userInfo", JSON.stringify(nextUser));
+          setUser(nextUser);
+        }
+      } catch (error) {
+        console.error("Failed to restore auth state from server", error);
+        if (!cancelled) {
+          clearAuthState();
+        }
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    };
+
+    loadAuthState();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = (userData, jwtToken) => {
@@ -37,10 +70,7 @@ export const UserProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem("userInfo");
-    localStorage.removeItem("token");
-    setUser(null);
-    setToken(null);
+    clearAuthState();
   };
 
   const updateUser = (nextUser) => {

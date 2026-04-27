@@ -71,11 +71,7 @@ function App() {
           />
           <Route
             path="/order-success/:orderNo"
-            element={
-              <CustomerRoute>
-                <OrderSuccess />
-              </CustomerRoute>
-            }
+            element={<OrderSuccess />}
           />
           <Route
             path="/orders"

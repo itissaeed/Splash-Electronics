@@ -15,6 +15,7 @@ import {
 import api from "../utils/api";
 import { getProductDisplayPricing } from "../utils/productPricing";
 import { UserContext } from "./context/UserContext";
+import { isAdminUser } from "../utils/auth";
 import useCompareItems from "../utils/useCompare";
 import {
   COMPARE_LIMIT,
@@ -130,7 +131,7 @@ export default function Home() {
     if (!user?.name) return "";
     return user.name.split(" ")[0];
   }, [user]);
-  const isAdmin = Boolean(user?.isAdmin);
+  const isAdmin = isAdminUser(user);
 
   const goSearch = () => {
     const q = search.trim();
@@ -247,7 +248,7 @@ export default function Home() {
                       Profile
                     </Link>
 
-                    {!user.isAdmin && (
+                    {!isAdmin && (
                       <Link
                         to="/orders"
                         onClick={() => setAccountMenuOpen(false)}
@@ -363,7 +364,7 @@ export default function Home() {
                   Profile
                 </Link>
 
-                {!user.isAdmin && (
+                {!isAdmin && (
                   <Link to="/orders" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 hover:bg-white/10">
                     My Orders
                   </Link>
