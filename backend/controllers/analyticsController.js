@@ -323,8 +323,8 @@ exports.adminAnalyticsOverview = async (req, res) => {
       paidOrderCount: 0,
     };
 
-    const peakOrderHour = Array.isArray(agg?.peakOrderHours) && agg.peakOrderHours.length
-      ? agg.peakOrderHours[0]
+    const peakOrderHour = Array.isArray(peakOrderHoursAgg) && peakOrderHoursAgg.length
+      ? peakOrderHoursAgg[0]
       : null;
     const uniqueViewerCount = uniqueViewers.length;
     const orderingVisitorCount = orderingVisitors.length;
