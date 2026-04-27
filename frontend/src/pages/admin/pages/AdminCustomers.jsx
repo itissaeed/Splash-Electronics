@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../../utils/api";
 import { isAdminUser } from "../../../utils/auth";
 
@@ -21,12 +22,18 @@ function MetricCard({ label, value, subtitle }) {
 }
 
 export default function AdminCustomers() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
+  const syncedUrlKeywordRef = useRef(urlKeyword);
   const [customers, setCustomers] = useState([]);
   const [promoteCandidates, setPromoteCandidates] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(urlKeyword);
   const [role, setRole] = useState("all");
   const [activeTab, setActiveTab] = useState("users");
   const [promoteKeyword, setPromoteKeyword] = useState("");
@@ -75,6 +82,14 @@ export default function AdminCustomers() {
     fetchCustomers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (syncedUrlKeywordRef.current === urlKeyword) return;
+    syncedUrlKeywordRef.current = urlKeyword;
+    setKeyword(urlKeyword);
+    fetchCustomers({ page: 1, keyword: urlKeyword });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlKeyword]);
 
   useEffect(() => {
     if (activeTab !== "make-admin") return;

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../../utils/api";
 
 const tokenHeader = () => ({
@@ -62,11 +63,16 @@ const textToSpecs = (text) =>
     }, {});
 
 export default function AdminCategories() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(urlKeyword);
 
   const [form, setForm] = useState({
     name: "",
@@ -103,6 +109,10 @@ export default function AdminCategories() {
   useEffect(() => {
     fetchCategories();
   }, []);
+
+  useEffect(() => {
+    setQ(urlKeyword);
+  }, [urlKeyword]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
@@ -217,10 +218,15 @@ function DetailRow({ label, value, muted = false }) {
 }
 
 export default function AdminReturns() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(urlKeyword);
   const [updatingId, setUpdatingId] = useState("");
   const [selectedId, setSelectedId] = useState("");
 
@@ -242,6 +248,10 @@ export default function AdminReturns() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    setQuery(urlKeyword);
+  }, [urlKeyword]);
 
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();

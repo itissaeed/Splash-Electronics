@@ -225,12 +225,6 @@ export default function AdminLayout() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Search (just visual for now) */}
-                <input
-                  placeholder="Search in admin…"
-                  className="hidden md:block w-64 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-400"
-                />
-
                 {/* Order notifications */}
                 <div className="relative">
                   <button

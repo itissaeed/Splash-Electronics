@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../../utils/api";
 
 const money = (n) => `BDT ${Number(n || 0).toLocaleString("en-BD")}`;
@@ -123,14 +124,19 @@ function TrendBars({ title, rows }) {
 }
 
 export default function AdminInventory() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
   const [metrics, setMetrics] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [allStock, setAllStock] = useState([]);
   const [movements, setMovements] = useState([]);
   const [threshold, setThreshold] = useState(5);
-  const [stockQuery, setStockQuery] = useState("");
+  const [stockQuery, setStockQuery] = useState(urlKeyword);
   const [stockCategory, setStockCategory] = useState("all");
-  const [movementQuery, setMovementQuery] = useState("");
+  const [movementQuery, setMovementQuery] = useState(urlKeyword);
   const [movementType, setMovementType] = useState("all");
   const [loading, setLoading] = useState(true);
   const [errMsg, setErrMsg] = useState("");
@@ -165,6 +171,11 @@ export default function AdminInventory() {
     fetchOverview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threshold]);
+
+  useEffect(() => {
+    setStockQuery(urlKeyword);
+    setMovementQuery(urlKeyword);
+  }, [urlKeyword]);
 
   const totalLowStockUnits = useMemo(
     () => lowStock.reduce((sum, v) => sum + Number(v.available || v.stock || 0), 0),
