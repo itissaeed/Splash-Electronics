@@ -19,6 +19,7 @@ const postForm = (urlString, payload) =>
   new Promise((resolve, reject) => {
     const url = new URL(urlString);
     const data = new URLSearchParams(payload).toString();
+    let settled = false;
 
     const req = https.request(
       {
@@ -36,6 +37,8 @@ const postForm = (urlString, payload) =>
           body += chunk;
         });
         res.on("end", () => {
+          if (settled) return;
+          settled = true;
           try {
             const json = JSON.parse(body);
             resolve(json);
@@ -46,7 +49,17 @@ const postForm = (urlString, payload) =>
       }
     );
 
-    req.on("error", reject);
+    req.setTimeout(15000, () => {
+      if (settled) return;
+      settled = true;
+      req.destroy(new Error(`Request timed out for ${url.hostname}`));
+    });
+
+    req.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
     req.write(data);
     req.end();
   });
@@ -68,9 +81,80 @@ const getSslCommerzErrorMessage = (resp) => {
   );
 };
 
-const getGatewayConfig = () => {
-  const backendUrl = getEnv("BACKEND_URL", "http://localhost:5000");
-  const frontendUrl = getEnv("FRONTEND_URL", "http://localhost:3000");
+const normalizeBaseUrl = (url) => String(url || "").replace(/\/+$/, "");
+
+const getConfiguredOrigins = () =>
+  String(process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((origin) => normalizeBaseUrl(origin.trim()))
+    .filter(Boolean);
+
+const getHeaderValue = (req, headerName) => {
+  const value = req?.headers?.[headerName];
+  if (Array.isArray(value)) return value[0];
+  return value;
+};
+
+const getFirstForwardedValue = (value) => String(value || "").split(",")[0].trim();
+
+const safeAbsoluteUrl = (value) => {
+  if (!value) return "";
+
+  try {
+    const url = new URL(String(value).trim());
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    return normalizeBaseUrl(url.toString());
+  } catch (e) {
+    return "";
+  }
+};
+
+const resolveBackendUrl = (req) => {
+  const envUrl = safeAbsoluteUrl(process.env.BACKEND_URL);
+  if (envUrl) return envUrl;
+
+  const forwardedProto = getFirstForwardedValue(getHeaderValue(req, "x-forwarded-proto"));
+  const forwardedHost = getFirstForwardedValue(getHeaderValue(req, "x-forwarded-host"));
+  const host = forwardedHost || getHeaderValue(req, "host");
+
+  if (!host) return "http://localhost:5000";
+  return safeAbsoluteUrl(`${forwardedProto || req?.protocol || "http"}://${host}`) || "http://localhost:5000";
+};
+
+const getOriginFromReferer = (req) => {
+  const referer = getHeaderValue(req, "referer");
+  if (!referer) return "";
+
+  try {
+    const url = new URL(referer);
+    return normalizeBaseUrl(url.origin);
+  } catch (e) {
+    return "";
+  }
+};
+
+const resolveFrontendUrl = (req) => {
+  const envUrl = safeAbsoluteUrl(process.env.FRONTEND_URL);
+  if (envUrl) return envUrl;
+
+  const callbackHint = safeAbsoluteUrl(getRequestValue(req, "value_c"));
+  if (callbackHint) return callbackHint;
+
+  const configuredOrigin = getConfiguredOrigins()[0];
+  if (configuredOrigin) return configuredOrigin;
+
+  const requestOrigin = safeAbsoluteUrl(getHeaderValue(req, "origin"));
+  if (requestOrigin) return requestOrigin;
+
+  const refererOrigin = safeAbsoluteUrl(getOriginFromReferer(req));
+  if (refererOrigin) return refererOrigin;
+
+  return "http://localhost:3000";
+};
+
+const getGatewayConfig = (req) => {
+  const backendUrl = resolveBackendUrl(req);
+  const frontendUrl = resolveFrontendUrl(req);
 
   return {
     storeId: process.env.SSLCOMMERZ_STORE_ID,
@@ -89,8 +173,6 @@ const getGatewayConfig = () => {
 };
 
 const getRequestValue = (req, key) => req.body?.[key] || req.query?.[key];
-
-const normalizeBaseUrl = (url) => String(url || "").replace(/\/+$/, "");
 
 const isSandboxGateway = (cfg) =>
   String(cfg?.initUrl || "").toLowerCase().includes("sandbox.sslcommerz.com");
@@ -170,7 +252,7 @@ const markOrderFailedFromSslCommerz = async (order, transactionId, statusHint) =
 };
 
 const syncSslCommerzOrder = async ({ req, statusHint }) => {
-  const cfg = getGatewayConfig();
+  const cfg = getGatewayConfig(req);
   const tranId = getRequestValue(req, "tran_id") || getRequestValue(req, "value_a");
   const valId = getRequestValue(req, "val_id");
   const status = String(getRequestValue(req, "status") || statusHint || "").toUpperCase();
@@ -186,7 +268,11 @@ const syncSslCommerzOrder = async ({ req, statusHint }) => {
 
   let validationResp = null;
   if (valId && cfg.storeId && cfg.storePass) {
-    validationResp = await validateSslPayment(cfg, valId);
+    try {
+      validationResp = await validateSslPayment(cfg, valId);
+    } catch (error) {
+      console.error("validateSslPayment:", error.message || error);
+    }
   }
 
   const transactionId =
@@ -247,7 +333,7 @@ exports.initSslCommerz = async (req, res) => {
       return res.status(400).json({ message: validation.message });
     }
 
-    const cfg = getGatewayConfig();
+    const cfg = getGatewayConfig(req);
     if (!cfg.storeId || !cfg.storePass) {
       await session.abortTransaction();
       return res.status(500).json({ message: "SSLCOMMERZ credentials not configured" });
@@ -301,6 +387,7 @@ exports.initSslCommerz = async (req, res) => {
       product_profile: "general",
       value_a: orderNo,
       value_b: String(req.user._id),
+      value_c: cfg.frontendUrl,
     };
 
     if (isSslCommerzDebugEnabled()) {
@@ -361,7 +448,7 @@ exports.sslCommerzIpn = async (req, res) => {
 };
 
 const redirectWithStatus = async (req, res, statusHint) => {
-  const cfg = getGatewayConfig();
+  const cfg = getGatewayConfig(req);
   const { orderNo, redirectStatus } = await syncSslCommerzOrder({ req, statusHint });
   const url = `${normalizeBaseUrl(cfg.frontendUrl)}/order-success/${encodeURIComponent(
     orderNo
