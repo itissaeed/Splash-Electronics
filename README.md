@@ -51,6 +51,7 @@ It features **multiple payment gateways**, **AI-based product recommendations**,
 - Build command: `npm run build`
 - Output directory: `build`
 - Environment variable: `REACT_APP_API_URL=https://your-render-service.onrender.com/api`
+- Do not leave `REACT_APP_API_URL` pointing to `http://localhost:5000/api` after deployment.
 
 The included [`frontend/vercel.json`](/d:/Splash-Electronics/frontend/vercel.json) rewrites all routes to `index.html` so React Router works on refresh.
 
@@ -71,6 +72,13 @@ Set these Render environment variables:
 - `api_key`
 - `api_secret`
 
+SSLCommerz production checklist:
+- `BACKEND_URL` must be the public backend origin, for example `https://your-render-service.onrender.com`
+- `FRONTEND_URL` must be the public frontend origin, for example `https://your-vercel-domain.vercel.app`
+- `CORS_ORIGINS` should include the same deployed frontend origin
+- If you set `SSLCOMMERZ_SUCCESS_URL`, `SSLCOMMERZ_FAIL_URL`, `SSLCOMMERZ_CANCEL_URL`, or `SSLCOMMERZ_IPN_URL`, they must use the deployed backend origin and never `localhost`
+- If you do not set the SSLCommerz callback env vars, the backend will derive them from `BACKEND_URL`
+
 Use [`frontend/.env.example`](/d:/Splash-Electronics/frontend/.env.example) and [`backend/.env.example`](/d:/Splash-Electronics/backend/.env.example) as the variable reference.
 
 ### Deploy Order
@@ -78,6 +86,7 @@ Use [`frontend/.env.example`](/d:/Splash-Electronics/frontend/.env.example) and 
 2. Set `REACT_APP_API_URL` in Vercel using that Render URL plus `/api`.
 3. Deploy the frontend to Vercel.
 4. Update Render `FRONTEND_URL` and `CORS_ORIGINS` with the final Vercel domain if it changed after first deploy.
+5. Recheck `BACKEND_URL` and any `SSLCOMMERZ_*_URL` values to make sure none of them still point to `http://localhost:5000`.
 
 ---
 
