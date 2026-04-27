@@ -8,6 +8,7 @@ import {
   getCompareCategory,
 } from "../utils/compare";
 import { UserContext } from "../pages/context/UserContext";
+import { isAdminUser } from "../utils/auth";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -19,8 +20,8 @@ export default function CompareBar() {
   const activeCategory = items[0] ? getCompareCategory(items[0]) : null;
 
   const hidden = useMemo(() => {
-    return user?.isAdmin || location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
-  }, [location.pathname, user?.isAdmin]);
+    return isAdminUser(user) || location.pathname.startsWith("/admin") || location.pathname.startsWith("/login");
+  }, [location.pathname, user]);
 
   if (hidden || items.length === 0) return null;
 

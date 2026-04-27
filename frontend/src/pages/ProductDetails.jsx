@@ -4,6 +4,7 @@ import api from "../utils/api";
 import { getProductDisplayPricing } from "../utils/productPricing";
 import useCompareItems from "../utils/useCompare";
 import { UserContext } from "./context/UserContext";
+import { isAdminUser } from "../utils/auth";
 import {
   COMPARE_LIMIT,
   getCompareKey,
@@ -512,7 +513,7 @@ export default function ProductDetails() {
   const rating = Number(product?.rating || 0);
   const reviews = Number(product?.numReviews || 0);
   const currentUser = user || null;
-  const isAdmin = Boolean(user?.isAdmin);
+  const isAdmin = isAdminUser(user);
   const canReviewProduct = Boolean(currentUser && !isAdmin && reviewEligibility?.canReview);
   const showReviewComposer = canReviewProduct;
 

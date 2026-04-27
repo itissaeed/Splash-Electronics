@@ -19,6 +19,7 @@ import {
   toggleCompareItem,
 } from "../utils/compare";
 import { UserContext } from "./context/UserContext";
+import { isAdminUser } from "../utils/auth";
 
 const fallbackImg =
   "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=1200&auto=format&fit=crop&q=60";
@@ -144,7 +145,7 @@ export default function ProductListPage() {
   const [inStockOnly, setInStockOnly] = useState(inStockParam === "true");
   const [loading, setLoading] = useState(true);
   const compareItems = useCompareItems();
-  const isAdmin = Boolean(user?.isAdmin);
+  const isAdmin = isAdminUser(user);
 
   const compareKeys = useMemo(
     () => new Set(compareItems.map((item) => getCompareKey(item))),
