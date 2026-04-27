@@ -227,8 +227,8 @@ export default function AdminOverview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           label="Total Revenue"
-          value={money(data.totalRevenue)}
-          hint="Overall lifetime revenue"
+          value={money(data.netRevenue)}
+          hint="Net revenue after refunds"
           accent="bg-cyan-400/40"
         />
         <StatCard
@@ -248,6 +248,24 @@ export default function AdminOverview() {
           value={niceNumber(data.statusCounts?.pending || 0)}
           hint="Requires fulfillment action"
           accent="bg-teal-400/40"
+        />
+        <StatCard
+          label="Gross Sales"
+          value={money(data.recognizedSales ?? data.totalRevenue)}
+          hint="Collected order value before refunds"
+          accent="bg-indigo-400/40"
+        />
+        <StatCard
+          label="Cash Collected"
+          value={money(data.cashCollected)}
+          hint="Lifetime collected payments"
+          accent="bg-violet-400/40"
+        />
+        <StatCard
+          label="Refunds Issued"
+          value={money(data.refundsIssued)}
+          hint="Lifetime refunded amount"
+          accent="bg-amber-400/40"
         />
       </div>
 
@@ -294,7 +312,7 @@ export default function AdminOverview() {
       </div>
 
       <div className="rounded-3xl border border-white/70 bg-white/90 p-5 shadow-sm backdrop-blur">
-        <h3 className="text-sm font-bold text-slate-900">Revenue by Division</h3>
+        <h3 className="text-sm font-bold text-slate-900">Gross Sales by Division</h3>
         <div className="mt-4">
           <DivisionRevenueDonut rows={data.salesByDivision || []} />
         </div>

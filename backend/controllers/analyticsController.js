@@ -3,7 +3,10 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const ProductView = require("../models/ProductView");
 const Cart = require("../models/Cart");
+const ReturnRefund = require("../models/ReturnRefund");
 const {
+  COLLECTED_PAYMENT_STATUSES,
+  buildCollectedRevenueExpr,
   REVENUE_RECOGNIZED_STATUSES,
   buildRevenueMatch,
   buildRevenueExpr,
@@ -49,6 +52,14 @@ exports.adminAnalyticsOverview = async (req, res) => {
     const matchStage = {
       createdAt: { $gte: from, $lte: to },
     };
+    const paymentMatchStage = {
+      "payment.status": { $in: COLLECTED_PAYMENT_STATUSES },
+      "payment.paidAt": { $gte: from, $lte: to },
+    };
+    const refundMatchStage = {
+      status: "refunded",
+      "refund.refundedAt": { $gte: from, $lte: to },
+    };
 
     const [collectionTotalOrders, matchedOrderCount, latestOrder] = await Promise.all([
       Order.countDocuments({}),
@@ -59,170 +70,148 @@ exports.adminAnalyticsOverview = async (req, res) => {
         .lean(),
     ]);
 
-    const [aggResult, topViewedProducts, uniqueViewers, orderingVisitors, abandonedCartAgg] = await Promise.all([
+    const [overviewAgg, financeAgg, dailyAgg, byDivisionAgg, byDivisionProductOrdersAgg, topProductsAgg, paymentMethodsAgg, peakOrderHoursAgg, topViewedProducts, uniqueViewers, orderingVisitors, abandonedCartAgg, refundAgg] = await Promise.all([
       Order.aggregate([
         { $match: matchStage },
         {
-          $facet: {
-            overview: [
-              {
-                $group: {
-                  _id: null,
-                  totalOrders: { $sum: 1 },
-                  customersSet: { $addToSet: "$user" },
-                  revenueOrderCount: {
-                    $sum: {
-                      $cond: [buildRevenueExpr(), 1, 0],
-                    },
-                  },
-                  totalRevenue: {
-                    $sum: {
-                      $cond: [
-                        buildRevenueExpr(),
-                        "$pricing.grandTotal",
-                        0,
-                      ],
-                    },
-                  },
-                },
-              },
-              {
-                $project: {
-                  _id: 0,
-                  totalRevenue: 1,
-                  totalOrders: 1,
-                  uniqueCustomers: { $size: "$customersSet" },
-                  averageOrderValue: {
-                    $cond: [
-                      { $gt: ["$revenueOrderCount", 0] },
-                      { $divide: ["$totalRevenue", "$revenueOrderCount"] },
-                      0,
-                    ],
-                  },
-                },
-              },
-            ],
-            daily: [
-              {
-                $group: {
-                  _id: {
-                    $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-                  },
-                  orders: { $sum: 1 },
-                  revenue: {
-                    $sum: {
-                      $cond: [
-                        buildRevenueExpr(),
-                        "$pricing.grandTotal",
-                        0,
-                      ],
-                    },
-                  },
-                },
-              },
-              { $sort: { _id: 1 } },
-            ],
-            byDivision: [
-              { $match: buildRevenueMatch() },
-              {
-                $addFields: {
-                  divisionName: {
-                    $let: {
-                      vars: {
-                        d: {
-                          $trim: {
-                            input: { $ifNull: ["$shippingAddress.division", ""] },
-                          },
-                        },
-                      },
-                      in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
-                    },
-                  },
-                },
-              },
-              {
-                $group: {
-                  _id: "$divisionName",
-                  orders: { $sum: 1 },
-                  revenue: { $sum: "$pricing.grandTotal" },
-                },
-              },
-              { $sort: { revenue: -1 } },
-            ],
-            byDivisionProductOrders: [
-              {
-                $match: {
-                  status: { $in: ["pending", ...REVENUE_RECOGNIZED_STATUSES] },
-                },
-              },
-              {
-                $addFields: {
-                  divisionName: {
-                    $let: {
-                      vars: {
-                        d: {
-                          $trim: {
-                            input: { $ifNull: ["$shippingAddress.division", ""] },
-                          },
-                        },
-                      },
-                      in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
-                    },
-                  },
-                },
-              },
-              { $unwind: "$items" },
-              {
-                $group: {
-                  _id: "$divisionName",
-                  qty: { $sum: "$items.qty" },
-                  orderCount: { $sum: 1 },
-                },
-              },
-              { $sort: { qty: -1 } },
-            ],
-            topProducts: [
-              { $match: buildRevenueMatch() },
-              { $unwind: "$items" },
-              {
-                $group: {
-                  _id: { product: "$items.product", name: "$items.nameSnapshot" },
-                  qty: { $sum: "$items.qty" },
-                  revenue: {
-                    $sum: { $multiply: ["$items.qty", "$items.price"] },
-                  },
-                },
-              },
-              { $sort: { revenue: -1 } },
-              { $limit: 10 },
-            ],
-            paymentMethods: [
-              { $match: buildRevenueMatch() },
-              {
-                $group: {
-                  _id: "$payment.method",
-                  orders: { $sum: 1 },
-                  revenue: { $sum: "$pricing.grandTotal" },
-                  paidCount: {
-                    $sum: {
-                      $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
-                    },
-                  },
-                },
-              },
-              { $sort: { revenue: -1 } },
-            ],
-            peakOrderHours: [
-              {
-                $group: {
-                  _id: { $hour: "$createdAt" },
-                  orders: { $sum: 1 },
-                },
-              },
-              { $sort: { orders: -1, _id: 1 } },
-            ],
+          $group: {
+            _id: null,
+            totalOrders: { $sum: 1 },
+            customersSet: { $addToSet: "$user" },
           },
         },
+        {
+          $project: {
+            _id: 0,
+            totalOrders: 1,
+            uniqueCustomers: { $size: "$customersSet" },
+          },
+        },
+      ]),
+      Order.aggregate([
+        { $match: paymentMatchStage },
+        {
+          $group: {
+            _id: null,
+            grossSales: { $sum: "$pricing.grandTotal" },
+            cashCollected: { $sum: "$pricing.grandTotal" },
+            paidOrderCount: { $sum: 1 },
+          },
+        },
+      ]),
+      Order.aggregate([
+        { $match: paymentMatchStage },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$payment.paidAt" },
+            },
+            orders: { $sum: 1 },
+            revenue: { $sum: "$pricing.grandTotal" },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+      Order.aggregate([
+        { $match: paymentMatchStage },
+        {
+          $addFields: {
+            divisionName: {
+              $let: {
+                vars: {
+                  d: {
+                    $trim: {
+                      input: { $ifNull: ["$shippingAddress.division", ""] },
+                    },
+                  },
+                },
+                in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
+              },
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$divisionName",
+            orders: { $sum: 1 },
+            revenue: { $sum: "$pricing.grandTotal" },
+          },
+        },
+        { $sort: { revenue: -1 } },
+      ]),
+      Order.aggregate([
+        { $match: paymentMatchStage },
+        {
+          $addFields: {
+            divisionName: {
+              $let: {
+                vars: {
+                  d: {
+                    $trim: {
+                      input: { $ifNull: ["$shippingAddress.division", ""] },
+                    },
+                  },
+                },
+                in: { $cond: [{ $eq: ["$$d", ""] }, "Unknown", "$$d"] },
+              },
+            },
+          },
+        },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$divisionName",
+            qty: { $sum: "$items.qty" },
+            orderCount: { $addToSet: "$_id" },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            qty: 1,
+            orderCount: { $size: "$orderCount" },
+          },
+        },
+        { $sort: { qty: -1 } },
+      ]),
+      Order.aggregate([
+        { $match: paymentMatchStage },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: { product: "$items.product", name: "$items.nameSnapshot" },
+            qty: { $sum: "$items.qty" },
+            revenue: {
+              $sum: { $multiply: ["$items.qty", "$items.price"] },
+            },
+          },
+        },
+        { $sort: { revenue: -1 } },
+        { $limit: 10 },
+      ]),
+      Order.aggregate([
+        { $match: paymentMatchStage },
+        {
+          $group: {
+            _id: "$payment.method",
+            orders: { $sum: 1 },
+            revenue: { $sum: "$pricing.grandTotal" },
+            recognizedSales: { $sum: "$pricing.grandTotal" },
+            cashCollected: { $sum: "$pricing.grandTotal" },
+            paidCount: { $sum: 1 },
+          },
+        },
+        { $sort: { cashCollected: -1, revenue: -1 } },
+      ]),
+      Order.aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: { $hour: "$createdAt" },
+            orders: { $sum: 1 },
+          },
+        },
+        { $sort: { orders: -1, _id: 1 } },
       ]),
       ProductView.aggregate([
         { $match: { viewedAt: { $gte: from, $lte: to } } },
@@ -311,17 +300,28 @@ exports.adminAnalyticsOverview = async (req, res) => {
           },
         },
       ]),
+      ReturnRefund.aggregate([
+        {
+          $match: refundMatchStage,
+        },
+        {
+          $group: {
+            _id: null,
+            refundsIssued: { $sum: { $ifNull: ["$refund.amount", 0] } },
+          },
+        },
+      ]),
     ]);
 
-    const agg = Array.isArray(aggResult) ? aggResult[0] : aggResult;
-
-    const overview =
-      (agg?.overview && agg.overview[0]) || {
-        totalRevenue: 0,
-        totalOrders: 0,
-        uniqueCustomers: 0,
-        averageOrderValue: 0,
-      };
+    const overviewBase = overviewAgg?.[0] || {
+      totalOrders: 0,
+      uniqueCustomers: 0,
+    };
+    const financeBase = financeAgg?.[0] || {
+      grossSales: 0,
+      cashCollected: 0,
+      paidOrderCount: 0,
+    };
 
     const peakOrderHour = Array.isArray(agg?.peakOrderHours) && agg.peakOrderHours.length
       ? agg.peakOrderHours[0]
@@ -335,11 +335,23 @@ exports.adminAnalyticsOverview = async (req, res) => {
       abandonedCarts: 0,
       abandonedItems: 0,
     };
+    const refundsIssued = Number(refundAgg?.[0]?.refundsIssued || 0);
+    const grossSales = Number(financeBase.grossSales || 0);
+    const cashCollected = Number(financeBase.cashCollected || 0);
+    const paidOrderCount = Number(financeBase.paidOrderCount || 0);
 
     res.json({
       range: { from, to },
       overview: {
-        ...overview,
+        ...overviewBase,
+        grossSales,
+        recognizedSales: grossSales,
+        cashCollected,
+        refundsIssued,
+        netRevenue: cashCollected - refundsIssued,
+        totalRevenue: cashCollected - refundsIssued,
+        averageRecognizedOrderValue: paidOrderCount > 0 ? grossSales / paidOrderCount : 0,
+        averageOrderValue: paidOrderCount > 0 ? grossSales / paidOrderCount : 0,
         uniqueViewers: uniqueViewerCount,
         orderingVisitors: orderingVisitorCount,
         conversionRate,
@@ -353,13 +365,13 @@ exports.adminAnalyticsOverview = async (req, res) => {
             }
           : null,
       },
-      daily: agg?.daily || [],
-      byDivision: agg?.byDivision || [],
-      byDivisionProductOrders: agg?.byDivisionProductOrders || [],
-      topProducts: agg?.topProducts || [],
-      paymentMethods: agg?.paymentMethods || [],
+      daily: dailyAgg || [],
+      byDivision: byDivisionAgg || [],
+      byDivisionProductOrders: byDivisionProductOrdersAgg || [],
+      topProducts: topProductsAgg || [],
+      paymentMethods: paymentMethodsAgg || [],
       mostViewedProducts: topViewedProducts || [],
-      peakOrderHours: agg?.peakOrderHours || [],
+      peakOrderHours: peakOrderHoursAgg || [],
     });
   } catch (err) {
     console.error("adminAnalyticsOverview error:", err);
