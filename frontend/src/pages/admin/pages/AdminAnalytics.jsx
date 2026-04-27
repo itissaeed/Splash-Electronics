@@ -245,8 +245,12 @@ export default function AdminAnalytics() {
   const [reportTotal, setReportTotal] = useState(0);
   const [reportRows, setReportRows] = useState([]);
   const [reportSummary, setReportSummary] = useState({
-    totalRevenue: 0,
-    averageOrderValue: 0,
+    grossOrderValue: 0,
+    recognizedSales: 0,
+    cashCollected: 0,
+    refundsIssued: 0,
+    netRevenue: 0,
+    averageRecognizedOrderValue: 0,
     paidOrders: 0,
     paidRevenue: 0,
     statusCounts: {},
@@ -299,6 +303,7 @@ export default function AdminAnalytics() {
       const params = {
         page: opts.page ?? reportPage,
         limit: 12,
+        scope: "finance",
         from: opts.from ?? from,
         to: opts.to ?? to,
       };
@@ -319,8 +324,14 @@ export default function AdminAnalytics() {
       setReportTotal(Number(data.total || 0));
       setReportPages(Number(data.pages || 1));
       setReportSummary({
-        totalRevenue: Number(data.summary?.totalRevenue || 0),
-        averageOrderValue: Number(data.summary?.averageOrderValue || 0),
+        grossOrderValue: Number(data.summary?.grossOrderValue || 0),
+        recognizedSales: Number(data.summary?.recognizedSales || data.summary?.totalRevenue || 0),
+        cashCollected: Number(data.summary?.cashCollected || 0),
+        refundsIssued: Number(data.summary?.refundsIssued || 0),
+        netRevenue: Number(data.summary?.netRevenue || 0),
+        averageRecognizedOrderValue: Number(
+          data.summary?.averageRecognizedOrderValue || data.summary?.averageOrderValue || 0
+        ),
         paidOrders: Number(data.summary?.paidOrders || 0),
         paidRevenue: Number(data.summary?.paidRevenue || 0),
         statusCounts: data.summary?.statusCounts || {},
@@ -391,6 +402,10 @@ export default function AdminAnalytics() {
       })),
     [peakOrderHours]
   );
+  const netRevenue = Number(overview?.netRevenue ?? 0);
+  const averageOrderValue = Number(
+    overview?.averageRecognizedOrderValue ?? overview?.averageOrderValue ?? 0
+  );
 
   const openSalesReport = (extra = {}) => {
     if (Object.keys(extra).length === 0 || Object.prototype.hasOwnProperty.call(extra, "status")) {
@@ -417,6 +432,7 @@ export default function AdminAnalytics() {
         const params = {
           page,
           limit: 500,
+          scope: "finance",
           from,
           to,
         };
@@ -447,6 +463,12 @@ export default function AdminAnalytics() {
           "Payment Status",
           "Order Status",
           "Grand Total",
+          "Collected At",
+          "Collected Amount",
+          "Refund Events",
+          "Refunded Amount",
+          "Latest Refunded At",
+          "Net Revenue",
         ],
         ...allRows.map((order) => [
           order.orderNo,
@@ -460,6 +482,12 @@ export default function AdminAnalytics() {
           order.payment?.status || "",
           order.status || "",
           getOrderTotal(order),
+          order.finance?.collectedAt ? new Date(order.finance.collectedAt).toISOString() : "",
+          Number(order.finance?.collectedAmount || 0),
+          Number(order.finance?.refundEvents || 0),
+          Number(order.finance?.refundsIssued || 0),
+          order.finance?.latestRefundedAt || "",
+          Number(order.finance?.netRevenue || 0),
         ]),
       ];
 
@@ -547,8 +575,8 @@ export default function AdminAnalytics() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           label="Total Revenue"
-          value={money(overview?.totalRevenue ?? 0)}
-          hint="Excludes cancelled and returned"
+          value={money(netRevenue)}
+          hint="Net revenue after refunds"
           accent="bg-cyan-400/40"
         />
         <StatCard
@@ -559,7 +587,7 @@ export default function AdminAnalytics() {
         />
         <StatCard
           label="Avg Order Value"
-          value={money(overview?.averageOrderValue ?? 0)}
+          value={money(averageOrderValue)}
           hint="Revenue per order"
           accent="bg-sky-400/40"
         />
@@ -631,8 +659,29 @@ export default function AdminAnalytics() {
 	        />
 	      </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard
+          label="Gross Sales"
+          value={money(overview?.recognizedSales ?? overview?.totalRevenue ?? 0)}
+          hint="Collected order value before refunds"
+          accent="bg-slate-400/40"
+        />
+        <StatCard
+          label="Cash Collected"
+          value={money(overview?.cashCollected ?? 0)}
+          hint="Orders with collected payment"
+          accent="bg-emerald-400/40"
+        />
+        <StatCard
+          label="Refunds Issued"
+          value={money(overview?.refundsIssued ?? 0)}
+          hint="Refunded amount in selected range"
+          accent="bg-amber-400/40"
+        />
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <DonutChart title="Revenue by Division" rows={byDivision} valueKey="revenue" moneyMode />
+        <DonutChart title="Gross Sales by Division" rows={byDivision} valueKey="revenue" moneyMode />
         <DonutChart title="Product Orders by Division" rows={byDivisionProductOrders} valueKey="qty" />
         <RankedBars
           title="Top Products by Revenue"
@@ -654,9 +703,9 @@ export default function AdminAnalytics() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 	        <DonutChart
-	          title="Revenue Share by Payment Method"
+	          title="Cash Collected by Payment Method"
 	          rows={paymentMethods}
-	          valueKey="revenue"
+	          valueKey="cashCollected"
 	          moneyMode
 	          onRowClick={(row) => openSalesReport({ paymentMethod: row._id })}
 	        />
@@ -689,10 +738,14 @@ export default function AdminAnalytics() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Report Revenue" value={money(reportSummary.totalRevenue)} hint="Current report filters" accent="bg-cyan-400/40" />
-          <StatCard label="AOV" value={money(reportSummary.averageOrderValue)} hint="Average order value" accent="bg-sky-400/40" />
-          <StatCard label="Delivered" value={niceNumber(reportDelivered)} hint="Completed sales records" accent="bg-emerald-400/40" />
-          <StatCard label="Cancelled" value={niceNumber(reportCancelled)} hint="Cancelled orders included here" accent="bg-rose-400/40" />
+          <StatCard label="Gross Order Value" value={money(reportSummary.grossOrderValue)} hint="All matching orders" accent="bg-slate-400/40" />
+          <StatCard label="Gross Sales" value={money(reportSummary.recognizedSales)} hint="Collected order value in filters" accent="bg-cyan-400/40" />
+          <StatCard label="Cash Collected" value={money(reportSummary.cashCollected)} hint="Matching paid orders" accent="bg-sky-400/40" />
+          <StatCard label="Refunds on Orders" value={money(reportSummary.refundsIssued)} hint="Refunded rows linked to matching orders" accent="bg-rose-400/40" />
+          <StatCard label="Net Revenue" value={money(reportSummary.netRevenue)} hint="Cash collected minus refunds" accent="bg-emerald-400/40" />
+          <StatCard label="Avg Paid Order" value={money(reportSummary.averageRecognizedOrderValue)} hint="Average collected order value" accent="bg-indigo-400/40" />
+          <StatCard label="Delivered" value={niceNumber(reportDelivered)} hint="Completed sales records" accent="bg-teal-400/40" />
+          <StatCard label="Cancelled" value={niceNumber(reportCancelled)} hint="Cancelled orders included here" accent="bg-amber-400/40" />
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">

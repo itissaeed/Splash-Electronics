@@ -1,22 +1,52 @@
 const Order = require("../models/Order");
 const User = require("../models/UserModel");
-const { buildRevenueMatch } = require("../utils/revenueRecognition");
+const ReturnRefund = require("../models/ReturnRefund");
+const { COLLECTED_PAYMENT_STATUSES } = require("../utils/revenueRecognition");
 const { customerUserQuery } = require("../utils/adminAccess");
 
 exports.getAdminOverview = async (req, res) => {
   try {
-    const revenueMatch = buildRevenueMatch();
+    const collectedMatch = {
+      "payment.status": { $in: COLLECTED_PAYMENT_STATUSES },
+      "payment.paidAt": { $exists: true, $ne: null },
+    };
 
     // totals
     const totalOrders = await Order.countDocuments();
     const totalCustomers = await User.countDocuments(customerUserQuery());
 
-    // revenue (only admin-confirmed order pipeline)
-    const revenueAgg = await Order.aggregate([
-      { $match: revenueMatch },
-      { $group: { _id: null, revenue: { $sum: "$pricing.grandTotal" } } },
+    const [salesAgg, refundAgg] = await Promise.all([
+      Order.aggregate([
+        {
+          $match: collectedMatch,
+        },
+        {
+          $group: {
+            _id: null,
+            recognizedSales: {
+              $sum: "$pricing.grandTotal",
+            },
+            cashCollected: {
+              $sum: "$pricing.grandTotal",
+            },
+          },
+        },
+      ]),
+      ReturnRefund.aggregate([
+        { $match: { status: "refunded" } },
+        {
+          $group: {
+            _id: null,
+            refundsIssued: { $sum: { $ifNull: ["$refund.amount", 0] } },
+          },
+        },
+      ]),
     ]);
-    const totalRevenue = revenueAgg[0]?.revenue || 0;
+    const salesSummary = salesAgg[0] || {};
+    const refundsIssued = Number(refundAgg[0]?.refundsIssued || 0);
+    const recognizedSales = Number(salesSummary.recognizedSales || 0);
+    const cashCollected = Number(salesSummary.cashCollected || 0);
+    const netRevenue = cashCollected - refundsIssued;
 
     // status counts
     const statusAgg = await Order.aggregate([
@@ -30,7 +60,7 @@ exports.getAdminOverview = async (req, res) => {
 
     // best sellers (top 10 products)
     const bestSellers = await Order.aggregate([
-      { $match: revenueMatch },
+      { $match: collectedMatch },
       { $unwind: "$items" },
       {
         $group: {
@@ -47,7 +77,7 @@ exports.getAdminOverview = async (req, res) => {
 
     // sales by division
     const salesByDivision = await Order.aggregate([
-      { $match: revenueMatch },
+      { $match: collectedMatch },
       {
         $group: {
           _id: "$shippingAddress.division",
@@ -63,13 +93,13 @@ exports.getAdminOverview = async (req, res) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const salesLast7Days = await Order.aggregate([
-      { $match: { ...revenueMatch, createdAt: { $gte: sevenDaysAgo } } },
+      { $match: { ...collectedMatch, "payment.paidAt": { $gte: sevenDaysAgo } } },
       {
         $group: {
           _id: {
-            y: { $year: "$createdAt" },
-            m: { $month: "$createdAt" },
-            d: { $dayOfMonth: "$createdAt" },
+            y: { $year: "$payment.paidAt" },
+            m: { $month: "$payment.paidAt" },
+            d: { $dayOfMonth: "$payment.paidAt" },
           },
           revenue: { $sum: "$pricing.grandTotal" },
           orders: { $sum: 1 },
@@ -81,7 +111,11 @@ exports.getAdminOverview = async (req, res) => {
     res.json({
       totalOrders,
       totalCustomers,
-      totalRevenue,
+      recognizedSales,
+      cashCollected,
+      refundsIssued,
+      netRevenue,
+      totalRevenue: recognizedSales,
       statusCounts,
       bestSellers,
       salesByDivision,

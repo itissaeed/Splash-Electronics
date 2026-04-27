@@ -16,6 +16,11 @@ const { validateShippingPayload } = require("../utils/shippingValidation");
 const { getCourierProvider } = require("../services/courier");
 const { getVisitorKey } = require("../utils/visitorKey");
 const {
+  COLLECTED_PAYMENT_STATUSES,
+  buildCollectedRevenueExpr,
+  buildRevenueExpr,
+} = require("../utils/revenueRecognition");
+const {
   PREPAID_METHODS,
   releaseExpiredReservations,
   releaseReservationForOrder,
@@ -319,9 +324,17 @@ const parseAdminDate = (value, endOfDay = false) => {
     : new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0);
 };
 
-const buildAdminOrderFilter = (query = {}) => {
+const buildDateRangeFilter = (from, to) => {
+  const range = {};
+  if (from) range.$gte = from;
+  if (to) range.$lte = to;
+  return Object.keys(range).length ? range : null;
+};
+
+const buildAdminOrderFilter = (query = {}, options = {}) => {
   const filter = {};
   const scope = String(query.scope || "").trim().toLowerCase();
+  const skipDate = options.skipDate === true;
 
   if (scope === "active") {
     filter.status = { $in: ["pending", "confirmed", "processing", "shipped"] };
@@ -338,10 +351,8 @@ const buildAdminOrderFilter = (query = {}) => {
 
   const from = parseAdminDate(query.from);
   const to = parseAdminDate(query.to, true);
-  if (from || to) {
-    filter.createdAt = {};
-    if (from) filter.createdAt.$gte = from;
-    if (to) filter.createdAt.$lte = to;
+  if (!skipDate && (from || to)) {
+    filter.createdAt = buildDateRangeFilter(from, to);
   }
 
   const keyword = String(query.keyword || "").trim();
@@ -355,6 +366,75 @@ const buildAdminOrderFilter = (query = {}) => {
   }
 
   return filter;
+};
+
+const buildFinanceOrderFilter = async (query = {}) => {
+  const baseFilter = buildAdminOrderFilter(query, { skipDate: true });
+  const from = parseAdminDate(query.from);
+  const to = parseAdminDate(query.to, true);
+  const paidAtRange = buildDateRangeFilter(from, to);
+  const refundMatch = { status: "refunded" };
+  if (from || to) {
+    refundMatch["refund.refundedAt"] = buildDateRangeFilter(from, to);
+  }
+
+  const refundedOrderIds = await ReturnRefund.find(refundMatch).distinct("order");
+  const financeClauses = [];
+
+  if (paidAtRange) {
+    financeClauses.push({
+      "payment.paidAt": paidAtRange,
+      "payment.status": { $in: COLLECTED_PAYMENT_STATUSES },
+    });
+  } else {
+    financeClauses.push({
+      "payment.status": { $in: COLLECTED_PAYMENT_STATUSES },
+    });
+  }
+
+  if (refundedOrderIds.length) {
+    financeClauses.push({ _id: { $in: refundedOrderIds } });
+  }
+
+  if (!financeClauses.length) {
+    return { _id: { $in: [] } };
+  }
+
+  if (Object.keys(baseFilter).length === 0) {
+    return { $or: financeClauses };
+  }
+
+  return {
+    $and: [baseFilter, { $or: financeClauses }],
+  };
+};
+
+const prefixFilterPaths = (value, prefix) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => prefixFilterPaths(entry, prefix));
+  }
+
+  if (!value || typeof value !== "object" || value instanceof Date) {
+    return value;
+  }
+
+  return Object.entries(value).reduce((acc, [key, entry]) => {
+    if (key.startsWith("$")) {
+      acc[key] = prefixFilterPaths(entry, prefix);
+      return acc;
+    }
+
+    acc[`${prefix}.${key}`] = prefixFilterPaths(entry, prefix);
+    return acc;
+  }, {});
+};
+
+const isWithinRange = (dateLike, from, to) => {
+  const dt = dateLike ? new Date(dateLike) : null;
+  if (!dt || Number.isNaN(dt.getTime())) return false;
+  if (from && dt < from) return false;
+  if (to && dt > to) return false;
+  return true;
 };
 
 const deductOrderItems = async (order) => {
@@ -678,9 +758,36 @@ exports.adminGetOrders = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
     const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 5000);
-    const filter = buildAdminOrderFilter(req.query);
+    const scope = String(req.query.scope || "").trim().toLowerCase();
+    const from = parseAdminDate(req.query.from);
+    const to = parseAdminDate(req.query.to, true);
+    const dateRange = buildDateRangeFilter(from, to);
+    const baseFilter = buildAdminOrderFilter(req.query, { skipDate: scope === "finance" });
+    const filter = scope === "finance" ? await buildFinanceOrderFilter(req.query) : baseFilter;
 
-    const [total, orders, summaryAgg, statusCountsAgg] = await Promise.all([
+    const financePaymentMatch =
+      scope === "finance"
+        ? {
+            ...buildAdminOrderFilter(req.query, { skipDate: true }),
+            ...(dateRange ? { "payment.paidAt": dateRange } : {}),
+            "payment.status": { $in: COLLECTED_PAYMENT_STATUSES },
+          }
+        : null;
+
+    const financeRefundMatch =
+      scope === "finance"
+        ? {
+            status: "refunded",
+            ...(dateRange ? { "refund.refundedAt": dateRange } : {}),
+          }
+        : null;
+
+    const financeRefundOrderMatch =
+      scope === "finance"
+        ? prefixFilterPaths(buildAdminOrderFilter(req.query, { skipDate: true }), "orderDoc")
+        : null;
+
+    const [total, orders, summaryAgg, refundAgg, statusCountsAgg] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter)
         .sort({ createdAt: -1 })
@@ -688,26 +795,114 @@ exports.adminGetOrders = async (req, res) => {
         .skip(limit * (page - 1))
         .limit(limit)
         .lean(),
-      Order.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: "$pricing.grandTotal" },
-            averageOrderValue: { $avg: "$pricing.grandTotal" },
-            paidOrders: {
-              $sum: {
-                $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
+      scope === "finance"
+        ? Order.aggregate([
+            { $match: financePaymentMatch },
+            {
+              $group: {
+                _id: null,
+                grossOrderValue: { $sum: "$pricing.grandTotal" },
+                recognizedOrderCount: { $sum: 1 },
+                recognizedSales: { $sum: "$pricing.grandTotal" },
+                collectedOrderCount: { $sum: 1 },
+                cashCollected: { $sum: "$pricing.grandTotal" },
+                paidOrders: {
+                  $sum: {
+                    $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
+                  },
+                },
+                paidRevenue: {
+                  $sum: {
+                    $cond: [{ $eq: ["$payment.status", "paid"] }, "$pricing.grandTotal", 0],
+                  },
+                },
               },
             },
-            paidRevenue: {
-              $sum: {
-                $cond: [{ $eq: ["$payment.status", "paid"] }, "$pricing.grandTotal", 0],
+          ])
+        : Order.aggregate([
+            { $match: filter },
+            {
+              $group: {
+                _id: null,
+                grossOrderValue: { $sum: "$pricing.grandTotal" },
+                recognizedOrderCount: {
+                  $sum: {
+                    $cond: [buildRevenueExpr(), 1, 0],
+                  },
+                },
+                recognizedSales: {
+                  $sum: {
+                    $cond: [buildRevenueExpr(), "$pricing.grandTotal", 0],
+                  },
+                },
+                collectedOrderCount: {
+                  $sum: {
+                    $cond: [buildCollectedRevenueExpr(), 1, 0],
+                  },
+                },
+                cashCollected: {
+                  $sum: {
+                    $cond: [buildCollectedRevenueExpr(), "$pricing.grandTotal", 0],
+                  },
+                },
+                paidOrders: {
+                  $sum: {
+                    $cond: [{ $eq: ["$payment.status", "paid"] }, 1, 0],
+                  },
+                },
+                paidRevenue: {
+                  $sum: {
+                    $cond: [{ $eq: ["$payment.status", "paid"] }, "$pricing.grandTotal", 0],
+                  },
+                },
               },
             },
-          },
-        },
-      ]),
+          ]),
+      scope === "finance"
+        ? ReturnRefund.aggregate([
+            { $match: financeRefundMatch },
+            {
+              $lookup: {
+                from: "orders",
+                localField: "order",
+                foreignField: "_id",
+                as: "orderDoc",
+              },
+            },
+            { $unwind: "$orderDoc" },
+            ...(Object.keys(financeRefundOrderMatch || {}).length
+              ? [{ $match: financeRefundOrderMatch }]
+              : []),
+            {
+              $group: {
+                _id: null,
+                refundsIssued: {
+                  $sum: { $ifNull: ["$refund.amount", 0] },
+                },
+              },
+            },
+          ])
+        : Order.aggregate([
+            { $match: filter },
+            {
+              $lookup: {
+                from: "returnrefunds",
+                localField: "_id",
+                foreignField: "order",
+                as: "refundRows",
+              },
+            },
+            { $unwind: "$refundRows" },
+            { $match: { "refundRows.status": "refunded" } },
+            {
+              $group: {
+                _id: null,
+                refundsIssued: {
+                  $sum: { $ifNull: ["$refundRows.refund.amount", 0] },
+                },
+              },
+            },
+          ]),
       Order.aggregate([
         { $match: filter },
         {
@@ -720,21 +915,99 @@ exports.adminGetOrders = async (req, res) => {
     ]);
 
     const summaryRow = summaryAgg[0] || {};
+    const refundsIssued = Number(refundAgg[0]?.refundsIssued || 0);
+    const recognizedSales = Number(summaryRow.recognizedSales || 0);
+    const cashCollected = Number(summaryRow.cashCollected || 0);
+    const recognizedOrderCount = Number(summaryRow.recognizedOrderCount || 0);
     const statusCounts = statusCountsAgg.reduce((acc, row) => {
       acc[row._id || "unknown"] = Number(row.count || 0);
       return acc;
     }, {});
 
+    let orderRefundRows = [];
+    if (orders.length) {
+      const orderIds = orders.map((row) => row._id);
+      const refundFilter = {
+        order: { $in: orderIds },
+        status: "refunded",
+      };
+      if (scope === "finance" && dateRange) {
+        refundFilter["refund.refundedAt"] = dateRange;
+      }
+      orderRefundRows = await ReturnRefund.find(refundFilter)
+        .select("order refund.amount refund.refundedAt")
+        .lean();
+    }
+
+    const refundsByOrder = orderRefundRows.reduce((acc, row) => {
+      const key = String(row.order);
+      const next = acc[key] || {
+        refundsIssued: 0,
+        refundEvents: 0,
+        latestRefundedAt: null,
+      };
+      next.refundsIssued += Number(row?.refund?.amount || 0);
+      next.refundEvents += 1;
+      const refundedAt = row?.refund?.refundedAt ? new Date(row.refund.refundedAt) : null;
+      if (refundedAt && !Number.isNaN(refundedAt.getTime())) {
+        if (!next.latestRefundedAt || refundedAt > new Date(next.latestRefundedAt)) {
+          next.latestRefundedAt = refundedAt.toISOString();
+        }
+      }
+      acc[key] = next;
+      return acc;
+    }, {});
+
+    const rows = orders.map((order) => {
+      const refundMeta = refundsByOrder[String(order._id)] || {
+        refundsIssued: 0,
+        refundEvents: 0,
+        latestRefundedAt: null,
+      };
+      const collectedAmount =
+        String(order?.payment?.status || "").toLowerCase() === "failed"
+          ? 0
+          : scope === "finance"
+          ? isWithinRange(order?.payment?.paidAt, from, to)
+            ? Number(order?.pricing?.grandTotal || 0)
+            : 0
+          : ["paid", "partial_refund", "refunded"].includes(
+              String(order?.payment?.status || "").toLowerCase()
+            )
+          ? Number(order?.pricing?.grandTotal || 0)
+          : 0;
+
+      return {
+        ...order,
+        finance: {
+          collectedAt: order?.payment?.paidAt || null,
+          collectedAmount,
+          refundsIssued: refundMeta.refundsIssued,
+          refundEvents: refundMeta.refundEvents,
+          latestRefundedAt: refundMeta.latestRefundedAt,
+          netRevenue: collectedAmount - refundMeta.refundsIssued,
+        },
+      };
+    });
+
     res.json({
-      orders,
+      orders: rows,
       page,
       pages: Math.ceil(total / limit),
       total,
       summary: {
-        totalRevenue: Number(summaryRow.totalRevenue || 0),
-        averageOrderValue: Number(summaryRow.averageOrderValue || 0),
+        grossOrderValue: Number(summaryRow.grossOrderValue || 0),
+        recognizedSales,
+        cashCollected,
+        refundsIssued,
+        netRevenue: cashCollected - refundsIssued,
+        averageRecognizedOrderValue:
+          recognizedOrderCount > 0 ? recognizedSales / recognizedOrderCount : 0,
         paidOrders: Number(summaryRow.paidOrders || 0),
         paidRevenue: Number(summaryRow.paidRevenue || 0),
+        totalRevenue: recognizedSales,
+        averageOrderValue:
+          recognizedOrderCount > 0 ? recognizedSales / recognizedOrderCount : 0,
         statusCounts,
       },
     });

@@ -1,6 +1,7 @@
 const { PREPAID_METHODS } = require("../services/stockReservationService");
 
 const REVENUE_RECOGNIZED_STATUSES = ["confirmed", "processing", "shipped", "delivered"];
+const COLLECTED_PAYMENT_STATUSES = ["paid", "partial_refund", "refunded"];
 
 const buildRevenueMatch = () => ({
   $or: [
@@ -26,8 +27,19 @@ const buildRevenueExpr = () => ({
   ],
 });
 
+const buildCollectedRevenueMatch = () => ({
+  "payment.status": { $in: COLLECTED_PAYMENT_STATUSES },
+});
+
+const buildCollectedRevenueExpr = () => ({
+  $in: ["$payment.status", COLLECTED_PAYMENT_STATUSES],
+});
+
 module.exports = {
+  COLLECTED_PAYMENT_STATUSES,
   REVENUE_RECOGNIZED_STATUSES,
+  buildCollectedRevenueExpr,
+  buildCollectedRevenueMatch,
   buildRevenueMatch,
   buildRevenueExpr,
 };
