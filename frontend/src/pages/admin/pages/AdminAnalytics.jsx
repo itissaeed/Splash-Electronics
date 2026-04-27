@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../../utils/api";
 
 const tokenHeader = () => ({
@@ -225,6 +226,12 @@ function RankedBars({ title, rows, valueKey, subtitleKey, subtitleLabel, formatV
 }
 
 export default function AdminAnalytics() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
+  const syncedUrlKeywordRef = useRef(urlKeyword);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [overview, setOverview] = useState(null);
@@ -239,7 +246,7 @@ export default function AdminAnalytics() {
   const [errMsg, setErrMsg] = useState("");
   const [reportStatus, setReportStatus] = useState("all");
   const [reportPaymentMethod, setReportPaymentMethod] = useState("all");
-  const [reportKeyword, setReportKeyword] = useState("");
+  const [reportKeyword, setReportKeyword] = useState(urlKeyword);
   const [reportPage, setReportPage] = useState(1);
   const [reportPages, setReportPages] = useState(1);
   const [reportTotal, setReportTotal] = useState(0);
@@ -265,6 +272,13 @@ export default function AdminAnalytics() {
     setFrom(fromDate);
     setTo(toDate);
   }, []);
+
+  useEffect(() => {
+    if (syncedUrlKeywordRef.current === urlKeyword) return;
+    syncedUrlKeywordRef.current = urlKeyword;
+    setReportKeyword(urlKeyword);
+    setReportPage(1);
+  }, [urlKeyword]);
 
   const fetchAnalytics = async (opts = {}) => {
     try {

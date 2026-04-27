@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../../utils/api";
 
 const COUPON_DRAFT_KEY = "admin_coupon_form_draft_v1";
@@ -256,11 +257,17 @@ function AsyncScopePicker({
 }
 
 export default function AdminCoupons() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
+  const syncedUrlKeywordRef = useRef(urlKeyword);
   const [coupons, setCoupons] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(urlKeyword);
   const [statusFilter, setStatusFilter] = useState("");
   const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
@@ -361,6 +368,14 @@ export default function AdminCoupons() {
     fetchCoupons();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (syncedUrlKeywordRef.current === urlKeyword) return;
+    syncedUrlKeywordRef.current = urlKeyword;
+    setKeyword(urlKeyword);
+    fetchCoupons({ page: 1, keyword: urlKeyword });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlKeyword]);
 
   useEffect(() => {
     if (hasHydratedDraftRef.current) return;

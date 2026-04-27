@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../../../utils/api";
 
 const tokenHeader = () => ({
@@ -230,11 +231,17 @@ const getAudienceSummary = (offer) => {
 };
 
 export default function AdminOffers() {
+  const location = useLocation();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
+  const syncedUrlKeywordRef = useRef(urlKeyword);
   const [offers, setOffers] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [keyword, setKeyword] = useState("");
+  const [keyword, setKeyword] = useState(urlKeyword);
   const [statusFilter, setStatusFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -309,6 +316,14 @@ export default function AdminOffers() {
     fetchOffers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (syncedUrlKeywordRef.current === urlKeyword) return;
+    syncedUrlKeywordRef.current = urlKeyword;
+    setKeyword(urlKeyword);
+    fetchOffers({ page: 1, keyword: urlKeyword });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlKeyword]);
 
   const handleFormChange = (e) => {
     const { name, value, type, checked } = e.target;

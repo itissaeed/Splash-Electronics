@@ -1,0 +1,824 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Type /Pages /Count 17 /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R 17 0 R 19 0 R 21 0 R 23 0 R 25 0 R 27 0 R 29 0 R 31 0 R 33 0 R 35 0 R 37 0 R] >>
+endobj
+4 0 obj
+<< /Length 2933 >>
+stream
+BT /F2 20 Tf 1 0 0 1 54 732 Tm (Splash Electronics Admin UI Audit) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 690 Tm (Generated on: 2026-04-28 Workspace reviewed: d:\\Splash-Electronics) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 659 Tm (Scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 627 Tm (This report documents the current admin-facing UI in the Splash Electronics project,) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 613 Tm (the feature set available on each screen, and the backend or state-management logic) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 599 Tm (that powers those features.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 572 Tm (The review was based on the current code in:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 553 Tm (- frontend/src/pages/admin/pages/*) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 536 Tm (- frontend/src/pages/admin/AdminRoutes.jsx) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 519 Tm (- frontend/src/utils/api.js) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 502 Tm (- backend/routes/*) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 485 Tm (- backend/controllers/*) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 468 Tm (- backend/services/*) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 451 Tm (- backend/models/*) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 422 Tm (Admin Foundation) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 387 Tm (Access control) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 368 Tm (- The admin area is mounted at /admin/* from frontend/src/App.jsx.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 351 Tm (- frontend/src/pages/admin/AdminRoutes.jsx blocks entry unless the user is) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 337 Tm (  authenticated and passes isAdminUser\(user\).) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 320 Tm (- While authLoading is true, the route shows a full-screen loading state instead of) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 306 Tm (  rendering admin content too early.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 278 Tm (Shared API behavior) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 259 Tm (- frontend/src/utils/api.js injects the bearer token from localStorage into every) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 245 Tm (  request.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 228 Tm (- The same interceptor also adds X-Visitor-Id so analytics and checkout flows can tie) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 214 Tm (  browsing and ordering activity together.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 186 Tm (Admin shell and navigation) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 167 Tm (- frontend/src/pages/admin/pages/AdminLayout.jsx provides the permanent admin shell.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 150 Tm (- The left sidebar supports collapse/expand and routes to Overview, Products,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 136 Tm (  Categories, Orders, Inventory, Users, Offers, Coupons, Sales Analytics,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 122 Tm (  Forecasting, Returns, Commerce, Settings, and Profile.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 105 Tm (- The header includes:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 88 Tm (- a visual search box that is currently not wired to any data source) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 71 Tm (- order notifications) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 1 of 17) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 3069 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- an admin profile menu) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 710 Tm (Order notifications) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 691 Tm (- AdminLayout polls GET /api/admin/orders/notifications every 20 seconds for admins.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 674 Tm (- A localStorage key named admin_order_notif_last_seen_at is used as the "since") Tj ET
+BT /F1 10 Tf 1 0 0 1 72 660 Tm (  value.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 643 Tm (- Opening the order screen or marking notifications as read resets the counter) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 629 Tm (  locally.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 612 Tm (- The backend returns recent orders created after the stored timestamp, limited by) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 598 Tm (  query param.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 569 Tm (Overview) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 534 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 515 Tm (- Executive summary hero and manual refresh button.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 498 Tm (- KPI cards for total revenue, total orders, total customers, pending orders, gross) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 484 Tm (  sales, cash collected, and refunds issued.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 467 Tm (- Best sellers card with product image snapshots, sold quantity, and revenue.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 450 Tm (- Order status composition donut.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 433 Tm (- Gross sales by division donut.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 405 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 386 Tm (- The page calls GET /api/admin/overview.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 369 Tm (- backend/controllers/adminController.js computes:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 352 Tm (- total order count from Order) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 335 Tm (- total customer count using admin/customer filters from utils/adminAccess) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 318 Tm (- recognized sales and cash collected from paid or otherwise collected payment states) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 301 Tm (- refunds issued from ReturnRefund documents with status refunded) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 284 Tm (- net revenue as cash collected minus refunds) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 267 Tm (- order status counts grouped by status) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 250 Tm (- best sellers by unwinding order items from collected orders) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 233 Tm (- sales by division from shippingAddress.division) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 216 Tm (- last 7 days sales summary for recent trend data) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 187 Tm (Products) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 152 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 133 Tm (- Catalog dashboard with page-level stats for total products, published products on) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 119 Tm (  the current page, featured products on the current page, and low-stock products on) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 105 Tm (  the current page.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 88 Tm (- Filter shelf with:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 71 Tm (- keyword search) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 2 of 17) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 2857 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- async brand filter) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- async category filter) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- publication status filter) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- featured-only toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 670 Tm (- published-only toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 653 Tm (- Catalog table showing image, name, slug, brand, category, price, available) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 639 Tm (  inventory, publication status, and actions.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 622 Tm (- Row actions:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 605 Tm (- edit) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 588 Tm (- duplicate) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 571 Tm (- soft delete from storefront) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 554 Tm (- Full product editor for create and edit flows.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 537 Tm (- Featured toggle and publication status selector.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 520 Tm (- Base product fields:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 503 Tm (- name) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 486 Tm (- slug) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 469 Tm (- brand) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 452 Tm (- category) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 435 Tm (- base price) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 418 Tm (- warranty) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 401 Tm (- description) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 384 Tm (- highlights) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 367 Tm (- specs) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 350 Tm (- Category-driven preset helpers:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 333 Tm (- "Use Category Preset" to inject template highlights and specs) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 316 Tm (- "Save As Category Template" to push current highlights/specs back to the selected) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 302 Tm (  category) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 285 Tm (- Variant management:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 268 Tm (- add variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 251 Tm (- remove variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 234 Tm (- set default variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 217 Tm (- edit SKU, price, stock, low-stock threshold) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 200 Tm (- edit dynamic variant attributes derived from category metadata) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 183 Tm (- Existing variant image gallery in edit mode with per-image delete.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 166 Tm (- New per-variant image upload staging that happens on final save.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 149 Tm (- Footer actions for save, save as draft, and save and publish.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 132 Tm (- Quick-create modal for brands and categories without leaving the editor.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 115 Tm (- Bulk import modal with:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 98 Tm (- downloadable CSV template) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 81 Tm (- CSV file chooser) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 3 of 17) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 3599 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- grouped product preview) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- row validation) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- optional auto-create for missing brands/categories) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- import feedback including imported image counts) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 659 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 640 Tm (- The list screen loads GET /api/products/admin with filters for keyword, brand,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 626 Tm (  category, status, featured, and publishedOnly.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 609 Tm (- backend/controllers/productController.js enriches admin list results with:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 592 Tm (- inventorySummary from services/stockReservationService) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 575 Tm (- offerPricing from services/offerPricingService) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 558 Tm (- Product status is driven by publicationStatus with fallback to legacy isActive) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 544 Tm (  behavior.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 527 Tm (- Soft delete sets isDeleted=true, isActive=false, publicationStatus=archived, and) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 513 Tm (  deletedAt, instead of removing the document.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 496 Tm (- Duplicating a product:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 479 Tm (- creates a draft copy) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 462 Tm (- generates a unique slug) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 445 Tm (- creates fresh SKUs) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 428 Tm (- resets stock to zero) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 411 Tm (- clears review and view metrics) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 394 Tm (- clears images) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 377 Tm (- The editor preserves create drafts in localStorage under) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 363 Tm (  admin_product_create_draft_v1 and warns on browser unload if there are unsaved) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 349 Tm (  changes.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 332 Tm (- While creating a product, the slug auto-follows the name unless manually changed.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 315 Tm (- Category selection controls variant attribute fields by reading category.attributes) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 301 Tm (  or category preset logic in the frontend.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 284 Tm (- Specs text can auto-fill empty attributes on the default variant so structured) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 270 Tm (  variant data stays aligned with product-level specs.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 253 Tm (- Save validation enforces:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 236 Tm (- required name, slug, brand, category, and description) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 219 Tm (- unique SKUs within the product) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 202 Tm (- SKU presence for any variant with queued image uploads) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 185 Tm (- exactly one default variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 168 Tm (- On save, the frontend first creates or updates the product payload, then re-fetches) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 154 Tm (  the saved product and uploads queued variant images by matching each variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 140 Tm (  through SKU.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 123 Tm (- The backend also validates SKU uniqueness across the entire catalog before insert) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 109 Tm (  or update.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 92 Tm (- Base price is normalized on the backend from the lowest valid variant price) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 78 Tm (  whenever variants exist.) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 4 of 17) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 2796 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- Bulk import logic in AdminProducts:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- parses CSV locally) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- groups repeated slug rows into one product with multiple variants) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- validates missing description, slug, brand, category, SKU, price, stock, duplicate) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 673 Tm (  slugs, duplicate SKUs, and bad image URLs) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 656 Tm (- can auto-create missing brand/category dependencies) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 639 Tm (- submits only valid grouped payloads to POST /api/products/bulk-import) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 622 Tm (- The bulk import backend:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 605 Tm (- creates products one by one) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 588 Tm (- tracks created vs failed rows) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 571 Tm (- can import remote image URLs into Cloudinary and attach them to variants after) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 557 Tm (  creation) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 528 Tm (Categories) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 493 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 474 Tm (- Searchable category list.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 457 Tm (- Create and edit form for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 440 Tm (- name) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 423 Tm (- slug) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 406 Tm (- variant attributes) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 389 Tm (- highlights template) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 372 Tm (- specs template) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 355 Tm (- Category table with edit and delete actions.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 327 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 308 Tm (- The page reads GET /api/categories.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 291 Tm (- Category create and update send normalized payloads to POST /api/categories and PUT) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 277 Tm (  /api/categories/:id.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 260 Tm (- backend/controllers/categoryController.js:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 243 Tm (- normalizes attribute keys into underscore-style tokens) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 226 Tm (- de-duplicates string lists) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 209 Tm (- normalizes specs template keys and values) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 192 Tm (- stores templates that feed the product editor for new product drafting) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 175 Tm (- Admin lookups for filters and quick selectors come from GET) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 161 Tm (  /api/categories/admin/lookups.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 132 Tm (Orders) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 97 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 78 Tm (- Active fulfillment queue with URL-backed filters for:) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 5 of 17) Tj ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Length 2942 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- from date) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- to date) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- status) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- payment method) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 670 Tm (- keyword) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 653 Tm (- Summary cards for active, confirmed, processing, and shipped counts.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 636 Tm (- Paginated order table with order number, customer, payment method/status, region,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 622 Tm (  total, and status pill.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 605 Tm (- "View / Update" modal with:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 588 Tm (- line items and pricing breakdown) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 571 Tm (- payment summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 554 Tm (- fulfillment mode selector) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 537 Tm (- courier picker) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 520 Tm (- courier status selector) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 503 Tm (- tracking ID) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 486 Tm (- tracking URL) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 469 Tm (- booking reference) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 452 Tm (- pickup date) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 435 Tm (- courier status note) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 418 Tm (- internal notes) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 401 Tm (- sequential workflow buttons) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 384 Tm (- shipment save button) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 367 Tm (- shipment booking button) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 350 Tm (- delete button for cancelled/returned orders only) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 322 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 303 Tm (- The main grid calls GET /api/admin/orders with scope=active and the current) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 289 Tm (  filters.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 272 Tm (- The selected modal loads GET /api/orders/:orderNo for full order detail.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 255 Tm (- backend/controllers/orderController.js enforces a strict admin workflow:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 238 Tm (- pending -> confirmed or cancelled) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 221 Tm (- confirmed -> processing or cancelled) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 204 Tm (- processing -> shipped or cancelled) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 187 Tm (- shipped -> delivered) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 170 Tm (- delivered -> returned) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 153 Tm (- Orders cannot skip steps.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 136 Tm (- Prepaid orders cannot move into revenue-recognized fulfillment states unless) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 122 Tm (  payment.status is already paid.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 105 Tm (- Marking an order shipped requires courier and tracking ID.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 88 Tm (- Shipment metadata is saved separately through PATCH) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 74 Tm (  /api/admin/orders/:orderNo/shipment.) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 6 of 17) Tj ET
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<< /Length 3480 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- Workflow status changes are saved through PUT /api/admin/orders/:orderNo/status.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- Dispatch booking is available only for processing orders and calls POST) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 707 Tm (  /api/admin/orders/:orderNo/dispatch.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 690 Tm (- Dispatch uses the configured courier provider abstraction, writes shipment details,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 676 Tm (  sets shipped timestamps, and creates courier events.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 659 Tm (- Stock behavior is tightly coupled to order status:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 642 Tm (- shipping or delivery deducts stock if it has not already been deducted) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 625 Tm (- cancellation releases reservations and restocks if stock had already been deducted) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 608 Tm (- returned status can auto-create a return/refund request if one does not exist) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 591 Tm (- Shipment events are written into order.shipment.events so customer and admin) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 577 Tm (  tracking UIs can render a timeline.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 560 Tm (- Deletion is hard delete but only for cancelled or returned orders, and it also) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 546 Tm (  deletes linked ReturnRefund and InventoryLedger rows.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 529 Tm (- The order notifications dropdown in the admin shell uses adminGetOrderNotifications) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 515 Tm (  and only reports newly created orders after the stored last-seen timestamp.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 486 Tm (Inventory) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 451 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 432 Tm (- Inventory Intelligence dashboard with manual refresh and a global low-stock) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 418 Tm (  threshold input.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 401 Tm (- KPI cards for total SKUs, units available, on-hand value, and low-stock variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 387 Tm (  count.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 370 Tm (- Donut charts for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 353 Tm (- stock health composition) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 336 Tm (- movement type mix) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 319 Tm (- low-stock by category) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 302 Tm (- Low Availability Queue table showing product, SKU, brand/category, available,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 288 Tm (  threshold, reserved, on hand, and price.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 271 Tm (- Right-side manual adjustment form with quick-action presets:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 254 Tm (- Add Stock) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 237 Tm (- Remove Stock) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 220 Tm (- Correction) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 203 Tm (- Return Received) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 186 Tm (- Recent movement trend chart.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 169 Tm (- Recent movement summary list.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 152 Tm (- Full movement history table with filters for search text and movement type.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 135 Tm (- Full stock table with search and category filter.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 107 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 88 Tm (- The page calls GET /api/admin/inventory/overview?threshold=...) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 71 Tm (- backend/controllers/inventoryController.js:) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 7 of 17) Tj ET
+endstream
+endobj
+17 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 16 0 R >>
+endobj
+18 0 obj
+<< /Length 3000 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- loads active, non-deleted products) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- walks every variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- calculates reserved quantity using) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 690 Tm (  services/stockReservationService.getReservedQtyMap) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 673 Tm (- calculates sellable available stock as physical on-hand minus reserved) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 656 Tm (- flags low-stock rows using variant.lowStockThreshold with fallback to the requested) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 642 Tm (  threshold) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 625 Tm (- computes total stock value from on-hand multiplied by variant or base price) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 608 Tm (- loads recent InventoryLedger records with populated product and actor data) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 591 Tm (- Manual adjustments post to POST /api/admin/inventory/adjust.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 574 Tm (- The backend rejects:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 557 Tm (- missing product or variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 540 Tm (- zero delta) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 523 Tm (- negative resulting stock) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 506 Tm (- any adjustment that would push on-hand below currently reserved stock) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 489 Tm (- Successful adjustments also create InventoryLedger entries with old/new on-hand,) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 475 Tm (  reserved, available, actor, reason, and note.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 446 Tm (Users) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 411 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 392 Tm (- Metrics for total customers, total users, admin count, and newly joined users in) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 378 Tm (  the last 30 days.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 361 Tm (- Two-tab layout:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 344 Tm (- Users) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 327 Tm (- Make an Admin) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 310 Tm (- Users tab supports:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 293 Tm (- role filter) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 276 Tm (- search by name/email/phone) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 259 Tm (- pagination) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 242 Tm (- The Make an Admin tab supports live customer search and one-click promotion.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 214 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 195 Tm (- The page calls GET /api/admin/customers for both the user list and promotion) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 181 Tm (  search.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 164 Tm (- backend/controllers/customerController.js returns:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 147 Tm (- paginated user rows) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 130 Tm (- filtered totals) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 113 Tm (- global metrics across all users) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 96 Tm (- Role updates call PATCH /api/admin/customers/:userId/role.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 79 Tm (- The backend prevents:) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 8 of 17) Tj ET
+endstream
+endobj
+19 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 18 0 R >>
+endobj
+20 0 obj
+<< /Length 2781 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- invalid role values) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- demoting yourself through this screen) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- removing the last admin account) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- promoting a user who is already admin or demoting a user who is already customer) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 673 Tm (  becomes a no-op success response) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 644 Tm (Offers) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 609 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 590 Tm (- Search and status filter for active, upcoming, expired, or disabled offers.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 573 Tm (- Metrics for total, enabled, upcoming, and expired offers.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 556 Tm (- Create/edit form for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 539 Tm (- name) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 522 Tm (- label) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 505 Tm (- description) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 488 Tm (- discount type) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 471 Tm (- value) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 454 Tm (- priority) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 437 Tm (- scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 420 Tm (- audience) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 403 Tm (- valid from/to) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 386 Tm (- active toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 369 Tm (- Async scope pickers for products, categories, and specific users.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 352 Tm (- Offer list with edit and deactivate actions.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 324 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 305 Tm (- The page calls GET /api/admin/offers.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 288 Tm (- Scope pickers use:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 271 Tm (- GET /api/admin/offers/lookups/products) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 254 Tm (- GET /api/admin/offers/lookups/categories) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 237 Tm (- GET /api/admin/offers/lookups/users) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 220 Tm (- The frontend also has fallback lookups if those endpoints are unavailable.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 203 Tm (- backend/controllers/offerController.js supports list, create, update, and soft) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 189 Tm (  delete.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 172 Tm (- An offer can target:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 155 Tm (- all products) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 138 Tm (- selected products) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 121 Tm (- selected categories) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 104 Tm (- and optionally all users or selected users) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 87 Tm (- Status is derived from isActive plus the validFrom/validTo window.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 70 Tm (- Deactivate does not remove the record; it sets isActive=false.) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 9 of 17) Tj ET
+endstream
+endobj
+21 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 20 0 R >>
+endobj
+22 0 obj
+<< /Length 2944 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 735 Tm (- services/offerPricingService.js applies active offers to product and variant) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (  pricing at read time.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- If multiple offers match the same product, the service chooses the best effective) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 690 Tm (  price, then breaks ties by higher priority and newer creation time.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 661 Tm (Coupons) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 626 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 607 Tm (- Search and status filter.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 590 Tm (- Metrics for total, active-flag, upcoming, and expired coupons.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 573 Tm (- Draft restore banner when a coupon form draft is recovered from localStorage.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 556 Tm (- Create/edit form for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 539 Tm (- code) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 522 Tm (- auto-generate code) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 505 Tm (- coupon type) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 488 Tm (- discount value) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 471 Tm (- max discount) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 454 Tm (- min cart total) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 437 Tm (- usage limit) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 420 Tm (- per-customer usage limit) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 403 Tm (- valid from/to) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 386 Tm (- customer eligibility) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 369 Tm (- discount applies to) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 352 Tm (- active toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 335 Tm (- internal description) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 318 Tm (- Async selectors for specific products, categories, and users.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 301 Tm (- Coupon list with status badge, validity window, usage stats, edit, and deactivate.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 273 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 254 Tm (- The page saves local draft state in localStorage under admin_coupon_form_draft_v1.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 237 Tm (- Coupon list calls GET /api/admin/coupons.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 220 Tm (- Code generation uses GET /api/admin/coupons/generate-code and derives a prefix hint) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 206 Tm (  from the current form.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 189 Tm (- Coupon CRUD uses POST, PUT, and DELETE under /api/admin/coupons.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 172 Tm (- backend/controllers/couponController.js enforces unique codes, normalizes FLAT into) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 158 Tm (  FIXED, and soft-deactivates on delete.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 141 Tm (- Coupon applicability data includes:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 124 Tm (- product scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 107 Tm (- category scope) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 90 Tm (- specific users) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 73 Tm (- new-customer only) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 10 of 17) Tj ET
+endstream
+endobj
+23 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 22 0 R >>
+endobj
+24 0 obj
+<< /Length 2859 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- returning-customer only) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- usage caps) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- per-customer caps) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- In checkout, backend/services/orderService.js validates coupon rules against:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 670 Tm (- active flag) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 653 Tm (- valid date window) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 636 Tm (- total usage cap) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 619 Tm (- per-customer usage cap) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 602 Tm (- specific users) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 585 Tm (- new vs returning customer eligibility) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 568 Tm (- eligible products/categories in the cart) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 551 Tm (- min cart total or eligible-items subtotal) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 534 Tm (- discountAppliesTo logic for eligible items only vs entire cart) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 505 Tm (Sales Analytics) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 470 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 451 Tm (- Date range picker with default last 30 days.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 434 Tm (- KPI cards for revenue, orders, average order value, unique customers, unique) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 420 Tm (  viewers, conversion rate, abandoned carts, and peak order time.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 403 Tm (- Daily revenue trend chart.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 386 Tm (- Payment-method donut chart that can jump into the report table with that payment) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 372 Tm (  method filter applied.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 355 Tm (- Finance cards for gross sales, cash collected, and refunds issued.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 338 Tm (- Charts for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 321 Tm (- gross sales by division) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 304 Tm (- product orders by division) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 287 Tm (- top products by revenue) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 270 Tm (- most viewed products) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 253 Tm (- cash collected by payment method) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 236 Tm (- peak order hours) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 219 Tm (- Sales Report section with:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 202 Tm (- finance KPIs) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 185 Tm (- filterable read-only order table) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 168 Tm (- CSV export across all pages) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 140 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 121 Tm (- The analytics cards call GET /api/admin/analytics/overview.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 104 Tm (- backend/controllers/analyticsController.js calculates:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 87 Tm (- order totals in the selected date range) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 70 Tm (- unique customers) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 11 of 17) Tj ET
+endstream
+endobj
+25 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 24 0 R >>
+endobj
+26 0 obj
+<< /Length 2994 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 735 Tm (- gross sales and collected cash from collected payment states) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 718 Tm (- refunds issued from refunded return rows) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 701 Tm (- net revenue) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 684 Tm (- daily paid revenue) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 667 Tm (- sales and product-order mix by division) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 650 Tm (- payment method mix) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 633 Tm (- peak order hours) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 616 Tm (- product views and unique viewers from ProductView) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 599 Tm (- ordering visitors from order analytics.visitorKey) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 582 Tm (- approximate conversion rate) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 565 Tm (- abandoned carts by looking for carts that were updated but never followed by an) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 551 Tm (  order) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 534 Tm (- The Sales Report table uses GET /api/admin/orders with scope=finance.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 517 Tm (- In finance scope, backend order reporting merges:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 500 Tm (- order payment collection timing) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 483 Tm (- refund events tied to the same order) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 466 Tm (- calculated net revenue per order) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 449 Tm (- CSV export requests all pages in batches of 500 and builds a client-side CSV file.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 420 Tm (Forecasting) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 385 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 366 Tm (- History selector for 30, 60, 90, or 180 days.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 349 Tm (- Forecast horizon selector for 7, 14, 30, or 60 days.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 332 Tm (- KPI cards for forecast revenue, forecast units, page views, unique viewers, average) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 318 Tm (  conversion, trending SKUs, projected risk SKUs, and confidence.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 301 Tm (- Lead product spotlight.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 284 Tm (- Methodology explainer cards.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 267 Tm (- Signal overview panel.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 250 Tm (- Demand momentum line graphic.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 233 Tm (- Category revenue share donut.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 216 Tm (- Ranked top-forecasted products.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 199 Tm (- Category outlook cards.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 182 Tm (- Demand Intelligence table.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 165 Tm (- Stockout Risk and Reorder Plan table.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 137 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 118 Tm (- The page calls GET /api/admin/analytics/forecasting?daysBack=...&horizonDays=...) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 101 Tm (- backend/controllers/analyticsController.js blends:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 84 Tm (- order quantities and revenue) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 12 of 17) Tj ET
+endstream
+endobj
+27 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 26 0 R >>
+endobj
+28 0 obj
+<< /Length 2777 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- recent vs prior demand momentum) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- page views and unique viewers) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- visitor-to-buyer conversion estimates) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- traffic-vs-order weighting) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 670 Tm (- current stock) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 653 Tm (- safety stock buffer) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 636 Tm (- The forecast returns:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 619 Tm (- product-level forecast rows) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 602 Tm (- category-level rollups) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 585 Tm (- summary KPIs) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 568 Tm (- model metadata including version and safety stock days) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 551 Tm (- Risk labels are derived from projected stock remaining after the forecast horizon.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 534 Tm (- Suggested reorder quantity equals forecast demand plus safety stock minus current) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 520 Tm (  stock.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 491 Tm (Returns And Refunds) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 456 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 437 Tm (- Queue summary cards for total requests, open queue, urgent cases, and refund) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 423 Tm (  exposure.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 406 Tm (- Search and status filter.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 389 Tm (- Left-side request queue cards with SLA-style age labels.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 372 Tm (- Right-side detail panel with:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 355 Tm (- customer identity and refund preference) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 338 Tm (- returned items) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 321 Tm (- evidence photos) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 304 Tm (- financial snapshot) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 287 Tm (- stage tracker) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 270 Tm (- recommended next-step buttons) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 253 Tm (- admin notes display) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 225 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 206 Tm (- The admin page calls GET /api/returns/my.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 189 Tm (- That route looks customer-specific by name, but) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 175 Tm (  backend/controllers/returnRefundController.js intentionally returns all rows when) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 161 Tm (  req.user.isAdmin is true.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 144 Tm (- Status updates use PUT /api/returns/admin/:id/status.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 127 Tm (- Allowed states are:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 110 Tm (- requested) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 93 Tm (- approved) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 76 Tm (- rejected) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 13 of 17) Tj ET
+endstream
+endobj
+29 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 28 0 R >>
+endobj
+30 0 obj
+<< /Length 3073 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- picked) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- received) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- refunded) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- When a return is marked received, the backend restocks each returned variant and) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 673 Tm (  writes InventoryLedger IN entries with reason RETURN.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 656 Tm (- When a return is marked refunded, the backend updates the parent order payment) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 642 Tm (  status to refunded or partial_refund depending on the amount.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 613 Tm (Commerce) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 578 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 559 Tm (- Checkout and Shipping settings dashboard.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 542 Tm (- Summary cards for COD, inside Dhaka, outside Dhaka, and free shipping.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 525 Tm (- Order and Checkout section for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 508 Tm (- Cash on Delivery toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 491 Tm (- max COD amount) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 474 Tm (- auto-confirm online payments toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 457 Tm (- order prefix field) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 440 Tm (- Shipping Pricing section for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 423 Tm (- inside Dhaka fee) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 406 Tm (- outside Dhaka fee) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 389 Tm (- express surcharge inside Dhaka) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 372 Tm (- express surcharge outside Dhaka) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 355 Tm (- free shipping threshold) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 338 Tm (- Regional Overrides section for division/district-specific shipping fees.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 310 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 291 Tm (- The page reads and writes the same single settings document through GET/PUT) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 277 Tm (  /api/admin/settings.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 260 Tm (- backend/models/Settings.js stores order and shipping settings in nested objects.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 243 Tm (- backend/services/orderService.js reads shipping settings in getShippingConfig and) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 229 Tm (  getShippingQuote.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 212 Tm (- Checkout shipping calculation uses:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 195 Tm (- Dhaka vs outside-Dhaka baseline fees) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 178 Tm (- optional express surcharge) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 161 Tm (- optional regional override by division or district) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 144 Tm (- The UI explains that an empty district means the override applies to the full) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 130 Tm (  division.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 102 Tm (Important note) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 83 Tm (- The orderPrefix field is saved in Settings, but order numbers are still generated) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 69 Tm (  by backend/utils/orderNo.js with a hard-coded SPL prefix.) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 14 of 17) Tj ET
+endstream
+endobj
+31 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 30 0 R >>
+endobj
+32 0 obj
+<< /Length 2608 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 735 Tm (- That means the current Admin Commerce UI exposes an order-prefix setting that is) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (  not yet wired into order creation.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 692 Tm (Settings) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 657 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 638 Tm (- Brand, storefront, and maintenance settings page.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 621 Tm (- Summary cards for store name, support email, primary color, and maintenance status.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 604 Tm (- Store Profile form fields for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 587 Tm (- store name) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 570 Tm (- logo URL) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 553 Tm (- support email) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 536 Tm (- support phone) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 519 Tm (- support hours) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 502 Tm (- address lines) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 485 Tm (- city) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 468 Tm (- district) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 451 Tm (- country) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 434 Tm (- UI and Maintenance section for:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 417 Tm (- primary color) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 400 Tm (- secondary color) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 383 Tm (- homepage banner text) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 366 Tm (- announcement bar text) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 349 Tm (- maintenance toggle) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 332 Tm (- maintenance message) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 304 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 285 Tm (- The page reads and writes GET/PUT /api/admin/settings.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 268 Tm (- backend/controllers/adminSettingsController.js ensures a single Settings document) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 254 Tm (  exists and merges partial updates into store, order, shipping, ui, and maintenance) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 240 Tm (  objects.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 223 Tm (- Public storefront consumption happens through GET /api/settings/public.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 206 Tm (- frontend/src/pages/Home.jsx already uses:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 189 Tm (- storeName) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 172 Tm (- logoUrl) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 155 Tm (- supportEmail) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 138 Tm (- supportPhone) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 121 Tm (- supportHours) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 104 Tm (- address) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 87 Tm (- homepageBannerText) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 70 Tm (- announcementBarText) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 15 of 17) Tj ET
+endstream
+endobj
+33 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 32 0 R >>
+endobj
+34 0 obj
+<< /Length 3116 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 735 Tm (- maintenanceEnabled) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 718 Tm (- maintenanceMessage) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 690 Tm (Important note) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 671 Tm (- primaryColor and secondaryColor are stored and exposed through the public settings) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 657 Tm (  API, but the current storefront code does not apply them as live theme variables.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 640 Tm (- They behave as saved config fields today, not as active visual theming.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 611 Tm (Profile) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 576 Tm (UI features) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 557 Tm (- Current admin profile card.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 540 Tm (- Identity fields for name, email, phone, role, admin access, and last login.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 523 Tm (- Raw account ID display.) Tj ET
+BT /F2 11 Tf 1 0 0 1 54 495 Tm (Logic behind it) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 476 Tm (- This page is client-side only and reads from UserContext.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 459 Tm (- There is no separate admin profile update flow yet.) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 430 Tm (Notable Cross-Cutting Observations) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 398 Tm (- The admin shell search input in AdminLayout is visual only and does not trigger any) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 384 Tm (  search logic.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 367 Tm (- The returns page route naming is slightly misleading: admins use /api/returns/my) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 353 Tm (  but receive all returns because the controller checks req.user.isAdmin.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 336 Tm (- Product, order, inventory, and analytics modules are well-connected to the same) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 322 Tm (  underlying order, stock reservation, and ledger systems, so admin data stays) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 308 Tm (  internally consistent.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 291 Tm (- Product availability in admin listings is reservation-aware because inventory) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 277 Tm (  enrichment subtracts reserved quantities from physical stock.) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 260 Tm (- Offers and coupons are separate systems:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 243 Tm (- offers are automatic read-time price reductions on products and variants) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 226 Tm (- coupons are checkout-time discount rules validated against cart contents and user) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 212 Tm (  history) Tj ET
+BT /F2 14 Tf 1 0 0 1 54 183 Tm (Final Summary) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 151 Tm (The admin UI is already a broad operations console rather than just a CRUD back) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 137 Tm (office. It covers catalog management, inventory control, fulfillment workflow,) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 123 Tm (returns, promotions, customer access, shipping policy, store messaging, analytics, and) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 109 Tm (forecasting.) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 82 Tm (The strongest parts of the implementation are:) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 16 of 17) Tj ET
+endstream
+endobj
+35 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 34 0 R >>
+endobj
+36 0 obj
+<< /Length 760 >>
+stream
+BT /F1 10 Tf 1 0 0 1 72 738 Tm (- the product studio) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 721 Tm (- the inventory plus reservation-aware stock model) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 704 Tm (- the sequential order workflow) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 687 Tm (- the analytics and forecasting coverage) Tj ET
+BT /F1 10 Tf 1 0 0 1 54 662 Tm (The main implementation gaps observed during this re-check are:) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 643 Tm (- admin shell search is not wired) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 626 Tm (- order prefix is configurable in UI but not used by order number generation) Tj ET
+BT /F1 10 Tf 1 0 0 1 72 609 Tm (- saved storefront colors are not currently applied as runtime theme styling) Tj ET
+BT /F1 9 Tf 1 0 0 1 478 36 Tm (Page 17 of 17) Tj ET
+endstream
+endobj
+37 0 obj
+<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 36 0 R >>
+endobj
+38 0 obj
+<< /Type /Catalog /Pages 3 0 R >>
+endobj
+xref
+0 39
+0000000000 65535 f 
+0000000015 00000 n 
+0000000083 00000 n 
+0000000158 00000 n 
+0000000326 00000 n 
+0000003311 00000 n 
+0000003447 00000 n 
+0000006568 00000 n 
+0000006704 00000 n 
+0000009613 00000 n 
+0000009749 00000 n 
+0000013401 00000 n 
+0000013539 00000 n 
+0000016388 00000 n 
+0000016526 00000 n 
+0000019521 00000 n 
+0000019659 00000 n 
+0000023192 00000 n 
+0000023330 00000 n 
+0000026383 00000 n 
+0000026521 00000 n 
+0000029355 00000 n 
+0000029493 00000 n 
+0000032490 00000 n 
+0000032628 00000 n 
+0000035540 00000 n 
+0000035678 00000 n 
+0000038725 00000 n 
+0000038863 00000 n 
+0000041693 00000 n 
+0000041831 00000 n 
+0000044957 00000 n 
+0000045095 00000 n 
+0000047756 00000 n 
+0000047894 00000 n 
+0000051063 00000 n 
+0000051201 00000 n 
+0000052013 00000 n 
+0000052151 00000 n 
+trailer
+<< /Size 39 /Root 38 0 R >>
+startxref
+52201
+%%EOF

@@ -811,6 +811,10 @@ export default function AdminProducts() {
   const navigate = useNavigate();
   const location = useLocation();
   const { productId } = useParams();
+  const urlKeyword = useMemo(
+    () => new URLSearchParams(location.search).get("keyword") || "",
+    [location.search]
+  );
   const isCreatePage = location.pathname === "/admin/products/new";
   const isEditPage = Boolean(productId);
   const isEditorPage = isCreatePage || isEditPage;
@@ -839,7 +843,7 @@ export default function AdminProducts() {
   const hasHydratedEditorRef = useRef(false);
 
   // filters
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(urlKeyword);
   const [filterBrand, setFilterBrand] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -1237,6 +1241,10 @@ export default function AdminProducts() {
     fetchDependencies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setQ(urlKeyword);
+  }, [urlKeyword]);
 
   useEffect(() => {
     fetchProductList({ page: 1 });
